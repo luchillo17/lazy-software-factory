@@ -35,4 +35,4 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md). Issues and PRs welcome — especially 
 
 ## License
 
-[MIT](./LICENSE)
+[Apache License 2.0](./LICENSE) — see also [NOTICE](./NOTICE) for attribution.
