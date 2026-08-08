@@ -1,0 +1,32 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build / cache
+dist/
+build/
+.turbo/
+.nx/
+*.tsbuildinfo
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+.sandcastle/.env
+
+# Sandcastle / agents
+.sandcastle/worktrees/
+.sandcastle/logs/
+.sandcastle/patches/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Test / coverage
+coverage/
+.nyc_output/
