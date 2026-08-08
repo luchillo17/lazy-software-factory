@@ -37,6 +37,12 @@
       "skillPath": "skills/engineering/domain-modeling/SKILL.md",
       "computedHash": "363cb0f53b0b431e7c00086ad1f823500b7e1b70b5616ee969c979f0934e9e6e"
     },
+    "gh-stack-compact": {
+      "source": "luchillo17/gh-stack-compact",
+      "sourceType": "github",
+      "skillPath": "skills/gh-stack-compact/SKILL.md",
+      "computedHash": "6630968913e32890f2c0bfff1255e88f73aa4920bf98213652c8458dd4c3a186"
+    },
     "git-guardrails-claude-code": {
       "source": "mattpocock/skills",
       "sourceType": "github",

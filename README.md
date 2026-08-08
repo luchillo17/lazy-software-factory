@@ -14,17 +14,27 @@ Early bootstrap. Public so people can contribute while the shape settles.
 
 **Decided (see [docs/adr](./docs/adr/) and [CONTEXT.md](./CONTEXT.md)):** Nx from the start; extractable packages; self-building factory; Convex + Better Auth direction; logical org tenancy.
 
-**Still open:** concrete Nx project graph (no packages named yet); hosted cloud SaaS timing.
+**Still open:** more packages/apps in the Nx graph; hosted cloud SaaS timing.
 
-## Repo layout (intentional thin start)
+## Repo layout
 
 ```text
-docs/           design notes & ADRs
-packages/       future shared libs / factory orchestration
-apps/           future CLIs or services (only if needed)
+apps/              future CLIs / services
+packages/          shared libs / factory orchestration
+docs/              ADRs + agent config
+.agents/skills/    agent skills (mattpocock + luchillo17/gh-stack-compact)
 ```
 
-Nx workspace bootstrap lands with the first real packages. No cloud control plane yet.
+```bash
+pnpm install   # also ensures `gh stack` CLI extension when missing
+pnpm nx show projects
+# agent skill (project):
+npx skills add luchillo17/gh-stack-compact -y
+# CLI extension fallback:
+gh extension install github/gh-stack
+```
+
+No cloud control plane yet.
 
 ## Contributing
 

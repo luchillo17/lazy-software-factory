@@ -1,0 +1,22 @@
+{
+  "name": "@lazy-software-factory/source",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.34.5",
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "scripts": {
+    "nx": "nx",
+    "graph": "nx graph",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "ensure:gh-stack": "node ./scripts/ensure-gh-stack.ts",
+    "postinstall": "node ./scripts/ensure-gh-stack.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "nx": "23.1.1",
+    "typescript": "^5.9.2"
+  }
+}

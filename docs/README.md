@@ -15,13 +15,13 @@ Design notes and ADRs for the factory live here. Domain language: [`CONTEXT.md`]
 
 ## Open decisions
 
-- **Concrete Nx project graph** — no packages named yet; add when first real packages land.
+- **Nx project graph** — workspace bootstrapped; apps/packages empty aside from placeholders.
 - **Hosted cloud SaaS** — product layer later; core stays usable local/on-prem (ADR-0002).
 
-Agent skills config: [`AGENTS.md`](../AGENTS.md) (SoT) → [`docs/agents/`](./agents/).
+Agent skills config: [`AGENTS.md`](../AGENTS.md) (SoT) → [`docs/agents/`](./agents/). Skill: [luchillo17/gh-stack-compact](https://github.com/luchillo17/gh-stack-compact).
 
 ## Next setup
 
 1. Sandcastle init (Docker on WSL)
-2. Nx workspace bootstrap when ready to add the first package
-3. Custom ADW orchestration after runtime + skills wiring
+2. Custom ADW orchestration after runtime wiring
+3. Enable GitHub **stacked PRs** on the repo if `gh stack` reports exit 9
