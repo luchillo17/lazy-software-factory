@@ -6,18 +6,15 @@ Open-source **AI developer workflows** (a software factory) built on:
 - [mattpocock/skills](https://github.com/mattpocock/skills) — engineering **process** (grill → tickets → TDD → review)
 - IndyDevDan-style ADWs — **code owns the gates** (lint / typecheck / test / route); agents own judgment
 
-The goal is a factory you can run locally (WSL + Docker recommended), with orchestration you own in TypeScript — not a single mega-skill that lints, tests, and reviews itself.
+The goal is a factory you can run locally (WSL + Docker recommended), with orchestration you own in TypeScript — not a single mega-skill that lints, tests, and reviews itself. It should be **self-building**: once the loop exists, use this factory’s ADWs to develop this repo’s apps and packages.
 
 ## Status
 
 Early bootstrap. Public so people can contribute while the shape settles.
 
-**Explicitly undecided (on purpose):**
+**Decided (see [docs/adr](./docs/adr/) and [CONTEXT.md](./CONTEXT.md)):** Nx from the start; extractable packages; self-building factory; Convex + Better Auth direction; logical org tenancy.
 
-| Decision | Status |
-| --- | --- |
-| Nx monorepo | Deferred — start without Nx; adopt if the package graph needs it |
-| Cloud SaaS | Deferred — local/self-hosted factory first; cloud is a later product question |
+**Still open:** concrete Nx project graph (no packages named yet); hosted cloud SaaS timing.
 
 ## Repo layout (intentional thin start)
 
@@ -27,7 +24,7 @@ packages/       future shared libs / factory orchestration
 apps/           future CLIs or services (only if needed)
 ```
 
-No Nx, no cloud control plane yet. Structure stays easy to promote into either later.
+Nx workspace bootstrap lands with the first real packages. No cloud control plane yet.
 
 ## Contributing
 
