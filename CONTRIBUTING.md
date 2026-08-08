@@ -19,10 +19,21 @@ Thanks for helping shape **lazy-software-factory**.
 ## Local setup (recommended)
 
 - **WSL2 (Ubuntu)** + Git + `gh`
+- **Node.js ≥ 22.18** (native type stripping; see `engines` in root `package.json`)
+- **pnpm** (see `packageManager` in root `package.json`) + **Nx**
 - **Docker** (for Sandcastle sandboxes)
-- Node.js LTS + Nx (when the workspace is bootstrapped)
 
-Exact bootstrap commands will land with the first real package. Language and ADRs: [CONTEXT.md](./CONTEXT.md), [docs/adr](./docs/adr/).
+TypeScript is **erasable-syntax only** (`erasableSyntaxOnly` in `tsconfig.json`) so scripts run with `node *.ts`. `pnpm install` runs `postinstall` → installs the `github/gh-stack` gh extension when missing (skips cleanly if already present or `gh` is absent). Enable stacked PRs on the GitHub repo if `gh stack` exits 9.
+
+```bash
+pnpm install
+pnpm typecheck
+pnpm nx show projects
+# optional re-check:
+pnpm ensure:gh-stack
+```
+
+Language and ADRs: [CONTEXT.md](./CONTEXT.md), [docs/adr](./docs/adr/). Compact `gh stack` agent skill: [`luchillo17/gh-stack-compact`](https://github.com/luchillo17/gh-stack-compact) (`npx skills add luchillo17/gh-stack-compact`).
 
 ## Code of conduct
 
