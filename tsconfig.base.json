@@ -6,11 +6,20 @@
     "moduleResolution": "nodenext",
     "lib": ["esnext"],
     "strict": true,
-    "noEmit": true,
     "skipLibCheck": true,
     "verbatimModuleSyntax": true,
     "erasableSyntaxOnly": true,
     "rewriteRelativeImportExtensions": true,
-    "plugins": [{ "name": "@effect/language-service" }]
+    "forceConsistentCasingInFileNames": true,
+    "importHelpers": true,
+    "noImplicitOverride": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "noPropertyAccessFromIndexSignature": true,
+    "plugins": [{ "name": "@effect/language-service" }],
+    "paths": {
+      "@lazy-software-factory/runtime": ["./packages/runtime/src/index.ts"],
+      "@lazy-software-factory/adw": ["./packages/adw/src/index.ts"]
+    }
   }
 }

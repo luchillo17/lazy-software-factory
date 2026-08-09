@@ -12,5 +12,6 @@
     "rewriteRelativeImportExtensions": true,
     "types": ["node"]
   },
-  "include": ["scripts/**/*.ts"]
+  "include": ["scripts/**/*.ts"],
+  "references": [{ "path": "./packages/runtime" }, { "path": "./packages/adw" }]
 }

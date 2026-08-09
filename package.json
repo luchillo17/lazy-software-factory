@@ -10,7 +10,7 @@
   "scripts": {
     "nx": "nx",
     "graph": "nx graph",
-    "typecheck": "tsc --noEmit -p tsconfig.json && nx run-many -t typecheck",
+    "typecheck": "nx run-many -t typecheck",
     "test": "nx run-many -t test",
     "ensure:gh-stack": "node ./scripts/ensure-gh-stack.ts",
     "postinstall": "node ./scripts/ensure-gh-stack.ts",
@@ -20,11 +20,19 @@
     "@commitlint/cli": "^21.2.1",
     "@commitlint/config-conventional": "^21.2.0",
     "@effect/language-service": "^0.87.2",
+    "@nx/js": "23.1.1",
+    "@nx/vite": "23.1.1",
+    "@nx/vitest": "23.1.1",
+    "@swc/helpers": "~0.5.18",
     "@types/node": "^24.3.0",
+    "@vitest/coverage-v8": "~4.1.0",
     "husky": "^9.1.7",
     "lint-staged": "^17.3.0",
     "nx": "23.1.1",
     "prettier": "^3.9.6",
-    "typescript": "^5.9.2"
-  }
+    "typescript": "^5.9.2",
+    "vite": "^8.0.0",
+    "vitest": "~4.1.0"
+  },
+  "dependencies": {}
 }
