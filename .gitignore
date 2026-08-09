@@ -13,12 +13,6 @@ build/
 .env
 .env.*
 !.env.example
-.sandcastle/.env
-
-# Sandcastle / agents
-.sandcastle/worktrees/
-.sandcastle/logs/
-.sandcastle/patches/
 
 # OS / editor
 .DS_Store

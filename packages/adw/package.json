@@ -1,0 +1,23 @@
+{
+  "name": "@lazy-software-factory/adw",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "nx": {
+    "tags": [
+      "type:lib",
+      "scope:adw"
+    ]
+  },
+  "dependencies": {
+    "@lazy-software-factory/runtime": "workspace:*",
+    "effect": "^3.20.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "typescript": "^5.9.2"
+  }
+}

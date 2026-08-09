@@ -9,4 +9,4 @@ accepted (direction) — implementation deferred until the product/data slice la
 ## Consequences
 
 - Org plugin typically needs Better Auth **local install** under Convex so org schema lives in-project.
-- Sandcastle job credentials resolve per organization at runtime (see ADR-0003), not from one shared host `.env`.
+- Runtime / ADW job credentials resolve per Organization at runtime (see ADR-0003), not from one shared host `.env` in production.

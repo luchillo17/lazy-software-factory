@@ -2,7 +2,7 @@
 
 We use **Nx from the start** as the monorepo tool, and we design for **extractable packages** — consumers may run the whole product (local, on-prem, or later hosted) or depend on individual libraries. Thin apps compose packages; tenancy, billing, and hosted control-plane concerns stay at app/cloud edges so core OSS libs stay usable alone. Apache-2.0 on the core leaves room for proprietary hosted layers later.
 
-Package names and the app/package graph are **not** decided yet — only the tooling and extractability posture. Add concrete projects when the first real packages land.
+First packages: **`packages/runtime`** (Effect sandbox + agent providers) and **`packages/adw`** (ADW graph + gates). More apps/packages land as the graph grows.
 
 ## Status
 

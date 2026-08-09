@@ -1,0 +1,22 @@
+{
+  "name": "@lazy-software-factory/runtime",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "nx": {
+    "tags": [
+      "type:lib",
+      "scope:runtime"
+    ]
+  },
+  "dependencies": {
+    "effect": "^3.20.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "typescript": "^5.9.2"
+  }
+}

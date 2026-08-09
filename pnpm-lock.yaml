@@ -7,9 +7,6 @@ settings:
 importers:
   .:
     devDependencies:
-      "@ai-hero/sandcastle":
-        specifier: ^0.12.0
-        version: 0.12.0
       "@commitlint/cli":
         specifier: ^21.2.1
         version: 21.2.1(@types/node@24.13.3)(conventional-commits-parser@7.1.2)(typescript@5.9.3)
@@ -35,22 +32,36 @@ importers:
         specifier: ^5.9.2
         version: 5.9.3
 
-packages:
-  "@ai-hero/sandcastle@0.12.0":
-    resolution:
-      {
-        integrity: sha512-kdQ414rM8t1QiWeqZ3Klz4KSd0PqQG4bRVuqGpRDUomWhojSZkEAc1tbcEcThVmBEaHkCt8LmYR49vqEPNIoYQ==,
-      }
-    hasBin: true
-    peerDependencies:
-      "@daytona/sdk": ^0.164.0
-      "@vercel/sandbox": ">=1.0.0"
-    peerDependenciesMeta:
-      "@daytona/sdk":
-        optional: true
-      "@vercel/sandbox":
-        optional: true
+  packages/adw:
+    dependencies:
+      "@lazy-software-factory/runtime":
+        specifier: workspace:*
+        version: link:../runtime
+      effect:
+        specifier: ^3.20.0
+        version: 3.22.1
+    devDependencies:
+      "@types/node":
+        specifier: ^24.3.0
+        version: 24.13.3
+      typescript:
+        specifier: ^5.9.2
+        version: 5.9.3
 
+  packages/runtime:
+    dependencies:
+      effect:
+        specifier: ^3.20.0
+        version: 3.22.1
+    devDependencies:
+      "@types/node":
+        specifier: ^24.3.0
+        version: 24.13.3
+      typescript:
+        specifier: ^5.9.2
+        version: 5.9.3
+
+packages:
   "@babel/code-frame@7.29.7":
     resolution:
       {
@@ -64,20 +75,6 @@ packages:
         integrity: sha512-qehxGkRj55h/ff8EMaJ+cYhyaKlHIxqYDn682wQD7RNp9UujOQsHog2uS0r2vzr4pW+sXf90NeeayjcNaX3fFg==,
       }
     engines: { node: ">=6.9.0" }
-
-  "@clack/core@1.4.3":
-    resolution:
-      {
-        integrity: sha512-/kr3UWNtdJfxZtPgDqUOmG2pvwlmcLGheex5yiZKdwbzZJxhV+HMNR9QNmyY5cGwTNV6LrR7Jtp+KjhUAP1qBQ==,
-      }
-    engines: { node: ">= 20.12.0" }
-
-  "@clack/prompts@1.7.0":
-    resolution:
-      {
-        integrity: sha512-y7/yvZ2TPAnR9+jnc00klvNNLkJiXFFrQA/hlLCcxA9a2A4zQIOimyFQ9XfwYKiGD1fb5GY8vbKIIgO8d5Tb2A==,
-      }
-    engines: { node: ">= 20.12.0" }
 
   "@commitlint/cli@21.2.1":
     resolution:
@@ -349,6 +346,12 @@ packages:
         integrity: sha512-fCTuZK4QBa+39Oz9l4OGfJfz+GpwCp3AqO7Zch3to99xHPgstVsRFpeQ8LNd2o1Gv8raL2mCFwiaHh7bFSp5DQ==,
       }
     engines: { node: ">=22" }
+
+  "@standard-schema/spec@1.1.0":
+    resolution:
+      {
+        integrity: sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==,
+      }
 
   "@tybys/wasm-util@0.9.0":
     resolution:
@@ -675,6 +678,12 @@ packages:
       }
     engines: { node: ">= 0.4" }
 
+  effect@3.22.1:
+    resolution:
+      {
+        integrity: sha512-TNoXushmPOBAjJlthF5d2QwnX2xBPEtcNJr5XKNKbRLbDvBcOYkXlYDfvGfSA0zriwLFuCll5MDtNMAdZL17PQ==,
+      }
+
   ejs@5.0.1:
     resolution:
       {
@@ -769,34 +778,23 @@ packages:
       }
     engines: { node: ">=0.8.0" }
 
+  fast-check@3.23.2:
+    resolution:
+      {
+        integrity: sha512-h5+1OzzfCC3Ef7VbtKdcv7zsstUQwUDlYpUTvjeUsJAssPgLn7QzbboPtL5ro04Mq0rPOsMzl7q5hIbRs2wD1A==,
+      }
+    engines: { node: ">=8.0.0" }
+
   fast-deep-equal@3.1.3:
     resolution:
       {
         integrity: sha512-f3qQ9oQy9j2AhBe/H9VC91wLmKBCCU/gDOnKNAYG5hswO7BLKj09Hc5HYNz9cGI++xlpDCIgDaitVs03ATR84Q==,
       }
 
-  fast-string-truncated-width@3.0.3:
-    resolution:
-      {
-        integrity: sha512-0jjjIEL6+0jag3l2XWWizO64/aZVtpiGE3t0Zgqxv0DPuxiMjvB3M24fCyhZUO4KomJQPj3LTSUnDP3GpdwC0g==,
-      }
-
-  fast-string-width@3.0.2:
-    resolution:
-      {
-        integrity: sha512-gX8LrtNEI5hq8DVUfRQMbr5lpaS4nMIWV+7XEbXk2b8kiQIizgnlr12B4dA3ZEx3308ze0O4Q1R+cHts8kyUJg==,
-      }
-
   fast-uri@3.1.5:
     resolution:
       {
         integrity: sha512-gHwA1O9LDIcKunMKhObS/HimwtehO1nPUECKAu5TpKgaO19fcWEl4bliWe1jWxVFvIXztJjjQ4L8XQ1EU9f7Jw==,
-      }
-
-  fast-wrap-ansi@0.2.2:
-    resolution:
-      {
-        integrity: sha512-7F2Fl+TjRSenLqlU3UjSH0iyqopqoZIu7eZVpEirP2g1GtWa2G/ecEmBdgz31+Mxr+ELclgg6sokpSFIQiZ02Q==,
       }
 
   figures@3.2.0:
@@ -1244,6 +1242,12 @@ packages:
       }
     engines: { node: ">=10" }
 
+  pure-rand@6.1.0:
+    resolution:
+      {
+        integrity: sha512-bVWawvoZoBYpp6yIoQtQXHZjmz35RSVHnUOTefl8Vcjr8snTPY1wnpSPMWekcFwbxI6gtmT7rSYPFvz71ldiOA==,
+      }
+
   readable-stream@3.6.2:
     resolution:
       {
@@ -1318,12 +1322,6 @@ packages:
     resolution:
       {
         integrity: sha512-wnD2ZE+l+SPC/uoS0vXeE9L1+0wuaMqKlfz9AMUo38JsyLSBWSFcHR1Rri62LZc12vLr1gb3jl7iwQhgwpAbGQ==,
-      }
-
-  sisteransi@1.0.5:
-    resolution:
-      {
-        integrity: sha512-bLGGlR1QxBcynn2d5YmDX4MGjlZvy2MRBDRNHLJ8VI6l6+9FUiyTFNJ0IveOSP0bcXgVDPRcfGqA0pjaqUpfVg==,
       }
 
   smol-toml@1.6.1:
@@ -1527,10 +1525,6 @@ packages:
     engines: { node: ^20.19.0 || ^22.12.0 || >=23 }
 
 snapshots:
-  "@ai-hero/sandcastle@0.12.0":
-    dependencies:
-      "@clack/prompts": 1.7.0
-
   "@babel/code-frame@7.29.7":
     dependencies:
       "@babel/helper-validator-identifier": 7.29.7
@@ -1538,18 +1532,6 @@ snapshots:
       picocolors: 1.1.1
 
   "@babel/helper-validator-identifier@7.29.7": {}
-
-  "@clack/core@1.4.3":
-    dependencies:
-      fast-wrap-ansi: 0.2.2
-      sisteransi: 1.0.5
-
-  "@clack/prompts@1.7.0":
-    dependencies:
-      "@clack/core": 1.4.3
-      fast-string-width: 3.0.2
-      fast-wrap-ansi: 0.2.2
-      sisteransi: 1.0.5
 
   "@commitlint/cli@21.2.1(@types/node@24.13.3)(conventional-commits-parser@7.1.2)(typescript@5.9.3)":
     dependencies:
@@ -1726,6 +1708,8 @@ snapshots:
       "@simple-libs/stream-utils": 2.0.0
 
   "@simple-libs/stream-utils@2.0.0": {}
+
+  "@standard-schema/spec@1.1.0": {}
 
   "@tybys/wasm-util@0.9.0":
     dependencies:
@@ -1909,6 +1893,11 @@ snapshots:
       es-errors: 1.3.0
       gopd: 1.2.0
 
+  effect@3.22.1:
+    dependencies:
+      "@standard-schema/spec": 1.1.0
+      fast-check: 3.23.2
+
   ejs@5.0.1: {}
 
   emoji-regex@10.6.0: {}
@@ -1950,19 +1939,13 @@ snapshots:
 
   escape-string-regexp@1.0.5: {}
 
+  fast-check@3.23.2:
+    dependencies:
+      pure-rand: 6.1.0
+
   fast-deep-equal@3.1.3: {}
 
-  fast-string-truncated-width@3.0.3: {}
-
-  fast-string-width@3.0.2:
-    dependencies:
-      fast-string-truncated-width: 3.0.3
-
   fast-uri@3.1.5: {}
-
-  fast-wrap-ansi@0.2.2:
-    dependencies:
-      fast-string-width: 3.0.2
 
   figures@3.2.0:
     dependencies:
@@ -2307,6 +2290,8 @@ snapshots:
 
   proxy-from-env@2.1.0: {}
 
+  pure-rand@6.1.0: {}
+
   readable-stream@3.6.2:
     dependencies:
       inherits: 2.0.4
@@ -2335,8 +2320,6 @@ snapshots:
   semver@7.8.4: {}
 
   signal-exit@3.0.7: {}
-
-  sisteransi@1.0.5: {}
 
   smol-toml@1.6.1: {}
 
