@@ -10,7 +10,8 @@
   "scripts": {
     "nx": "nx",
     "graph": "nx graph",
-    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json && nx run-many -t typecheck",
+    "test": "nx run-many -t test",
     "ensure:gh-stack": "node ./scripts/ensure-gh-stack.ts",
     "postinstall": "node ./scripts/ensure-gh-stack.ts",
     "prepare": "husky && effect-language-service patch"
