@@ -18,7 +18,11 @@ Canonical skills live in `.agents/skills/`. Claude Code uses `.claude/skills/` a
 
 ### Effect (vendored reference)
 
-**Default:** Effect **4 beta** (exact `4.0.0-beta.x` pins) for `packages/*` and `apps/*` unless a real constraint blocks it; root `scripts/` may stay plain Node (ADR-0008). Prefer `effect/*` over `effect/unstable/*`. When writing or reviewing Effect code, read `repos/effect/` (and `repos/effect/LLMS.md` if present) for idiomatic usage, tests, module layout, and API design (ADR-0012). Treat `repos/` as read-only reference — do not edit or import from it; app code imports `effect` from npm. After studying the tree, you may add short notes under `docs/agents/effect-patterns/`.
+**Default:** Effect **4 beta** (exact `4.0.0-beta.x` pins) for `packages/*` and `apps/*` when it fits; libs/Node stdlib welcome (ADR-0008). Thin root `scripts/` need not use Effect. Prefer `effect/*` over `effect/unstable/*`. When writing or reviewing Effect code, read `repos/effect/` (and `repos/effect/LLMS.md` if present) for idiomatic usage, tests, module layout, and API design (ADR-0012). Treat `repos/` as read-only reference — do not edit or import from it; app code imports `effect` from npm. After studying the tree, you may add short notes under `docs/agents/effect-patterns/`.
+
+### Effect Schema closed sets
+
+**Default** for every closed wire set (any finite named values with stable strings/numbers): const object + `Schema.Enum`; call sites use map keys, never bare wire strings. Reach `docs/agents/effect-patterns/schema-enums.md` when adding, changing, or reviewing such sets (also `Schema.Literals`, hand-rolled `"a" | "b"` unions).
 
 <!-- nx configuration start-->
 <!-- Leave the start & end comments to automatically receive updates. -->

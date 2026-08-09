@@ -1,5 +1,5 @@
 {
-  "name": "@lazy-software-factory/runtime",
+  "name": "@lazy-software-factory/git-host",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -9,13 +9,12 @@
   "nx": {
     "tags": [
       "type:lib",
-      "scope:runtime"
+      "scope:git-host"
     ],
-    "sourceRoot": "packages/runtime/src",
+    "sourceRoot": "packages/git-host/src",
     "projectType": "library"
   },
   "dependencies": {
-    "@cursor/sdk": "1.0.27",
     "@effect/platform-node": "4.0.0-beta.106",
     "effect": "4.0.0-beta.106"
   },

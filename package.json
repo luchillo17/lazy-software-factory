@@ -14,7 +14,8 @@
     "test": "nx run-many -t test",
     "ensure:gh-stack": "node ./scripts/ensure-gh-stack.ts",
     "postinstall": "node ./scripts/ensure-gh-stack.ts",
-    "prepare": "husky && effect-language-service patch"
+    "prepare": "husky && effect-language-service patch",
+    "adw:host": "node --import tsx ./scripts/run-minimal-adw.ts"
   },
   "devDependencies": {
     "@commitlint/cli": "^21.2.1",
@@ -26,13 +27,15 @@
     "@swc/helpers": "~0.5.18",
     "@types/node": "^24.3.0",
     "@vitest/coverage-v8": "~4.1.0",
+    "dotenv": "^17.4.2",
     "husky": "^9.1.7",
     "lint-staged": "^17.3.0",
     "nx": "23.1.1",
     "prettier": "^3.9.6",
-    "typescript": "^5.9.2",
+    "tslib": "^2.3.0",
+    "tsx": "^4.23.11",
+    "typescript": "^6.0.3",
     "vite": "^8.0.0",
     "vitest": "~4.1.0"
-  },
-  "dependencies": {}
+  }
 }

@@ -1,47 +1,168 @@
-/**
- * Pluggable sandbox backend (classic Docker locally; BYO cloud later).
- * One warm sandbox per ticket/task — create once, exec gates and agents inside it.
- */
-export interface Sandbox {
-  readonly id: string;
-  exec(command: string, args?: readonly string[]): Promise<ExecResult>;
-  destroy(): Promise<void>;
-}
+import { NodeCrypto } from "@effect/platform-node";
+import { Context, Effect, Layer, Scope } from "effect";
+import { Crypto } from "effect/Crypto";
+import type { ChildProcessHandle } from "effect/unstable/process/ChildProcessSpawner";
+import {
+  SandboxBusyError,
+  SandboxCreateError,
+  SandboxExecError,
+} from "./errors.ts";
+import { runCapturedProcess } from "./run-captured-process.ts";
+import type { CreateSandboxOptions, ExecResult, Sandbox } from "./sandbox.ts";
 
-export interface ExecResult {
-  readonly exitCode: number;
-  readonly stdout: string;
-  readonly stderr: string;
-}
+export type { CreateSandboxOptions, ExecResult, Sandbox } from "./sandbox.ts";
 
-export interface CreateSandboxOptions {
-  readonly cwd?: string;
-  readonly env?: Readonly<Record<string, string>>;
-  readonly image?: string;
-}
+export class SandboxProvider extends Context.Service<
+  SandboxProvider,
+  {
+    /**
+     * Create a warm sandbox. Requires `Scope` so `destroy` (and child kill)
+     * always run when the scope closes — Host slot cannot leak on abort.
+     */
+    readonly create: (
+      options?: CreateSandboxOptions
+    ) => Effect.Effect<
+      Sandbox,
+      SandboxCreateError | SandboxBusyError,
+      Scope.Scope
+    >;
+  }
+>()("@lazy-software-factory/runtime/SandboxProvider") {
+  /**
+   * Host warm sandbox: create/exec/destroy on this machine.
+   * One active Host sandbox at a time (single-ADW-at-a-time).
+   */
+  static readonly Host = Layer.effect(
+    SandboxProvider,
+    Effect.gen(function* () {
+      const crypto = yield* Crypto;
 
-export interface SandboxProvider {
-  create(options?: CreateSandboxOptions): Promise<Sandbox>;
-}
+      let activeId: string | undefined;
 
-/**
- * Agent provider seam (Cursor SDK first: create + resume inside a warm sandbox).
- */
-export interface AgentSession {
-  readonly sessionId: string;
-}
+      const create = Effect.fn("SandboxProvider.create")(function* (
+        options?: CreateSandboxOptions
+      ) {
+        const sandbox = yield* Effect.acquireRelease(
+          Effect.gen(function* () {
+            if (activeId !== undefined) {
+              return yield* new SandboxBusyError({
+                message:
+                  "Host sandbox already active; only one ADW at a time on Host",
+              });
+            }
 
-export interface AgentRunOptions {
-  readonly prompt: string;
-  readonly sandbox: Sandbox;
-  readonly model?: string;
-  readonly env?: Readonly<Record<string, string>>;
-}
+            const id = yield* crypto.randomUUIDv4.pipe(
+              Effect.mapError(
+                (cause) =>
+                  new SandboxCreateError({
+                    message: "Failed to allocate sandbox id",
+                    cause,
+                  })
+              )
+            );
+            activeId = id;
+            const cwd = options?.cwd ?? process.cwd();
+            const env = options?.env
+              ? { ...process.env, ...options.env }
+              : process.env;
 
-export interface AgentProvider {
-  run(options: AgentRunOptions): Promise<AgentSession>;
-  resume(
-    session: AgentSession,
-    options: AgentRunOptions
-  ): Promise<AgentSession>;
+            let destroyed = false;
+            let teardown: Effect.Effect<void> | undefined;
+            const children = new Set<ChildProcessHandle>();
+
+            const releaseSlot = () => {
+              if (activeId === id) {
+                activeId = undefined;
+              }
+            };
+
+            const waitForHandleExitBounded = (handle: ChildProcessHandle) =>
+              handle.exitCode.pipe(
+                Effect.asVoid,
+                Effect.timeout("5 seconds"),
+                Effect.catchTag("TimeoutError", () =>
+                  Effect.gen(function* () {
+                    yield* handle.kill({ killSignal: "SIGKILL" });
+                    yield* handle.exitCode.pipe(
+                      Effect.asVoid,
+                      Effect.timeout("2 seconds"),
+                      Effect.catchTag("TimeoutError", () => Effect.void)
+                    );
+                  })
+                ),
+                Effect.catch(() => Effect.void)
+              );
+
+            const destroy = (): Effect.Effect<void> =>
+              Effect.suspend(() => {
+                if (!teardown) {
+                  teardown = Effect.uninterruptibleMask((restore) =>
+                    Effect.gen(function* () {
+                      destroyed = true;
+                      const pending = [...children];
+                      for (const handle of pending) {
+                        yield* handle
+                          .kill({ killSignal: "SIGTERM" })
+                          .pipe(Effect.catch(() => Effect.void));
+                      }
+                      yield* restore(
+                        Effect.forEach(pending, waitForHandleExitBounded, {
+                          concurrency: "unbounded",
+                        })
+                      );
+                      children.clear();
+                    }).pipe(Effect.ensuring(Effect.sync(releaseSlot)))
+                  );
+                }
+                return teardown;
+              });
+
+            return {
+              id,
+              cwd,
+              exec: (
+                command: string,
+                args: readonly string[] = []
+              ): Effect.Effect<ExecResult, SandboxExecError> =>
+                Effect.gen(function* () {
+                  if (destroyed || activeId !== id) {
+                    return yield* new SandboxExecError({
+                      message: `Sandbox ${id} is destroyed`,
+                    });
+                  }
+
+                  return yield* runCapturedProcess({
+                    command,
+                    args,
+                    cwd,
+                    env,
+                    extendEnv: false,
+                    onSpawn: (handle) => {
+                      children.add(handle);
+                    },
+                    onSettle: (handle) => {
+                      children.delete(handle);
+                    },
+                  }).pipe(
+                    Effect.mapError(
+                      (cause) =>
+                        new SandboxExecError({
+                          message: `Failed to exec in sandbox ${id}`,
+                          cause,
+                        })
+                    )
+                  );
+                }),
+              destroy,
+            } satisfies Sandbox;
+          }),
+          (box) => box.destroy()
+        );
+
+        return sandbox;
+      });
+
+      return SandboxProvider.of({ create });
+    })
+  ).pipe(Layer.provide(NodeCrypto.layer));
 }

@@ -13,5 +13,5 @@
     "types": ["node"]
   },
   "include": ["scripts/**/*.ts"],
-  "references": [{ "path": "./packages/runtime" }, { "path": "./packages/adw" }]
+  "references": []
 }
