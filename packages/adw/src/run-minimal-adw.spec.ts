@@ -84,6 +84,7 @@ describe("runMinimalAdw happy path", () => {
       const gitLayer = Layer.succeed(
         GitHost,
         GitHost.of({
+          clone: () => Effect.void,
           push: () =>
             Effect.gen(function* () {
               yield* record("ship-push");

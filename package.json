@@ -30,6 +30,7 @@
     "lint-staged": "^17.3.0",
     "nx": "23.1.1",
     "prettier": "^3.9.6",
+    "tslib": "^2.3.0",
     "typescript": "^5.9.2",
     "vite": "^8.0.0",
     "vitest": "~4.1.0"

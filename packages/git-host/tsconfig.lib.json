@@ -1,9 +1,9 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
-    "outDir": "../../dist/out-tsc/packages/adw",
+    "outDir": "../../dist/out-tsc/packages/git-host",
     "rootDir": "src",
-    "tsBuildInfoFile": "../../dist/out-tsc/packages/adw/tsconfig.lib.tsbuildinfo",
+    "tsBuildInfoFile": "../../dist/out-tsc/packages/git-host/tsconfig.lib.tsbuildinfo",
     "composite": true,
     "declaration": true,
     "declarationMap": true,
@@ -16,13 +16,5 @@
     "src/**/*.spec.ts",
     "vitest.config.ts",
     "vitest.config.mts"
-  ],
-  "references": [
-    {
-      "path": "../runtime/tsconfig.lib.json"
-    },
-    {
-      "path": "../git-host/tsconfig.lib.json"
-    }
   ]
 }

@@ -208,7 +208,7 @@ export const runMinimalAdw = (
       const branch = ticketBranch(input.ticketId);
 
       const pushResult = yield* gitHost
-        .push({ sandbox, branch })
+        .push({ cwd: process.cwd(), branch })
         .pipe(Effect.exit);
 
       if (pushResult._tag === "Failure") {
@@ -224,7 +224,7 @@ export const runMinimalAdw = (
 
       const prResult = yield* gitHost
         .openPullRequest({
-          sandbox,
+          cwd: process.cwd(),
           branch,
           title: `ADW: ${input.ticketId}`,
         })

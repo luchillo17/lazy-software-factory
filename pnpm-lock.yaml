@@ -46,6 +46,9 @@ importers:
       prettier:
         specifier: ^3.9.6
         version: 3.9.6
+      tslib:
+        specifier: ^2.3.0
+        version: 2.8.1
       typescript:
         specifier: ^5.9.2
         version: 5.9.3
@@ -58,9 +61,28 @@ importers:
 
   packages/adw:
     dependencies:
+      "@lazy-software-factory/git-host":
+        specifier: workspace:*
+        version: link:../git-host
       "@lazy-software-factory/runtime":
         specifier: workspace:*
         version: link:../runtime
+      effect:
+        specifier: 4.0.0-beta.106
+        version: 4.0.0-beta.106
+    devDependencies:
+      "@effect/vitest":
+        specifier: 4.0.0-beta.106
+        version: 4.0.0-beta.106(effect@4.0.0-beta.106)(vitest@4.1.10)
+      "@types/node":
+        specifier: ^24.3.0
+        version: 24.13.3
+      typescript:
+        specifier: ^5.9.2
+        version: 5.9.3
+
+  packages/git-host:
+    dependencies:
       effect:
         specifier: 4.0.0-beta.106
         version: 4.0.0-beta.106

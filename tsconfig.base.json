@@ -16,10 +16,15 @@
     "noImplicitReturns": true,
     "noFallthroughCasesInSwitch": true,
     "noPropertyAccessFromIndexSignature": true,
-    "plugins": [{ "name": "@effect/language-service" }],
+    "plugins": [
+      {
+        "name": "@effect/language-service"
+      }
+    ],
     "paths": {
       "@lazy-software-factory/runtime": ["./packages/runtime/src/index.ts"],
-      "@lazy-software-factory/adw": ["./packages/adw/src/index.ts"]
+      "@lazy-software-factory/adw": ["./packages/adw/src/index.ts"],
+      "@lazy-software-factory/git-host": ["./packages/git-host/src/index.ts"]
     }
   }
 }

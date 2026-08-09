@@ -33,6 +33,7 @@ const passThroughShip = Layer.mergeAll(
   Layer.succeed(
     GitHost,
     GitHost.of({
+      clone: () => Effect.void,
       push: () => Effect.void,
       openPullRequest: () =>
         Effect.succeed({ url: "https://example.test/pr/1" }),

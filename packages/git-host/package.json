@@ -1,5 +1,5 @@
 {
-  "name": "@lazy-software-factory/adw",
+  "name": "@lazy-software-factory/git-host",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -9,14 +9,12 @@
   "nx": {
     "tags": [
       "type:lib",
-      "scope:adw"
+      "scope:git-host"
     ],
-    "sourceRoot": "packages/adw/src",
+    "sourceRoot": "packages/git-host/src",
     "projectType": "library"
   },
   "dependencies": {
-    "@lazy-software-factory/git-host": "workspace:*",
-    "@lazy-software-factory/runtime": "workspace:*",
     "effect": "4.0.0-beta.106"
   },
   "devDependencies": {

@@ -91,6 +91,7 @@ describe("runMinimalAdw Ship → ready_for_pr", () => {
       const gitLayer = Layer.succeed(
         GitHost,
         GitHost.of({
+          clone: () => Effect.void,
           push: () =>
             Effect.fail(new GitHostError({ message: "gh not available" })),
           openPullRequest: () => Effect.die("PR must not run after push fail"),
@@ -122,6 +123,7 @@ describe("runMinimalAdw Ship → ready_for_pr", () => {
       const gitLayer = Layer.succeed(
         GitHost,
         GitHost.of({
+          clone: () => Effect.void,
           push: () => Ref.set(pushed, true),
           openPullRequest: () =>
             Effect.fail(new GitHostError({ message: "cannot open PR" })),
@@ -144,6 +146,7 @@ describe("runMinimalAdw Ship → ready_for_pr", () => {
       const gitLayer = Layer.succeed(
         GitHost,
         GitHost.of({
+          clone: () => Effect.void,
           push: () => Effect.void,
           openPullRequest: () =>
             Effect.succeed({ url: "https://example.test/pr/9" }),
