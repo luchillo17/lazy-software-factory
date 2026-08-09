@@ -8,6 +8,17 @@ export {
   BuildAgentProvider,
   ReviewAgentProvider,
 } from "./agent-provider.ts";
+export {
+  CursorAgent,
+  CursorAgentLive,
+  CursorBuildAgent,
+  CursorBuildAgentLive,
+  CursorReviewAgent,
+  CursorReviewAgentLive,
+  makeCursorAgentService,
+} from "./cursor-agent-provider.ts";
+export { CursorSdk, CursorSdkLive } from "./cursor-sdk.ts";
+export type { CursorSdkService } from "./cursor-sdk.ts";
 export type { CreateSandboxOptions, ExecResult, Sandbox } from "./sandbox.ts";
 export { SandboxProvider } from "./sandbox-provider.ts";
 export {

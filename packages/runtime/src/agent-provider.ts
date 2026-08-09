@@ -49,14 +49,14 @@ const notImplementedService: AgentProviderService = {
 };
 
 /**
- * Effect seam for LLM agents (Cursor SDK adapter lands in a later ticket).
- * Build and Review should be separate Layer tags sharing this service shape.
+ * Effect seam for LLM agents. Cursor SDK adapter: `cursor-agent-provider.ts`.
+ * Build and Review are separate Layer tags sharing this service shape.
  */
 export class AgentProvider extends Context.Service<
   AgentProvider,
   AgentProviderService
 >()("@lazy-software-factory/runtime/AgentProvider") {
-  /** Placeholder Layer until Cursor SDK adapter (#9). */
+  /** Placeholder Layer when no Cursor (or other) adapter is wired. */
   static readonly NotImplemented = Layer.succeed(
     AgentProvider,
     AgentProvider.of(notImplementedService)
