@@ -14,7 +14,7 @@ Single-context: root `CONTEXT.md` + `docs/adr/`. See `docs/agents/domain.md`.
 
 ### Effect (vendored reference)
 
-When writing or reviewing Effect code, inspect `repos/effect/` for idiomatic usage, tests, module structure, and API design (ADR-0012). Prefer that source over web search or guesses. Read `repos/effect/LLMS.md` before writing Effect code when present. Treat `repos/` as read-only reference — do not edit it or import from it; app code imports `effect` from npm. Optional: add concise notes under `docs/agents/effect-patterns/` after studying the vendored tree.
+**Default:** Effect for `packages/*` and `apps/*` unless a real constraint blocks it; root `scripts/` may stay plain Node (ADR-0008). When writing or reviewing Effect code, inspect `repos/effect/` for idiomatic usage, tests, module structure, and API design (ADR-0012). Prefer that source over web search or guesses. Read `repos/effect/LLMS.md` before writing Effect code when present. Treat `repos/` as read-only reference — do not edit it or import from it; app code imports `effect` from npm. Optional: add concise notes under `docs/agents/effect-patterns/` after studying the vendored tree.
 
 ### Related skills
 
