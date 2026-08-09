@@ -3,6 +3,7 @@ import type {
   SandboxProvider,
 } from "@lazy-software-factory/runtime";
 import { Effect } from "effect";
+import { AdwStatus, AdwStatusSchema } from "./enums.ts";
 
 /**
  * Minimal ADW (ADR-0007): Build → Test agent (code gate) → Review,
@@ -27,7 +28,7 @@ export interface MinimalAdwInput {
 
 export interface MinimalAdwResult {
   readonly ticketId: string;
-  readonly status: "shipped" | "failed" | "not_implemented" | "ready_for_pr";
+  readonly status: typeof AdwStatusSchema.Type;
   readonly detail?: string;
   readonly sandboxId?: string;
   readonly buildSessionId?: string;
@@ -44,6 +45,6 @@ export const runMinimalAdw = (
 ): Effect.Effect<MinimalAdwResult> =>
   Effect.succeed({
     ticketId: input.ticketId,
-    status: "not_implemented" as const,
+    status: AdwStatus.NotImplemented,
     detail: "ADW loop stub — see ADR-0007 / ADR-0008",
   });
