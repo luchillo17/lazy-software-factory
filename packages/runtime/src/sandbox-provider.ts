@@ -139,7 +139,7 @@ export class SandboxProvider extends Context.Service<
                   }
 
                   return yield* Effect.tryPromise({
-                    try: () =>
+                    try: (signal) =>
                       new Promise<ExecResult>((resolve, reject) => {
                         const child = spawn(command, [...args], {
                           cwd,
@@ -147,6 +147,20 @@ export class SandboxProvider extends Context.Service<
                           shell: false,
                         });
                         children.add(child);
+
+                        const onAbort = () => {
+                          if (!child.killed) {
+                            child.kill("SIGTERM");
+                          }
+                        };
+                        if (signal.aborted) {
+                          onAbort();
+                        } else {
+                          signal.addEventListener("abort", onAbort, {
+                            once: true,
+                          });
+                        }
+
                         let stdout = "";
                         let stderr = "";
                         child.stdout?.setEncoding("utf8");
@@ -158,10 +172,12 @@ export class SandboxProvider extends Context.Service<
                           stderr += chunk;
                         });
                         child.on("error", (err) => {
+                          signal.removeEventListener("abort", onAbort);
                           children.delete(child);
                           reject(err);
                         });
                         child.on("close", (code) => {
+                          signal.removeEventListener("abort", onAbort);
                           children.delete(child);
                           resolve({
                             exitCode: code ?? 1,

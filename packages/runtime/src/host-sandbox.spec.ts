@@ -1,3 +1,6 @@
+import { mkdtemp, readFile, unlink } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Fiber } from "effect";
 import { SandboxProvider } from "./sandbox-provider.ts";
@@ -60,6 +63,52 @@ describe("Host SandboxProvider", () => {
         Effect.gen(function* () {
           const again = yield* provider.create({ cwd: process.cwd() });
           assert.isString(again.id);
+        })
+      );
+    }).pipe(Effect.provide(SandboxProvider.Host))
+  );
+
+  it.live("exec timeout aborts and kills the child process", () =>
+    Effect.gen(function* () {
+      const provider = yield* SandboxProvider;
+      const dir = yield* Effect.tryPromise(() =>
+        mkdtemp(join(tmpdir(), "host-sandbox-"))
+      );
+      const pidFile = join(dir, "pid");
+
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          const sandbox = yield* provider.create({ cwd: process.cwd() });
+
+          const exit = yield* sandbox
+            .exec("node", [
+              "-e",
+              `require("node:fs").writeFileSync(${JSON.stringify(pidFile)}, String(process.pid)); setTimeout(() => {}, 60_000)`,
+            ])
+            .pipe(Effect.timeout("200 millis"), Effect.exit);
+
+          assert.isTrue(exit._tag === "Failure");
+
+          const pid = Number(
+            (yield* Effect.tryPromise(() => readFile(pidFile, "utf8"))).trim()
+          );
+          assert.isTrue(Number.isFinite(pid) && pid > 0);
+
+          yield* Effect.sleep("50 millis");
+
+          const alive = yield* Effect.sync(() => {
+            try {
+              process.kill(pid, 0);
+              return true;
+            } catch {
+              return false;
+            }
+          });
+          assert.isFalse(alive);
+
+          yield* Effect.tryPromise(() => unlink(pidFile)).pipe(
+            Effect.catch(() => Effect.void)
+          );
         })
       );
     }).pipe(Effect.provide(SandboxProvider.Host))
