@@ -61,6 +61,7 @@ const requireZero = (
         })
       );
 
+/** This monorepo: pnpm lockfile only (ADR-0010). */
 const LOCKFILE_INSTALLS: ReadonlyArray<{
   readonly lockfile: string;
   readonly command: string;
@@ -69,21 +70,6 @@ const LOCKFILE_INSTALLS: ReadonlyArray<{
   {
     lockfile: "pnpm-lock.yaml",
     command: "pnpm",
-    args: ["install", "--frozen-lockfile"],
-  },
-  {
-    lockfile: "package-lock.json",
-    command: "npm",
-    args: ["ci"],
-  },
-  {
-    lockfile: "yarn.lock",
-    command: "yarn",
-    args: ["install", "--frozen-lockfile"],
-  },
-  {
-    lockfile: "bun.lockb",
-    command: "bun",
     args: ["install", "--frozen-lockfile"],
   },
 ];

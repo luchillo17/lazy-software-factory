@@ -1,6 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 import type { Sandbox } from "@lazy-software-factory/runtime";
-import { Effect, Layer, Ref } from "effect";
+import { Effect, Ref } from "effect";
 import { WorkspaceProvision } from "./workspace-provision.ts";
 
 type ExecCall = {
@@ -105,7 +105,6 @@ describe("WorkspaceProvision.Host", () => {
 
       const observed = yield* Ref.get(calls);
       assert.isFalse(observed.some((c) => c.command === "pnpm"));
-      assert.isFalse(observed.some((c) => c.command === "npm"));
       assert.isTrue(
         observed.some(
           (c) =>
@@ -140,6 +139,34 @@ describe("WorkspaceProvision.Host", () => {
         observed.map((c) => [c.command, ...c.args]),
         [["git", "rev-parse", "--git-dir"]]
       );
+    })
+  );
+
+  it.effect("install failure yields ProvisionError", () =>
+    Effect.gen(function* () {
+      const calls = yield* Ref.make<ExecCall[]>([]);
+      const sandbox = recordingSandbox(calls, (command, args) => {
+        if (command === "git") {
+          return { exitCode: 0, stdout: ".git\n" };
+        }
+        if (command === "test") {
+          return { exitCode: args[1] === "pnpm-lock.yaml" ? 0 : 1 };
+        }
+        if (command === "pnpm") {
+          return { exitCode: 1, stderr: "ERR_PNPM_OUTDATED_LOCKFILE" };
+        }
+        return { exitCode: 1, stderr: `unexpected: ${command}` };
+      });
+
+      const result = yield* Effect.gen(function* () {
+        const provisioner = yield* WorkspaceProvision;
+        return yield* provisioner
+          .provision({ sandbox, ticketId: "T-1" })
+          .pipe(Effect.exit);
+      }).pipe(Effect.provide(WorkspaceProvision.Host));
+
+      assert.strictEqual(result._tag, "Failure");
+      assert.isTrue((yield* Ref.get(calls)).some((c) => c.command === "pnpm"));
     })
   );
 });
