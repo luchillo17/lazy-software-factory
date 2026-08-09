@@ -211,8 +211,7 @@ function makeWithRepresentation() {
       schemas,
       definitions
     }
-    const importerOptions: SchemaRepresentation.FromJsonSchemaOptions = {
-      patterns: "apply",
+    const importerOptions = {
       onEnter(js: JsonSchema.JsonSchema) {
         const out = { ...js }
         if (out.type === "object" && out.additionalProperties === undefined) {
