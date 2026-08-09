@@ -72,7 +72,27 @@ export const runMinimalAdw = (
       });
 
       for (const step of testCommands.commands) {
-        const gate = yield* sandbox.exec(step.command, step.args ?? []);
+        const gateOrError = yield* sandbox
+          .exec(step.command, step.args ?? [])
+          .pipe(
+            Effect.map((gate) => ({ _tag: "ok" as const, gate })),
+            Effect.catchTag("SandboxExecError", (err) =>
+              Effect.succeed({
+                _tag: "execError" as const,
+                message: err.message,
+              })
+            )
+          );
+        if (gateOrError._tag === "execError") {
+          return {
+            ticketId: input.ticketId,
+            status: AdwStatus.Failed,
+            detail: `Test agent exec error: ${gateOrError.message}`,
+            sandboxId: sandbox.id,
+            buildSessionId: buildSession.sessionId,
+          } satisfies MinimalAdwResult;
+        }
+        const { gate } = gateOrError;
         if (gate.exitCode !== 0) {
           return {
             ticketId: input.ticketId,
