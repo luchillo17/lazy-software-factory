@@ -33,6 +33,19 @@ pnpm nx show projects
 pnpm ensure:gh-stack
 ```
 
+### Sandcastle (local agent sandbox)
+
+Scaffold lives in `.sandcastle/` (blank template + Docker + Cursor agent). Image tag: `sandcastle:lazy-software-factory`.
+
+```bash
+cp .sandcastle/.env.example .sandcastle/.env
+# fill CURSOR_API_KEY + GH_TOKEN (Issues/Contents/PRs — see .env.example)
+# edit .sandcastle/prompt.md, then:
+pnpm sandcastle
+```
+
+Rebuild image after Dockerfile changes: `pnpm exec sandcastle docker build-image --image-name sandcastle:lazy-software-factory`.
+
 Language and ADRs: [CONTEXT.md](./CONTEXT.md), [docs/adr](./docs/adr/). Compact `gh stack` agent skill: [`luchillo17/gh-stack-compact`](https://github.com/luchillo17/gh-stack-compact) (`npx skills add luchillo17/gh-stack-compact`).
 
 ## Code of conduct

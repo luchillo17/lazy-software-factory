@@ -22,6 +22,6 @@ Agent skills config: [`AGENTS.md`](../AGENTS.md) (SoT) → [`docs/agents/`](./ag
 
 ## Next setup
 
-1. Sandcastle init (Docker on WSL)
+1. ~~Sandcastle init (Docker on WSL)~~ — `.sandcastle/` + image `sandcastle:lazy-software-factory`; set `.sandcastle/.env` then `pnpm sandcastle`
 2. Custom ADW orchestration after runtime wiring
 3. Enable GitHub **stacked PRs** on the repo if `gh stack` reports exit 9
