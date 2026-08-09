@@ -11,10 +11,12 @@
     "nx": "nx",
     "graph": "nx graph",
     "typecheck": "tsc --noEmit -p tsconfig.json",
+    "sandcastle": "npx tsx .sandcastle/main.ts",
     "ensure:gh-stack": "node ./scripts/ensure-gh-stack.ts",
     "postinstall": "node ./scripts/ensure-gh-stack.ts"
   },
   "devDependencies": {
+    "@ai-hero/sandcastle": "^0.12.0",
     "@types/node": "^24.3.0",
     "nx": "23.1.1",
     "typescript": "^5.9.2"
