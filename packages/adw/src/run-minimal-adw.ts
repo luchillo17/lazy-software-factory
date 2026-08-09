@@ -3,8 +3,10 @@ import {
   ReviewAgentProvider,
   RuntimeErrorTag,
   SandboxProvider,
+  type AgentSession,
 } from "@lazy-software-factory/runtime";
 import { Effect, Schema } from "effect";
+import { AdwBuildAttemptCap } from "./attempt-caps.ts";
 import { AdwStatus, AdwStatusSchema, ReviewVerdict } from "./enums.ts";
 import { GitHost } from "./git-host.ts";
 import { ReviewOutput } from "./review-output.ts";
@@ -12,11 +14,11 @@ import { AdwTestCommands } from "./test-commands.ts";
 import { WorkspaceProvision } from "./workspace-provision.ts";
 
 /**
- * Minimal ADW (ADR-0007): provision → Build → Test agent → Review → Ship,
+ * Minimal ADW (ADR-0007): provision → Build ↔ Test agent → Review → Ship,
  * one warm sandbox per ticket.
  *
- * Happy path (#4): stub provision, one Build, green Test, Review pass,
- * push-then-PR → `shipped`. Resume/caps land in follow-ups.
+ * Build↔Test: Test fail resumes the same Build session (ADR-0009); each
+ * create/resume spends a Build attempt (default cap 5).
  */
 export interface MinimalAdwInput {
   readonly ticketId: string;
@@ -42,13 +44,27 @@ const TestExecBranch = {
   ExecError: "execError",
 } as const;
 
+const gateDetail = (gate: {
+  readonly exitCode: number;
+  readonly stdout: string;
+  readonly stderr: string;
+}) => {
+  const parts = [
+    `Test agent failed (exit ${gate.exitCode})`,
+    gate.stdout ? `stdout:\n${gate.stdout}` : undefined,
+    gate.stderr ? `stderr:\n${gate.stderr}` : undefined,
+  ].filter((p): p is string => p !== undefined);
+  return parts.join("\n");
+};
+
 export type MinimalAdwServices =
   | SandboxProvider
   | BuildAgentProvider
   | ReviewAgentProvider
   | GitHost
   | AdwTestCommands
-  | WorkspaceProvision;
+  | WorkspaceProvision
+  | AdwBuildAttemptCap;
 
 export const runMinimalAdw = (
   input: MinimalAdwInput
@@ -61,6 +77,7 @@ export const runMinimalAdw = (
       const gitHost = yield* GitHost;
       const testCommands = yield* AdwTestCommands;
       const provisioner = yield* WorkspaceProvision;
+      const { maxAttempts: buildAttemptCap } = yield* AdwBuildAttemptCap;
 
       const sandbox = yield* sandboxes.create({
         cwd: process.cwd(),
@@ -72,46 +89,69 @@ export const runMinimalAdw = (
         ticketId: input.ticketId,
       });
 
-      const buildSession = yield* buildAgent.run({
+      let buildSession: AgentSession = yield* buildAgent.run({
         prompt: input.prompt,
         sandbox,
         env: input.env,
       });
+      let buildAttempts = 1;
 
-      for (const step of testCommands.commands) {
-        const gateOrError = yield* sandbox
-          .exec(step.command, step.args ?? [])
-          .pipe(
-            Effect.map((gate) => ({
-              _tag: TestExecBranch.Ok,
-              gate,
-            })),
-            Effect.catchTag(RuntimeErrorTag.SandboxExecError, (err) =>
-              Effect.succeed({
-                _tag: TestExecBranch.ExecError,
-                message: err.message,
-              })
-            )
-          );
-        if (gateOrError._tag === TestExecBranch.ExecError) {
+      buildTest: while (true) {
+        let lastGateDetail = "Test agent failed";
+        let allGreen = true;
+
+        for (const step of testCommands.commands) {
+          const gateOrError = yield* sandbox
+            .exec(step.command, step.args ?? [])
+            .pipe(
+              Effect.map((gate) => ({
+                _tag: TestExecBranch.Ok,
+                gate,
+              })),
+              Effect.catchTag(RuntimeErrorTag.SandboxExecError, (err) =>
+                Effect.succeed({
+                  _tag: TestExecBranch.ExecError,
+                  message: err.message,
+                })
+              )
+            );
+          if (gateOrError._tag === TestExecBranch.ExecError) {
+            return {
+              ticketId: input.ticketId,
+              status: AdwStatus.Failed,
+              detail: `Test agent exec error: ${gateOrError.message}`,
+              sandboxId: sandbox.id,
+              buildSessionId: buildSession.sessionId,
+            } satisfies MinimalAdwResult;
+          }
+          const { gate } = gateOrError;
+          if (gate.exitCode !== 0) {
+            allGreen = false;
+            lastGateDetail = gateDetail(gate);
+            break;
+          }
+        }
+
+        if (allGreen) {
+          break buildTest;
+        }
+
+        if (buildAttempts >= buildAttemptCap) {
           return {
             ticketId: input.ticketId,
             status: AdwStatus.Failed,
-            detail: `Test agent exec error: ${gateOrError.message}`,
+            detail: lastGateDetail,
             sandboxId: sandbox.id,
             buildSessionId: buildSession.sessionId,
           } satisfies MinimalAdwResult;
         }
-        const { gate } = gateOrError;
-        if (gate.exitCode !== 0) {
-          return {
-            ticketId: input.ticketId,
-            status: AdwStatus.Failed,
-            detail: `Test agent failed (exit ${gate.exitCode}): ${gate.stderr || gate.stdout}`,
-            sandboxId: sandbox.id,
-            buildSessionId: buildSession.sessionId,
-          } satisfies MinimalAdwResult;
-        }
+
+        buildSession = yield* buildAgent.resume(buildSession, {
+          prompt: lastGateDetail,
+          sandbox,
+          env: input.env,
+        });
+        buildAttempts += 1;
       }
 
       const reviewSession = yield* reviewAgent.run({
