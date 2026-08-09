@@ -1,6 +1,7 @@
 import type { Sandbox } from "@lazy-software-factory/runtime";
 import { Context, Effect, Layer, Schema } from "effect";
 import { GitHost, GitHostError } from "./git-host.ts";
+import { ticketBranch } from "./ticket-branch.ts";
 
 export class ProvisionError extends Schema.TaggedError<ProvisionError>()(
   "ProvisionError",
@@ -22,8 +23,6 @@ export interface WorkspaceProvisionService {
     readonly env?: Readonly<Record<string, string>>;
   }) => Effect.Effect<void, ProvisionError>;
 }
-
-const ticketBranch = (ticketId: string) => `adw/${ticketId}`;
 
 const execOrProvisionFail = (
   sandbox: Sandbox,

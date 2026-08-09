@@ -24,6 +24,13 @@ describe("GitHubGh", () => {
               ) {
                 return {
                   exitCode: 0,
+                  stdout: "Creating pull request…\n",
+                  stderr: "",
+                };
+              }
+              if (command === "gh" && args[0] === "pr" && args[1] === "view") {
+                return {
+                  exitCode: 0,
                   stdout: "https://github.com/example/repo/pull/1\n",
                   stderr: "",
                 };
@@ -66,6 +73,10 @@ describe("GitHubGh", () => {
       });
       assert.strictEqual(seen[2]?.command, "gh");
       assert.deepStrictEqual(seen[2]?.args.slice(0, 2), ["pr", "create"]);
+      assert.deepStrictEqual(seen[3], {
+        command: "gh",
+        args: ["pr", "view", "--json", "url", "--jq", ".url"],
+      });
     })
   );
 });

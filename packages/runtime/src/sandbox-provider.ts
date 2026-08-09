@@ -1,5 +1,4 @@
 import type { ChildProcess } from "node:child_process";
-import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { Context, Effect, Layer, Scope } from "effect";
 import {
@@ -7,6 +6,7 @@ import {
   SandboxCreateError,
   SandboxExecError,
 } from "./errors.ts";
+import { runCapturedProcess } from "./run-captured-process.ts";
 import type { CreateSandboxOptions, ExecResult, Sandbox } from "./sandbox.ts";
 
 export type { CreateSandboxOptions, ExecResult, Sandbox } from "./sandbox.ts";
@@ -141,51 +141,18 @@ export class SandboxProvider extends Context.Service<
 
                   return yield* Effect.tryPromise({
                     try: (signal) =>
-                      new Promise<ExecResult>((resolve, reject) => {
-                        const child = spawn(command, [...args], {
-                          cwd,
-                          env,
-                          shell: false,
-                        });
-                        children.add(child);
-
-                        const onAbort = () => {
-                          if (!child.killed) {
-                            child.kill("SIGTERM");
-                          }
-                        };
-                        if (signal.aborted) {
-                          onAbort();
-                        } else {
-                          signal.addEventListener("abort", onAbort, {
-                            once: true,
-                          });
-                        }
-
-                        let stdout = "";
-                        let stderr = "";
-                        child.stdout?.setEncoding("utf8");
-                        child.stderr?.setEncoding("utf8");
-                        child.stdout?.on("data", (chunk: string) => {
-                          stdout += chunk;
-                        });
-                        child.stderr?.on("data", (chunk: string) => {
-                          stderr += chunk;
-                        });
-                        child.on("error", (err) => {
-                          signal.removeEventListener("abort", onAbort);
+                      runCapturedProcess({
+                        command,
+                        args,
+                        cwd,
+                        env,
+                        signal,
+                        onSpawn: (child) => {
+                          children.add(child);
+                        },
+                        onSettle: (child) => {
                           children.delete(child);
-                          reject(err);
-                        });
-                        child.on("close", (code) => {
-                          signal.removeEventListener("abort", onAbort);
-                          children.delete(child);
-                          resolve({
-                            exitCode: code ?? 1,
-                            stdout,
-                            stderr,
-                          });
-                        });
+                        },
                       }),
                     catch: (cause) =>
                       new SandboxExecError({

@@ -11,6 +11,7 @@ import { AdwStatus, AdwStatusSchema, ReviewVerdict } from "./enums.ts";
 import { GitHost } from "./git-host.ts";
 import { ReviewOutput } from "./review-output.ts";
 import { AdwTestCommands } from "./test-commands.ts";
+import { ticketBranch } from "./ticket-branch.ts";
 import { WorkspaceProvision } from "./workspace-provision.ts";
 
 /**
@@ -36,8 +37,6 @@ export interface MinimalAdwResult {
   readonly reviewSessionId?: string;
   readonly prUrl?: string;
 }
-
-const ticketBranch = (ticketId: string) => `adw/${ticketId}`;
 
 /** Local Test-exec branch tags (not Runtime `_tag` / not ADW status). */
 const TestExecBranch = {
