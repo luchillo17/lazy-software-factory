@@ -1,8 +1,8 @@
 # The factory is self-building
 
-This repo’s primary customer for the Factory is the Factory. Once the minimum loop exists (skills + Sandcastle + gates + orchestration), we develop lazy-software-factory **through its own ADWs** — triage, implement, gate, review, merge — not as a permanent exception that only humans and ad-hoc chats may change.
+This repo’s primary customer for the Factory is the Factory. Once the minimum loop exists (skills + Runtime + gates + ADW orchestration — see ADR-0007), we develop lazy-software-factory **through its own ADWs** — triage, implement, gate, review, merge — not as a permanent exception that only humans and ad-hoc chats may change.
 
-Bootstrap is allowed: a thin outer loop (manual skills, stock Sandcastle, human gates) stands up the first ADW; after that, prefer extending the factory by running the factory on this repo’s apps and packages. Designs that cannot eventually run against this repo are suspect.
+Bootstrap is allowed: a thin outer loop (manual skills, human gates, incomplete Runtime) stands up the first ADW; after that, prefer extending the factory by running the factory on this repo’s apps and packages. Designs that cannot eventually run against this repo are suspect.
 
 ## Status
 
