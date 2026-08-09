@@ -1,16 +1,20 @@
 import type {
-  AgentProvider,
+  AgentProviderService,
   SandboxProvider,
 } from "@lazy-software-factory/runtime";
+import { Effect } from "effect";
 
 /**
  * Minimal ADW (ADR-0007): Build → Test agent (code gate) → Review,
  * one warm sandbox per ticket; Test fail resumes Build in the same session.
+ *
+ * Full Effect loop lands in the happy-path ticket; this stub keeps the public
+ * API Effect-first (ADR-0008) so ADW never Promise-wraps the seam.
  */
 export interface MinimalAdwDeps {
-  readonly sandbox: SandboxProvider;
-  readonly buildAgent: AgentProvider;
-  readonly reviewAgent: AgentProvider;
+  readonly sandbox: SandboxProvider["Service"];
+  readonly buildAgent: AgentProviderService;
+  readonly reviewAgent: AgentProviderService;
   /** Shell command(s) for the Test agent coded gate (e.g. typecheck / test). */
   readonly testCommands: readonly string[];
 }
@@ -23,20 +27,23 @@ export interface MinimalAdwInput {
 
 export interface MinimalAdwResult {
   readonly ticketId: string;
-  readonly status: "shipped" | "failed" | "not_implemented";
+  readonly status: "shipped" | "failed" | "not_implemented" | "ready_for_pr";
   readonly detail?: string;
+  readonly sandboxId?: string;
+  readonly buildSessionId?: string;
+  readonly reviewSessionId?: string;
+  readonly prUrl?: string;
 }
 
 /**
- * Stub entrypoint — Docker + Cursor SDK wiring lands in a later slice.
+ * Stub Effect entrypoint — Host loop wiring lands in follow-up #2 tickets.
  */
-export async function runMinimalAdw(
+export const runMinimalAdw = (
   _deps: MinimalAdwDeps,
   input: MinimalAdwInput
-): Promise<MinimalAdwResult> {
-  return {
+): Effect.Effect<MinimalAdwResult> =>
+  Effect.succeed({
     ticketId: input.ticketId,
-    status: "not_implemented",
+    status: "not_implemented" as const,
     detail: "ADW loop stub — see ADR-0007 / ADR-0008",
-  };
-}
+  });

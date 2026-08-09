@@ -1,47 +1,192 @@
-/**
- * Pluggable sandbox backend (classic Docker locally; BYO cloud later).
- * One warm sandbox per ticket/task — create once, exec gates and agents inside it.
- */
-export interface Sandbox {
-  readonly id: string;
-  exec(command: string, args?: readonly string[]): Promise<ExecResult>;
-  destroy(): Promise<void>;
-}
+import type { ChildProcess } from "node:child_process";
+import { spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
+import { Context, Effect, Layer, Scope } from "effect";
+import {
+  SandboxBusyError,
+  SandboxCreateError,
+  SandboxExecError,
+} from "./errors.ts";
+import type { CreateSandboxOptions, ExecResult, Sandbox } from "./sandbox.ts";
 
-export interface ExecResult {
-  readonly exitCode: number;
-  readonly stdout: string;
-  readonly stderr: string;
-}
+export type { CreateSandboxOptions, ExecResult, Sandbox } from "./sandbox.ts";
 
-export interface CreateSandboxOptions {
-  readonly cwd?: string;
-  readonly env?: Readonly<Record<string, string>>;
-  readonly image?: string;
-}
+export class SandboxProvider extends Context.Service<
+  SandboxProvider,
+  {
+    /**
+     * Create a warm sandbox. Requires `Scope` so `destroy` (and child kill)
+     * always run when the scope closes — Host slot cannot leak on abort.
+     */
+    readonly create: (
+      options?: CreateSandboxOptions
+    ) => Effect.Effect<
+      Sandbox,
+      SandboxCreateError | SandboxBusyError,
+      Scope.Scope
+    >;
+  }
+>()("@lazy-software-factory/runtime/SandboxProvider") {
+  /**
+   * Host warm sandbox: create/exec/destroy on this machine.
+   * One active Host sandbox at a time (single-ADW-at-a-time).
+   */
+  static readonly Host = Layer.effect(
+    SandboxProvider,
+    Effect.sync(() => {
+      let activeId: string | undefined;
 
-export interface SandboxProvider {
-  create(options?: CreateSandboxOptions): Promise<Sandbox>;
-}
+      const create = Effect.fn("SandboxProvider.create")(function* (
+        options?: CreateSandboxOptions
+      ) {
+        const sandbox = yield* Effect.acquireRelease(
+          Effect.gen(function* () {
+            if (activeId !== undefined) {
+              return yield* new SandboxBusyError({
+                message:
+                  "Host sandbox already active; only one ADW at a time on Host",
+              });
+            }
 
-/**
- * Agent provider seam (Cursor SDK first: create + resume inside a warm sandbox).
- */
-export interface AgentSession {
-  readonly sessionId: string;
-}
+            const id = randomUUID();
+            activeId = id;
+            const cwd = options?.cwd ?? process.cwd();
+            const env = options?.env
+              ? { ...process.env, ...options.env }
+              : process.env;
 
-export interface AgentRunOptions {
-  readonly prompt: string;
-  readonly sandbox: Sandbox;
-  readonly model?: string;
-  readonly env?: Readonly<Record<string, string>>;
-}
+            let destroyed = false;
+            let teardown: Effect.Effect<void> | undefined;
+            const children = new Set<ChildProcess>();
 
-export interface AgentProvider {
-  run(options: AgentRunOptions): Promise<AgentSession>;
-  resume(
-    session: AgentSession,
-    options: AgentRunOptions
-  ): Promise<AgentSession>;
+            const releaseSlot = () => {
+              if (activeId === id) {
+                activeId = undefined;
+              }
+            };
+
+            const waitForChildExit = (child: ChildProcess) =>
+              Effect.callback<void>((resume) => {
+                let settled = false;
+                const finish = () => {
+                  if (settled) {
+                    return;
+                  }
+                  settled = true;
+                  resume(Effect.void);
+                };
+                if (child.exitCode !== null || child.signalCode !== null) {
+                  finish();
+                  return;
+                }
+                // Prefer `exit` (does not wait for stdio drain); also accept `close`.
+                child.once("exit", finish);
+                child.once("close", finish);
+              });
+
+            const waitForChildExitBounded = (child: ChildProcess) =>
+              waitForChildExit(child).pipe(
+                Effect.timeout("5 seconds"),
+                Effect.catchTag("TimeoutError", () =>
+                  Effect.gen(function* () {
+                    if (child.exitCode === null && child.signalCode === null) {
+                      child.kill("SIGKILL");
+                    }
+                    yield* waitForChildExit(child).pipe(
+                      Effect.timeout("2 seconds"),
+                      Effect.catchTag("TimeoutError", () => Effect.void)
+                    );
+                  })
+                )
+              );
+
+            const destroy = (): Effect.Effect<void> =>
+              Effect.suspend(() => {
+                if (!teardown) {
+                  teardown = Effect.uninterruptibleMask((restore) =>
+                    Effect.gen(function* () {
+                      destroyed = true;
+                      const pending = [...children];
+                      for (const child of pending) {
+                        if (!child.killed) {
+                          child.kill("SIGTERM");
+                        }
+                      }
+                      // restore so timeout can interrupt the wait; ensuring still frees slot
+                      yield* restore(
+                        Effect.forEach(pending, waitForChildExitBounded, {
+                          concurrency: "unbounded",
+                        })
+                      );
+                      children.clear();
+                    }).pipe(Effect.ensuring(Effect.sync(releaseSlot)))
+                  );
+                }
+                return teardown;
+              });
+
+            return {
+              id,
+              exec: (
+                command: string,
+                args: readonly string[] = []
+              ): Effect.Effect<ExecResult, SandboxExecError> =>
+                Effect.gen(function* () {
+                  if (destroyed || activeId !== id) {
+                    return yield* new SandboxExecError({
+                      message: `Sandbox ${id} is destroyed`,
+                    });
+                  }
+
+                  return yield* Effect.tryPromise({
+                    try: () =>
+                      new Promise<ExecResult>((resolve, reject) => {
+                        const child = spawn(command, [...args], {
+                          cwd,
+                          env,
+                          shell: false,
+                        });
+                        children.add(child);
+                        let stdout = "";
+                        let stderr = "";
+                        child.stdout?.setEncoding("utf8");
+                        child.stderr?.setEncoding("utf8");
+                        child.stdout?.on("data", (chunk: string) => {
+                          stdout += chunk;
+                        });
+                        child.stderr?.on("data", (chunk: string) => {
+                          stderr += chunk;
+                        });
+                        child.on("error", (err) => {
+                          children.delete(child);
+                          reject(err);
+                        });
+                        child.on("close", (code) => {
+                          children.delete(child);
+                          resolve({
+                            exitCode: code ?? 1,
+                            stdout,
+                            stderr,
+                          });
+                        });
+                      }),
+                    catch: (cause) =>
+                      new SandboxExecError({
+                        message: `Failed to exec in sandbox ${id}`,
+                        cause,
+                      }),
+                  });
+                }),
+              destroy,
+            } satisfies Sandbox;
+          }),
+          (box) => box.destroy()
+        );
+
+        return sandbox;
+      });
+
+      return SandboxProvider.of({ create });
+    })
+  );
 }

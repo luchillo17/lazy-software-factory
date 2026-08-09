@@ -78,6 +78,9 @@ importers:
         specifier: 4.0.0-beta.106
         version: 4.0.0-beta.106
     devDependencies:
+      "@effect/vitest":
+        specifier: 4.0.0-beta.106
+        version: 4.0.0-beta.106(effect@4.0.0-beta.106)(vitest@4.1.10)
       "@types/node":
         specifier: ^24.3.0
         version: 24.13.3
@@ -1078,6 +1081,15 @@ packages:
         integrity: sha512-CfiSoaVQO8pZgaMZGw5VvMvRGybsJ2LaSDoLYaqiVGvo/YYPYVR2GzUKY0h1NtIweq/+SQ5XLrvtzPIttWQ0GQ==,
       }
     hasBin: true
+
+  "@effect/vitest@4.0.0-beta.106":
+    resolution:
+      {
+        integrity: sha512-0w799orFqjFNlKh9GrnzMIJLn2/uPaVu8qmT3hJKkYxS46tUS9ZbfjeYNsd1BddvY+3sdS/vXVpnTE64z6+QaQ==,
+      }
+    peerDependencies:
+      effect: ^4.0.0-beta.106
+      vitest: ">=4.1.0 <5.0.0"
 
   "@emnapi/core@1.4.5":
     resolution:
@@ -4386,6 +4398,11 @@ snapshots:
   "@conventional-changelog/template@1.2.1": {}
 
   "@effect/language-service@0.87.2": {}
+
+  "@effect/vitest@4.0.0-beta.106(effect@4.0.0-beta.106)(vitest@4.1.10)":
+    dependencies:
+      effect: 4.0.0-beta.106
+      vitest: 4.1.10(@types/node@24.13.3)(@vitest/coverage-v8@4.1.10)(vite@8.2.1(@types/node@24.13.3)(jiti@2.6.1)(yaml@2.9.0))
 
   "@emnapi/core@1.4.5":
     dependencies:
