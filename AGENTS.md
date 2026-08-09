@@ -12,6 +12,10 @@ Defaults: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `w
 
 Single-context: root `CONTEXT.md` + `docs/adr/`. See `docs/agents/domain.md`.
 
+### Effect (vendored reference)
+
+When writing or reviewing Effect code, inspect `repos/effect/` for idiomatic usage, tests, module structure, and API design (ADR-0012). Prefer that source over web search or guesses. Read `repos/effect/LLMS.md` before writing Effect code when present. Treat `repos/` as read-only reference — do not edit it or import from it; app code imports `effect` from npm. Optional: add concise notes under `docs/agents/effect-patterns/` after studying the vendored tree.
+
 ### Related skills
 
 `gh-stack-compact` lives in [`luchillo17/gh-stack-compact`](https://github.com/luchillo17/gh-stack-compact) — install with `npx skills add luchillo17/gh-stack-compact`. Compact skill (membership, non-interactive, recipes); distinct from the official `gh-stack` skill id; not part of this monorepo.
