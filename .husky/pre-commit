@@ -1,0 +1,2 @@
+npx lint-staged
+corepack pnpm run typecheck
