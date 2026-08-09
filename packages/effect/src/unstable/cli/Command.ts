@@ -22,7 +22,6 @@ import type * as Path from "../../Path.ts"
 import * as Predicate from "../../Predicate.ts"
 import * as References from "../../References.ts"
 import * as Result from "../../Result.ts"
-import * as Runtime from "../../Runtime.ts"
 import * as Stdio from "../../Stdio.ts"
 import * as Terminal from "../../Terminal.ts"
 import type { Contravariant, Covariant, NoInfer, Simplify } from "../../Types.ts"
@@ -1666,24 +1665,16 @@ const getOutOfScopeGlobalFlagErrors = (
 
 const showHelp = <Name extends string, Input, E, R, ContextInput>(
   command: Command<Name, Input, ContextInput, E, R>,
-  error: CliError.ShowHelp,
-  renderErrors: boolean
+  error: CliError.ShowHelp
 ): Effect.Effect<void, CliError.CliError, Environment> =>
   Effect.gen(function*() {
     const { builtIns } = yield* CliConfig.CliConfig
     const formatter = yield* CliOutput.Formatter
     const helpDoc = yield* getHelpForCommandPath(command, error.commandPath, builtIns)
     yield* Console.log(formatter.formatHelpDoc(helpDoc))
-    if (renderErrors && error.errors.length > 0) {
+    if (error.errors.length > 0) {
       yield* Console.error(formatter.formatErrors(error.errors as any))
     }
-  })
-
-const showUserError = (error: CliError.UserError): Effect.Effect<void> =>
-  Effect.gen(function*() {
-    const formatter = yield* CliOutput.Formatter
-    yield* Console.error(formatter.formatError(error))
-    error[Runtime.errorReported] = false
   })
 
 /**
@@ -1693,11 +1684,6 @@ const showUserError = (error: CliError.UserError): Effect.Effect<void> =>
  *
  * Use when command-line arguments should come from `Stdio` at the application
  * entry point.
- *
- * Help documents are always rendered. By default, parse error details and
- * `CliError.UserError` failures are also rendered with the installed
- * `CliOutput.Formatter` before the error is rethrown. Set `renderErrors` to
- * `false` when the host application owns error rendering.
  *
  * **Example** (Running commands with standard input)
  *
@@ -1750,7 +1736,6 @@ const showUserError = (error: CliError.UserError): Effect.Effect<void> =>
 export const run: {
   (config: {
     readonly version: string
-    readonly renderErrors?: boolean | undefined
   }): <Name extends string, Input, E, R, ContextInput>(
     command: Command<Name, Input, ContextInput, E, R>
   ) => Effect.Effect<void, E | CliError.CliError, R | Environment>
@@ -1758,14 +1743,12 @@ export const run: {
     command: Command<Name, Input, ContextInput, E, R>,
     config: {
       readonly version: string
-      readonly renderErrors?: boolean | undefined
     }
   ): Effect.Effect<void, E | CliError.CliError, R | Environment>
 } = dual(2, <Name extends string, Input, E, R, ContextInput>(
   command: Command<Name, Input, ContextInput, E, R>,
   config: {
     readonly version: string
-    readonly renderErrors?: boolean | undefined
   }
 ) =>
   Stdio.Stdio.use(({ args }) =>
@@ -1782,11 +1765,6 @@ export const run: {
  *
  * Use when you need to test CLI applications or programmatically execute
  * commands with specific arguments.
- *
- * Help documents are always rendered. By default, parse error details and
- * `CliError.UserError` failures are also rendered with the installed
- * `CliOutput.Formatter` before the error is rethrown. Set `renderErrors` to
- * `false` when the host application owns error rendering.
  *
  * **Example** (Running commands with explicit arguments)
  *
@@ -1841,7 +1819,6 @@ export const runWith = <const Name extends string, Input, E, R, ContextInput>(
   command: Command<Name, Input, ContextInput, E, R>,
   config: {
     readonly version: string
-    readonly renderErrors?: boolean | undefined
   }
 ): (
   input: ReadonlyArray<string>
@@ -1908,7 +1885,7 @@ export const runWith = <const Name extends string, Input, E, R, ContextInput>(
             }))
             if (shouldRun) {
               yield* Console.log()
-              yield* runWith(command, { ...config, renderErrors: false })(wizardArgs.slice(1))
+              yield* runWith(command, config)(wizardArgs.slice(1))
             }
           }).pipe(
             Effect.catchTag("QuitError", () => Console.log(Wizard.renderQuit()))
@@ -1956,14 +1933,7 @@ export const runWith = <const Name extends string, Input, E, R, ContextInput>(
         CliError.isCliError(error) && error._tag === "ShowHelp"
           ? Result.succeed(error)
           : Result.fail(error),
-      (error) => Effect.andThen(showHelp(command, error, config.renderErrors !== false), Effect.fail(error))
-    ),
-    Effect.catchFilter(
-      (error) =>
-        config.renderErrors !== false && CliError.isCliError(error) && error._tag === "UserError"
-          ? Result.succeed(error)
-          : Result.fail(error),
-      (error) => Effect.andThen(showUserError(error), Effect.fail(error))
+      (error) => Effect.andThen(showHelp(command, error), Effect.fail(error))
     ),
     Effect.catchFilter(
       (e) =>
