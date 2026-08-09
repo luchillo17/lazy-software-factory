@@ -22,6 +22,8 @@ import { WorkspaceProvision } from "./workspace-provision.ts";
 export interface MinimalAdwInput {
   readonly ticketId: string;
   readonly prompt: string;
+  /** Required when sandbox has no `.git` (clone-when-empty). */
+  readonly repoUrl?: string;
   readonly env?: Readonly<Record<string, string>>;
 }
 
@@ -88,6 +90,8 @@ export const runMinimalAdw = (
       yield* provisioner.provision({
         sandbox,
         ticketId: input.ticketId,
+        repoUrl: input.repoUrl,
+        env: input.env,
       });
 
       let buildSession: AgentSession = yield* buildAgent.run({

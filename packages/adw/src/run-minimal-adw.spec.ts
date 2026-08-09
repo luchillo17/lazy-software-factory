@@ -74,8 +74,6 @@ describe("runMinimalAdw happy path", () => {
         })
       );
 
-      const provisionLayer = WorkspaceProvision.Host;
-
       const buildLayer = Layer.succeed(
         BuildAgentProvider,
         BuildAgentProvider.of({
@@ -137,7 +135,7 @@ describe("runMinimalAdw happy path", () => {
         Effect.provide(
           Layer.mergeAll(
             fakeSandboxLayer,
-            provisionLayer,
+            WorkspaceProvision.Host.pipe(Layer.provide(gitLayer)),
             buildLayer,
             reviewLayer,
             gitLayer,

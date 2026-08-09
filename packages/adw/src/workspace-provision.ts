@@ -1,5 +1,6 @@
 import type { Sandbox } from "@lazy-software-factory/runtime";
 import { Context, Effect, Layer, Schema } from "effect";
+import { GitHost, GitHostError } from "./git-host.ts";
 
 export class ProvisionError extends Schema.TaggedError<ProvisionError>()(
   "ProvisionError",
@@ -11,12 +12,14 @@ export class ProvisionError extends Schema.TaggedError<ProvisionError>()(
 
 export interface WorkspaceProvisionService {
   /**
-   * Deterministic setup before Build (ADR-0010): ensure git worktree,
-   * checkout orchestration-owned ticket branch, locked install when present.
+   * Deterministic setup before Build (ADR-0010): ensure git worktree
+   * (reuse or clone), checkout ticket branch, locked install when present.
    */
   readonly provision: (options: {
     readonly sandbox: Sandbox;
     readonly ticketId: string;
+    readonly repoUrl?: string;
+    readonly env?: Readonly<Record<string, string>>;
   }) => Effect.Effect<void, ProvisionError>;
 }
 
@@ -74,6 +77,41 @@ const LOCKFILE_INSTALLS: ReadonlyArray<{
   },
 ];
 
+const checkoutBranchAndInstall = (
+  sandbox: Sandbox,
+  ticketId: string
+): Effect.Effect<void, ProvisionError> =>
+  Effect.gen(function* () {
+    const branch = ticketBranch(ticketId);
+    const checkout = yield* execOrProvisionFail(
+      sandbox,
+      "git",
+      ["checkout", "-B", branch],
+      "git checkout"
+    );
+    yield* requireZero(checkout, `git checkout -B ${branch}`);
+
+    for (const step of LOCKFILE_INSTALLS) {
+      const lock = yield* execOrProvisionFail(
+        sandbox,
+        "test",
+        ["-f", step.lockfile],
+        `test -f ${step.lockfile}`
+      );
+      if (lock.exitCode !== 0) {
+        continue;
+      }
+      const install = yield* execOrProvisionFail(
+        sandbox,
+        step.command,
+        step.args,
+        `${step.command} install`
+      );
+      yield* requireZero(install, `${step.command} ${step.args.join(" ")}`);
+      return;
+    }
+  });
+
 export class WorkspaceProvision extends Context.Service<
   WorkspaceProvision,
   WorkspaceProvisionService
@@ -87,60 +125,51 @@ export class WorkspaceProvision extends Context.Service<
   );
 
   /**
-   * Host provision (ADR-0010): reuse existing clone when `.git` is present;
-   * create/checkout `adw/<ticketId>`; run locked install when a lockfile exists.
-   * Missing worktree fails — clone-when-empty is #12.
+   * Host / warm-sandbox provision (ADR-0010): reuse `.git` when present;
+   * otherwise clone via {@link GitHost}, then ticket branch + locked install.
    */
-  static readonly Host = Layer.succeed(
+  static readonly Host = Layer.effect(
     WorkspaceProvision,
-    WorkspaceProvision.of({
-      provision: ({ sandbox, ticketId }) =>
-        Effect.gen(function* () {
-          const gitDir = yield* execOrProvisionFail(
-            sandbox,
-            "git",
-            ["rev-parse", "--git-dir"],
-            "git rev-parse"
-          );
-          if (gitDir.exitCode !== 0) {
-            return yield* new ProvisionError({
-              message:
-                "Host provision requires an existing git worktree (.git); clone-when-empty is separate",
-            });
-          }
+    Effect.gen(function* () {
+      const gitHost = yield* GitHost;
 
-          const branch = ticketBranch(ticketId);
-          const checkout = yield* execOrProvisionFail(
-            sandbox,
-            "git",
-            ["checkout", "-B", branch],
-            "git checkout"
-          );
-          yield* requireZero(checkout, `git checkout -B ${branch}`);
-
-          for (const step of LOCKFILE_INSTALLS) {
-            const lock = yield* execOrProvisionFail(
+      return WorkspaceProvision.of({
+        provision: ({ sandbox, ticketId, repoUrl, env }) =>
+          Effect.gen(function* () {
+            const gitDir = yield* execOrProvisionFail(
               sandbox,
-              "test",
-              ["-f", step.lockfile],
-              `test -f ${step.lockfile}`
+              "git",
+              ["rev-parse", "--git-dir"],
+              "git rev-parse"
             );
-            if (lock.exitCode !== 0) {
-              continue;
+
+            if (gitDir.exitCode !== 0) {
+              if (!repoUrl) {
+                return yield* new ProvisionError({
+                  message:
+                    "No git worktree and no repoUrl for clone; pass repoUrl for empty sandbox",
+                });
+              }
+              yield* gitHost
+                .clone({
+                  repoUrl,
+                  destination: sandbox.cwd,
+                  env,
+                })
+                .pipe(
+                  Effect.mapError(
+                    (err: GitHostError) =>
+                      new ProvisionError({
+                        message: `git host clone failed: ${err.message}`,
+                        cause: err,
+                      })
+                  )
+                );
             }
-            const install = yield* execOrProvisionFail(
-              sandbox,
-              step.command,
-              step.args,
-              `${step.command} install`
-            );
-            yield* requireZero(
-              install,
-              `${step.command} ${step.args.join(" ")}`
-            );
-            return;
-          }
-        }),
+
+            yield* checkoutBranchAndInstall(sandbox, ticketId);
+          }),
+      });
     })
   );
 }
