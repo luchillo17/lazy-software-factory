@@ -20,6 +20,8 @@ export interface CreateSandboxOptions {
  */
 export interface Sandbox {
   readonly id: string;
+  /** Working directory for exec / Ship (git host cwd). */
+  readonly cwd: string;
   readonly exec: (
     command: string,
     args?: readonly string[]

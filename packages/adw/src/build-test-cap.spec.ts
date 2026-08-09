@@ -61,6 +61,7 @@ describe("runMinimalAdw Build↔Test resume + cap", () => {
           create: () =>
             Effect.succeed({
               id: "sandbox-1",
+              cwd: "/tmp/sandbox-1",
               exec: () =>
                 Effect.gen(function* () {
                   const pass = yield* Ref.get(testPass);
@@ -133,6 +134,7 @@ describe("runMinimalAdw Build↔Test resume + cap", () => {
             create: () =>
               Effect.succeed({
                 id: "sandbox-1",
+                cwd: "/tmp/sandbox-1",
                 exec: () =>
                   Effect.succeed({
                     exitCode: 1,

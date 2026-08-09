@@ -46,6 +46,7 @@ describe("runMinimalAdw Review routing + cap", () => {
             create: () =>
               Effect.succeed({
                 id: "sandbox-1",
+                cwd: "/tmp/sandbox-1",
                 exec: () =>
                   Effect.gen(function* () {
                     const phase = yield* Ref.get(testPhase);
@@ -160,6 +161,7 @@ describe("runMinimalAdw Review routing + cap", () => {
             create: () =>
               Effect.succeed({
                 id: "sandbox-1",
+                cwd: "/tmp/sandbox-1",
                 exec: () =>
                   Effect.succeed({ exitCode: 0, stdout: "", stderr: "" }),
                 destroy: () => Effect.void,
@@ -232,6 +234,7 @@ describe("runMinimalAdw Review routing + cap", () => {
           create: () =>
             Effect.succeed({
               id: "sandbox-1",
+              cwd: "/tmp/sandbox-1",
               exec: () =>
                 Effect.succeed({ exitCode: 0, stdout: "", stderr: "" }),
               destroy: () => Effect.void,

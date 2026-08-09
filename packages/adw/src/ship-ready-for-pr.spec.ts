@@ -24,6 +24,7 @@ const greenAgents = Layer.mergeAll(
       create: () =>
         Effect.succeed({
           id: "sandbox-1",
+          cwd: "/tmp/sandbox-1",
           exec: () => Effect.succeed({ exitCode: 0, stdout: "", stderr: "" }),
           destroy: () => Effect.void,
         } satisfies Sandbox),

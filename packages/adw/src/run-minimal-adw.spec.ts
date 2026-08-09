@@ -28,6 +28,7 @@ describe("runMinimalAdw happy path", () => {
               yield* record("sandbox");
               const box: Sandbox = {
                 id: "sandbox-1",
+                cwd: "/tmp/sandbox-1",
                 exec: (command, args = []) =>
                   Effect.gen(function* () {
                     yield* record("test");

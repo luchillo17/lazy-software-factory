@@ -127,6 +127,7 @@ export class SandboxProvider extends Context.Service<
 
             return {
               id,
+              cwd,
               exec: (
                 command: string,
                 args: readonly string[] = []
