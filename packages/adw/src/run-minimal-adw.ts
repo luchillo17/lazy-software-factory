@@ -6,7 +6,7 @@ import {
   type AgentSession,
 } from "@lazy-software-factory/runtime";
 import { Effect, Schema } from "effect";
-import { AdwBuildAttemptCap } from "./attempt-caps.ts";
+import { AdwBuildAttemptCap, AdwReviewAttemptCap } from "./attempt-caps.ts";
 import { AdwStatus, AdwStatusSchema, ReviewVerdict } from "./enums.ts";
 import { GitHost } from "./git-host.ts";
 import { ReviewOutput } from "./review-output.ts";
@@ -14,11 +14,10 @@ import { AdwTestCommands } from "./test-commands.ts";
 import { WorkspaceProvision } from "./workspace-provision.ts";
 
 /**
- * Minimal ADW (ADR-0007): provision → Build ↔ Test agent → Review → Ship,
- * one warm sandbox per ticket.
+ * Minimal ADW (ADR-0007): provision → Build ↔ Test → Review → Ship.
  *
- * Build↔Test: Test fail resumes the same Build session (ADR-0009); each
- * create/resume spends a Build attempt (default cap 5).
+ * Build↔Test and Review have separate attempt caps (ADR-0009). Review fail
+ * resumes the original Build session without spending a Build attempt.
  */
 export interface MinimalAdwInput {
   readonly ticketId: string;
@@ -64,7 +63,8 @@ export type MinimalAdwServices =
   | GitHost
   | AdwTestCommands
   | WorkspaceProvision
-  | AdwBuildAttemptCap;
+  | AdwBuildAttemptCap
+  | AdwReviewAttemptCap;
 
 export const runMinimalAdw = (
   input: MinimalAdwInput
@@ -78,6 +78,7 @@ export const runMinimalAdw = (
       const testCommands = yield* AdwTestCommands;
       const provisioner = yield* WorkspaceProvision;
       const { maxAttempts: buildAttemptCap } = yield* AdwBuildAttemptCap;
+      const { maxAttempts: reviewAttemptCap } = yield* AdwReviewAttemptCap;
 
       const sandbox = yield* sandboxes.create({
         cwd: process.cwd(),
@@ -95,91 +96,113 @@ export const runMinimalAdw = (
         env: input.env,
       });
       let buildAttempts = 1;
+      let reviewAttempts = 0;
+      let reviewSessionId: string | undefined;
 
-      buildTest: while (true) {
-        let lastGateDetail = "Test agent failed";
-        let allGreen = true;
+      adw: while (true) {
+        buildTest: while (true) {
+          let lastGateDetail = "Test agent failed";
+          let allGreen = true;
 
-        for (const step of testCommands.commands) {
-          const gateOrError = yield* sandbox
-            .exec(step.command, step.args ?? [])
-            .pipe(
-              Effect.map((gate) => ({
-                _tag: TestExecBranch.Ok,
-                gate,
-              })),
-              Effect.catchTag(RuntimeErrorTag.SandboxExecError, (err) =>
-                Effect.succeed({
-                  _tag: TestExecBranch.ExecError,
-                  message: err.message,
-                })
-              )
-            );
-          if (gateOrError._tag === TestExecBranch.ExecError) {
+          for (const step of testCommands.commands) {
+            const gateOrError = yield* sandbox
+              .exec(step.command, step.args ?? [])
+              .pipe(
+                Effect.map((gate) => ({
+                  _tag: TestExecBranch.Ok,
+                  gate,
+                })),
+                Effect.catchTag(RuntimeErrorTag.SandboxExecError, (err) =>
+                  Effect.succeed({
+                    _tag: TestExecBranch.ExecError,
+                    message: err.message,
+                  })
+                )
+              );
+            if (gateOrError._tag === TestExecBranch.ExecError) {
+              return {
+                ticketId: input.ticketId,
+                status: AdwStatus.Failed,
+                detail: `Test agent exec error: ${gateOrError.message}`,
+                sandboxId: sandbox.id,
+                buildSessionId: buildSession.sessionId,
+                reviewSessionId,
+              } satisfies MinimalAdwResult;
+            }
+            const { gate } = gateOrError;
+            if (gate.exitCode !== 0) {
+              allGreen = false;
+              lastGateDetail = gateDetail(gate);
+              break;
+            }
+          }
+
+          if (allGreen) {
+            break buildTest;
+          }
+
+          if (buildAttempts >= buildAttemptCap) {
             return {
               ticketId: input.ticketId,
               status: AdwStatus.Failed,
-              detail: `Test agent exec error: ${gateOrError.message}`,
+              detail: lastGateDetail,
               sandboxId: sandbox.id,
               buildSessionId: buildSession.sessionId,
+              reviewSessionId,
             } satisfies MinimalAdwResult;
           }
-          const { gate } = gateOrError;
-          if (gate.exitCode !== 0) {
-            allGreen = false;
-            lastGateDetail = gateDetail(gate);
-            break;
-          }
+
+          buildSession = yield* buildAgent.resume(buildSession, {
+            prompt: lastGateDetail,
+            sandbox,
+            env: input.env,
+          });
+          buildAttempts += 1;
         }
 
-        if (allGreen) {
-          break buildTest;
-        }
-
-        if (buildAttempts >= buildAttemptCap) {
-          return {
-            ticketId: input.ticketId,
-            status: AdwStatus.Failed,
-            detail: lastGateDetail,
-            sandboxId: sandbox.id,
-            buildSessionId: buildSession.sessionId,
-          } satisfies MinimalAdwResult;
-        }
-
-        buildSession = yield* buildAgent.resume(buildSession, {
-          prompt: lastGateDetail,
+        const reviewSession = yield* reviewAgent.run({
+          prompt: `Review changes for ticket ${input.ticketId}`,
           sandbox,
           env: input.env,
         });
-        buildAttempts += 1;
-      }
+        reviewSessionId = reviewSession.sessionId;
+        reviewAttempts += 1;
 
-      const reviewSession = yield* reviewAgent.run({
-        prompt: `Review changes for ticket ${input.ticketId}`,
-        sandbox,
-        env: input.env,
-      });
+        const decoded = yield* Schema.decodeUnknownEffect(ReviewOutput)(
+          reviewSession.output
+        ).pipe(
+          Effect.catchTag("SchemaError", () =>
+            Effect.succeed({
+              verdict: ReviewVerdict.Fail,
+              failReport: "malformed or missing Review verdict",
+            } satisfies ReviewOutput)
+          )
+        );
 
-      const decoded = yield* Schema.decodeUnknownEffect(ReviewOutput)(
-        reviewSession.output
-      ).pipe(
-        Effect.catchTag("SchemaError", () =>
-          Effect.succeed({
-            verdict: ReviewVerdict.Fail,
-            failReport: "malformed or missing Review verdict",
-          } satisfies ReviewOutput)
-        )
-      );
+        if (decoded.verdict === ReviewVerdict.Pass) {
+          break adw;
+        }
 
-      if (decoded.verdict !== ReviewVerdict.Pass) {
-        return {
-          ticketId: input.ticketId,
-          status: AdwStatus.Failed,
-          detail: decoded.failReport ?? "Review failed",
-          sandboxId: sandbox.id,
-          buildSessionId: buildSession.sessionId,
-          reviewSessionId: reviewSession.sessionId,
-        } satisfies MinimalAdwResult;
+        const failReport =
+          decoded.failReport ?? "Review failed without a fail report";
+
+        if (reviewAttempts >= reviewAttemptCap) {
+          return {
+            ticketId: input.ticketId,
+            status: AdwStatus.Failed,
+            detail: failReport,
+            sandboxId: sandbox.id,
+            buildSessionId: buildSession.sessionId,
+            reviewSessionId,
+          } satisfies MinimalAdwResult;
+        }
+
+        // Review→Build: same Build session; does NOT spend a Build attempt.
+        buildSession = yield* buildAgent.resume(buildSession, {
+          prompt: failReport,
+          sandbox,
+          env: input.env,
+        });
       }
 
       const branch = ticketBranch(input.ticketId);
@@ -195,7 +218,7 @@ export const runMinimalAdw = (
           detail: "Ship push failed",
           sandboxId: sandbox.id,
           buildSessionId: buildSession.sessionId,
-          reviewSessionId: reviewSession.sessionId,
+          reviewSessionId,
         } satisfies MinimalAdwResult;
       }
 
@@ -214,7 +237,7 @@ export const runMinimalAdw = (
           detail: "Ship open PR failed",
           sandboxId: sandbox.id,
           buildSessionId: buildSession.sessionId,
-          reviewSessionId: reviewSession.sessionId,
+          reviewSessionId,
         } satisfies MinimalAdwResult;
       }
 
@@ -223,7 +246,7 @@ export const runMinimalAdw = (
         status: AdwStatus.Shipped,
         sandboxId: sandbox.id,
         buildSessionId: buildSession.sessionId,
-        reviewSessionId: reviewSession.sessionId,
+        reviewSessionId,
         prUrl: prResult.value.url,
       } satisfies MinimalAdwResult;
     }).pipe(

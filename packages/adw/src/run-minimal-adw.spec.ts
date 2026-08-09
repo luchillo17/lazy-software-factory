@@ -6,7 +6,7 @@ import {
   type Sandbox,
 } from "@lazy-software-factory/runtime";
 import { Effect, Layer, Ref } from "effect";
-import { AdwBuildAttemptCap } from "./attempt-caps.ts";
+import { AdwBuildAttemptCap, AdwReviewAttemptCap } from "./attempt-caps.ts";
 import { AdwStatus, ReviewVerdict } from "./enums.ts";
 import { GitHost } from "./git-host.ts";
 import { runMinimalAdw } from "./run-minimal-adw.ts";
@@ -117,7 +117,8 @@ describe("runMinimalAdw happy path", () => {
             reviewLayer,
             gitLayer,
             testCommandsLayer,
-            AdwBuildAttemptCap.Default
+            AdwBuildAttemptCap.Default,
+            AdwReviewAttemptCap.Default
           )
         )
       );

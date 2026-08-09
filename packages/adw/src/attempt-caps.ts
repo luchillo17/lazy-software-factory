@@ -10,3 +10,14 @@ export class AdwBuildAttemptCap extends Context.Service<
     AdwBuildAttemptCap.of({ maxAttempts: 5 })
   );
 }
+
+/** Review attempt budget (ADR-0009). Default 3. Separate from Build. */
+export class AdwReviewAttemptCap extends Context.Service<
+  AdwReviewAttemptCap,
+  { readonly maxAttempts: number }
+>()("@lazy-software-factory/adw/AdwReviewAttemptCap") {
+  static readonly Default = Layer.succeed(
+    AdwReviewAttemptCap,
+    AdwReviewAttemptCap.of({ maxAttempts: 3 })
+  );
+}
