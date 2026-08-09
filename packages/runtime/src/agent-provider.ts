@@ -8,6 +8,11 @@ import type { Sandbox } from "./sandbox.ts";
  */
 export interface AgentSession {
   readonly sessionId: string;
+  /**
+   * Optional structured payload from the agent (e.g. Review verdict).
+   * Opaque to Runtime — ADW parses with Schema.
+   */
+  readonly output?: unknown;
 }
 
 export interface AgentRunOptions {

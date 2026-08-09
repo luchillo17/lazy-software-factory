@@ -1,25 +1,22 @@
-import type {
-  AgentProviderService,
+import {
+  BuildAgentProvider,
+  ReviewAgentProvider,
   SandboxProvider,
 } from "@lazy-software-factory/runtime";
-import { Effect } from "effect";
-import { AdwStatus, AdwStatusSchema } from "./enums.ts";
+import { Effect, Schema } from "effect";
+import { AdwStatus, AdwStatusSchema, ReviewVerdict } from "./enums.ts";
+import { GitHost } from "./git-host.ts";
+import { ReviewOutput } from "./review-output.ts";
+import { AdwTestCommands } from "./test-commands.ts";
+import { WorkspaceProvision } from "./workspace-provision.ts";
 
 /**
- * Minimal ADW (ADR-0007): Build → Test agent (code gate) → Review,
- * one warm sandbox per ticket; Test fail resumes Build in the same session.
+ * Minimal ADW (ADR-0007): provision → Build → Test agent → Review → Ship,
+ * one warm sandbox per ticket.
  *
- * Full Effect loop lands in the happy-path ticket; this stub keeps the public
- * API Effect-first (ADR-0008) so ADW never Promise-wraps the seam.
+ * Happy path (#4): stub provision, one Build, green Test, Review pass,
+ * push-then-PR → `shipped`. Resume/caps land in follow-ups.
  */
-export interface MinimalAdwDeps {
-  readonly sandbox: SandboxProvider["Service"];
-  readonly buildAgent: AgentProviderService;
-  readonly reviewAgent: AgentProviderService;
-  /** Shell command(s) for the Test agent coded gate (e.g. typecheck / test). */
-  readonly testCommands: readonly string[];
-}
-
 export interface MinimalAdwInput {
   readonly ticketId: string;
   readonly prompt: string;
@@ -36,15 +33,136 @@ export interface MinimalAdwResult {
   readonly prUrl?: string;
 }
 
-/**
- * Stub Effect entrypoint — Host loop wiring lands in follow-up #2 tickets.
- */
+const ticketBranch = (ticketId: string) => `adw/${ticketId}`;
+
+export type MinimalAdwServices =
+  | SandboxProvider
+  | BuildAgentProvider
+  | ReviewAgentProvider
+  | GitHost
+  | AdwTestCommands
+  | WorkspaceProvision;
+
 export const runMinimalAdw = (
-  _deps: MinimalAdwDeps,
   input: MinimalAdwInput
-): Effect.Effect<MinimalAdwResult> =>
-  Effect.succeed({
-    ticketId: input.ticketId,
-    status: AdwStatus.NotImplemented,
-    detail: "ADW loop stub — see ADR-0007 / ADR-0008",
-  });
+): Effect.Effect<MinimalAdwResult, never, MinimalAdwServices> =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const sandboxes = yield* SandboxProvider;
+      const buildAgent = yield* BuildAgentProvider;
+      const reviewAgent = yield* ReviewAgentProvider;
+      const gitHost = yield* GitHost;
+      const testCommands = yield* AdwTestCommands;
+      const provisioner = yield* WorkspaceProvision;
+
+      const sandbox = yield* sandboxes.create({
+        cwd: process.cwd(),
+        env: input.env,
+      });
+
+      yield* provisioner.provision({
+        sandbox,
+        ticketId: input.ticketId,
+      });
+
+      const buildSession = yield* buildAgent.run({
+        prompt: input.prompt,
+        sandbox,
+        env: input.env,
+      });
+
+      for (const step of testCommands.commands) {
+        const gate = yield* sandbox.exec(step.command, step.args ?? []);
+        if (gate.exitCode !== 0) {
+          return {
+            ticketId: input.ticketId,
+            status: AdwStatus.Failed,
+            detail: `Test agent failed (exit ${gate.exitCode}): ${gate.stderr || gate.stdout}`,
+            sandboxId: sandbox.id,
+            buildSessionId: buildSession.sessionId,
+          } satisfies MinimalAdwResult;
+        }
+      }
+
+      const reviewSession = yield* reviewAgent.run({
+        prompt: `Review changes for ticket ${input.ticketId}`,
+        sandbox,
+        env: input.env,
+      });
+
+      const decoded = yield* Schema.decodeUnknownEffect(ReviewOutput)(
+        reviewSession.output
+      ).pipe(
+        Effect.catchTag("SchemaError", () =>
+          Effect.succeed({
+            verdict: ReviewVerdict.Fail,
+            failReport: "malformed or missing Review verdict",
+          } satisfies ReviewOutput)
+        )
+      );
+
+      if (decoded.verdict !== ReviewVerdict.Pass) {
+        return {
+          ticketId: input.ticketId,
+          status: AdwStatus.Failed,
+          detail: decoded.failReport ?? "Review failed",
+          sandboxId: sandbox.id,
+          buildSessionId: buildSession.sessionId,
+          reviewSessionId: reviewSession.sessionId,
+        } satisfies MinimalAdwResult;
+      }
+
+      const branch = ticketBranch(input.ticketId);
+
+      const pushResult = yield* gitHost
+        .push({ sandbox, branch })
+        .pipe(Effect.exit);
+
+      if (pushResult._tag === "Failure") {
+        return {
+          ticketId: input.ticketId,
+          status: AdwStatus.ReadyForPr,
+          detail: "Ship push failed",
+          sandboxId: sandbox.id,
+          buildSessionId: buildSession.sessionId,
+          reviewSessionId: reviewSession.sessionId,
+        } satisfies MinimalAdwResult;
+      }
+
+      const prResult = yield* gitHost
+        .openPullRequest({
+          sandbox,
+          branch,
+          title: `ADW: ${input.ticketId}`,
+        })
+        .pipe(Effect.exit);
+
+      if (prResult._tag === "Failure") {
+        return {
+          ticketId: input.ticketId,
+          status: AdwStatus.ReadyForPr,
+          detail: "Ship open PR failed",
+          sandboxId: sandbox.id,
+          buildSessionId: buildSession.sessionId,
+          reviewSessionId: reviewSession.sessionId,
+        } satisfies MinimalAdwResult;
+      }
+
+      return {
+        ticketId: input.ticketId,
+        status: AdwStatus.Shipped,
+        sandboxId: sandbox.id,
+        buildSessionId: buildSession.sessionId,
+        reviewSessionId: reviewSession.sessionId,
+        prUrl: prResult.value.url,
+      } satisfies MinimalAdwResult;
+    }).pipe(
+      Effect.catch((err) =>
+        Effect.succeed({
+          ticketId: input.ticketId,
+          status: AdwStatus.Failed,
+          detail: err instanceof Error ? err.message : String(err),
+        } satisfies MinimalAdwResult)
+      )
+    )
+  );
