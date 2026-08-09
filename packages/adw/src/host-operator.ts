@@ -4,7 +4,7 @@ import {
   CursorReviewAgentLive,
   SandboxProvider,
 } from "@lazy-software-factory/runtime";
-import { Effect, Layer } from "effect";
+import { Config, ConfigProvider, Effect, Layer, Option } from "effect";
 import { parseArgs } from "node:util";
 import { AdwBuildAttemptCap, AdwReviewAttemptCap } from "./attempt-caps.ts";
 import { AdwStatus } from "./enums.ts";
@@ -21,6 +21,15 @@ export interface HostOperatorArgs {
   readonly prompt: string;
   readonly repoUrl?: string;
 }
+
+const optionalEnv = (name: string): string | undefined =>
+  Option.getOrUndefined(
+    Effect.runSync(
+      Config.option(Config.string(name))
+        .parse(ConfigProvider.fromEnvRecord(process.env))
+        .pipe(Effect.orElseSucceed(() => Option.none()))
+    )
+  );
 
 /** Parse argv flags: --ticket --prompt --repo-url (env fallbacks OK). */
 export const parseHostOperatorArgs = (
@@ -57,9 +66,9 @@ export const parseHostOperatorArgs = (
     return { help: true as const };
   }
 
-  const ticketId = values.ticket ?? process.env["ADW_TICKET_ID"];
-  const prompt = values.prompt ?? process.env["ADW_PROMPT"];
-  const repoUrl = values["repo-url"] ?? process.env["ADW_REPO_URL"];
+  const ticketId = values.ticket ?? optionalEnv("ADW_TICKET_ID");
+  const prompt = values.prompt ?? optionalEnv("ADW_PROMPT");
+  const repoUrl = values["repo-url"] ?? optionalEnv("ADW_REPO_URL");
 
   if (!ticketId || !prompt) {
     return {

@@ -1,5 +1,6 @@
-import { randomUUID } from "node:crypto";
+import { NodeCrypto } from "@effect/platform-node";
 import { Context, Effect, Layer, Scope } from "effect";
+import { Crypto } from "effect/Crypto";
 import type { ChildProcessHandle } from "effect/unstable/process/ChildProcessSpawner";
 import {
   SandboxBusyError,
@@ -33,7 +34,9 @@ export class SandboxProvider extends Context.Service<
    */
   static readonly Host = Layer.effect(
     SandboxProvider,
-    Effect.sync(() => {
+    Effect.gen(function* () {
+      const crypto = yield* Crypto;
+
       let activeId: string | undefined;
 
       const create = Effect.fn("SandboxProvider.create")(function* (
@@ -48,7 +51,15 @@ export class SandboxProvider extends Context.Service<
               });
             }
 
-            const id = randomUUID();
+            const id = yield* crypto.randomUUIDv4.pipe(
+              Effect.mapError(
+                (cause) =>
+                  new SandboxCreateError({
+                    message: "Failed to allocate sandbox id",
+                    cause,
+                  })
+              )
+            );
             activeId = id;
             const cwd = options?.cwd ?? process.cwd();
             const env = options?.env
@@ -153,5 +164,5 @@ export class SandboxProvider extends Context.Service<
 
       return SandboxProvider.of({ create });
     })
-  );
+  ).pipe(Layer.provide(NodeCrypto.layer));
 }

@@ -87,6 +87,31 @@ describe("host operator entry", () => {
     });
   });
 
+  it("parseHostOperatorArgs falls back to Config env", () => {
+    const prevTicket = process.env["ADW_TICKET_ID"];
+    const prevPrompt = process.env["ADW_PROMPT"];
+    process.env["ADW_TICKET_ID"] = "T-ENV";
+    process.env["ADW_PROMPT"] = "from env";
+    try {
+      const parsed = parseHostOperatorArgs([]);
+      assert.deepStrictEqual(parsed, {
+        ticketId: "T-ENV",
+        prompt: "from env",
+      });
+    } finally {
+      if (prevTicket === undefined) {
+        delete process.env["ADW_TICKET_ID"];
+      } else {
+        process.env["ADW_TICKET_ID"] = prevTicket;
+      }
+      if (prevPrompt === undefined) {
+        delete process.env["ADW_PROMPT"];
+      } else {
+        process.env["ADW_PROMPT"] = prevPrompt;
+      }
+    }
+  });
+
   it("redactSecrets strips token-like substrings from detail", () => {
     const redacted = redactSecrets(
       "push failed GH_TOKEN=gho_abcdefghijklmnopqrstuv stderr"
