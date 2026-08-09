@@ -13,6 +13,9 @@ importers:
       "@commitlint/config-conventional":
         specifier: ^21.2.0
         version: 21.2.0
+      "@effect/language-service":
+        specifier: ^0.87.2
+        version: 0.87.2
       "@types/node":
         specifier: ^24.3.0
         version: 24.13.3
@@ -217,6 +220,13 @@ packages:
         integrity: sha512-TzlTVpKPjaqW6qOYjQcYUDuGsLCNsvFHVBXkYGTAnf5V37jCWrE5haKNXzz0WZUtVHjrpV76L1buANjwXMfT8w==,
       }
     engines: { node: ">=22" }
+
+  "@effect/language-service@0.87.2":
+    resolution:
+      {
+        integrity: sha512-CfiSoaVQO8pZgaMZGw5VvMvRGybsJ2LaSDoLYaqiVGvo/YYPYVR2GzUKY0h1NtIweq/+SQ5XLrvtzPIttWQ0GQ==,
+      }
+    hasBin: true
 
   "@emnapi/core@1.4.5":
     resolution:
@@ -1651,6 +1661,8 @@ snapshots:
       conventional-commits-parser: 7.1.2
 
   "@conventional-changelog/template@1.2.1": {}
+
+  "@effect/language-service@0.87.2": {}
 
   "@emnapi/core@1.4.5":
     dependencies:

@@ -20,7 +20,12 @@ Thumbs.db
 .idea/
 .vscode/*
 !.vscode/extensions.json
+!.vscode/settings.json
+
+# Vendored reference trees (agents may read; tooling should not format)
+# repos/ is tracked via git subtree — do not gitignore it
 
 # Test / coverage
 coverage/
 .nyc_output/
+
