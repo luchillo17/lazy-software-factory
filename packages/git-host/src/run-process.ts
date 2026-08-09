@@ -1,59 +1,67 @@
-import { spawn } from "node:child_process";
-import { Effect } from "effect";
+import {
+  NodeChildProcessSpawner,
+  NodeFileSystem,
+  NodePath,
+} from "@effect/platform-node";
+import { Effect, Layer, Stream } from "effect";
+import type { PlatformError } from "effect/PlatformError";
+import { ChildProcess } from "effect/unstable/process";
 import type { GhRunResult } from "./gh-runner.ts";
 import { GitHostError } from "./git-host.ts";
 
-/** Spawn `gh`/`git`, capture utf8 streams, kill on AbortSignal. */
+const NodeChildProcessLive = NodeChildProcessSpawner.layer.pipe(
+  Layer.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer))
+);
+
+const collectUtf8 = (
+  stream: Stream.Stream<Uint8Array, PlatformError>
+): Effect.Effect<string, PlatformError> =>
+  stream.pipe(Stream.decodeText(), Stream.mkString);
+
+/** Spawn `gh`/`git` via Effect ChildProcess; capture utf8 streams. */
 export const runProcess = (options: {
   readonly command: string;
   readonly args: readonly string[];
   readonly cwd?: string;
   readonly env?: Readonly<Record<string, string>>;
 }): Effect.Effect<GhRunResult, GitHostError> =>
-  Effect.tryPromise({
-    try: (signal) =>
-      new Promise<GhRunResult>((resolve, reject) => {
-        const child = spawn(options.command, [...options.args], {
+  Effect.scoped(
+    Effect.gen(function* () {
+      const handle = yield* ChildProcess.make(
+        options.command,
+        [...options.args],
+        {
           cwd: options.cwd,
-          env: options.env ? { ...process.env, ...options.env } : process.env,
-          shell: false,
-        });
-        const onAbort = () => {
-          if (!child.killed) {
-            child.kill("SIGTERM");
-          }
-        };
-        if (signal.aborted) {
-          onAbort();
-        } else {
-          signal.addEventListener("abort", onAbort, { once: true });
+          env: options.env ? { ...options.env } : undefined,
+          extendEnv: options.env !== undefined,
         }
+      );
 
-        let stdout = "";
-        let stderr = "";
-        child.stdout?.setEncoding("utf8");
-        child.stderr?.setEncoding("utf8");
-        child.stdout?.on("data", (c: string) => {
-          stdout += c;
-        });
-        child.stderr?.on("data", (c: string) => {
-          stderr += c;
-        });
-        child.on("error", (err) => {
-          signal.removeEventListener("abort", onAbort);
-          reject(err);
-        });
-        child.on("close", (code) => {
-          signal.removeEventListener("abort", onAbort);
-          resolve({ exitCode: code ?? 1, stdout, stderr });
-        });
-      }),
-    catch: (cause) =>
-      new GitHostError({
-        message: `Failed to run ${options.command}`,
-        cause,
-      }),
-  });
+      const [stdout, stderr, exitCode] = yield* Effect.all(
+        [
+          collectUtf8(handle.stdout),
+          collectUtf8(handle.stderr),
+          handle.exitCode,
+        ],
+        { concurrency: "unbounded" }
+      );
+
+      return {
+        exitCode: Number(exitCode),
+        stdout,
+        stderr,
+      } satisfies GhRunResult;
+    })
+  ).pipe(
+    Effect.provide(NodeChildProcessLive),
+    Effect.mapError(
+      (cause) =>
+        new GitHostError({
+          message: `Failed to run ${options.command}`,
+          cause,
+        })
+    )
+  );
 
 export const requireZero = (
   result: GhRunResult,

@@ -1,6 +1,6 @@
-import type { ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { Context, Effect, Layer, Scope } from "effect";
+import type { ChildProcessHandle } from "effect/unstable/process/ChildProcessSpawner";
 import {
   SandboxBusyError,
   SandboxCreateError,
@@ -57,7 +57,7 @@ export class SandboxProvider extends Context.Service<
 
             let destroyed = false;
             let teardown: Effect.Effect<void> | undefined;
-            const children = new Set<ChildProcess>();
+            const children = new Set<ChildProcessHandle>();
 
             const releaseSlot = () => {
               if (activeId === id) {
@@ -65,39 +65,21 @@ export class SandboxProvider extends Context.Service<
               }
             };
 
-            const waitForChildExit = (child: ChildProcess) =>
-              Effect.callback<void>((resume) => {
-                let settled = false;
-                const finish = () => {
-                  if (settled) {
-                    return;
-                  }
-                  settled = true;
-                  resume(Effect.void);
-                };
-                if (child.exitCode !== null || child.signalCode !== null) {
-                  finish();
-                  return;
-                }
-                // Prefer `exit` (does not wait for stdio drain); also accept `close`.
-                child.once("exit", finish);
-                child.once("close", finish);
-              });
-
-            const waitForChildExitBounded = (child: ChildProcess) =>
-              waitForChildExit(child).pipe(
+            const waitForHandleExitBounded = (handle: ChildProcessHandle) =>
+              handle.exitCode.pipe(
+                Effect.asVoid,
                 Effect.timeout("5 seconds"),
                 Effect.catchTag("TimeoutError", () =>
                   Effect.gen(function* () {
-                    if (child.exitCode === null && child.signalCode === null) {
-                      child.kill("SIGKILL");
-                    }
-                    yield* waitForChildExit(child).pipe(
+                    yield* handle.kill({ killSignal: "SIGKILL" });
+                    yield* handle.exitCode.pipe(
+                      Effect.asVoid,
                       Effect.timeout("2 seconds"),
                       Effect.catchTag("TimeoutError", () => Effect.void)
                     );
                   })
-                )
+                ),
+                Effect.catch(() => Effect.void)
               );
 
             const destroy = (): Effect.Effect<void> =>
@@ -107,14 +89,13 @@ export class SandboxProvider extends Context.Service<
                     Effect.gen(function* () {
                       destroyed = true;
                       const pending = [...children];
-                      for (const child of pending) {
-                        if (!child.killed) {
-                          child.kill("SIGTERM");
-                        }
+                      for (const handle of pending) {
+                        yield* handle
+                          .kill({ killSignal: "SIGTERM" })
+                          .pipe(Effect.catch(() => Effect.void));
                       }
-                      // restore so timeout can interrupt the wait; ensuring still frees slot
                       yield* restore(
-                        Effect.forEach(pending, waitForChildExitBounded, {
+                        Effect.forEach(pending, waitForHandleExitBounded, {
                           concurrency: "unbounded",
                         })
                       );
@@ -139,27 +120,27 @@ export class SandboxProvider extends Context.Service<
                     });
                   }
 
-                  return yield* Effect.tryPromise({
-                    try: (signal) =>
-                      runCapturedProcess({
-                        command,
-                        args,
-                        cwd,
-                        env,
-                        signal,
-                        onSpawn: (child) => {
-                          children.add(child);
-                        },
-                        onSettle: (child) => {
-                          children.delete(child);
-                        },
-                      }),
-                    catch: (cause) =>
-                      new SandboxExecError({
-                        message: `Failed to exec in sandbox ${id}`,
-                        cause,
-                      }),
-                  });
+                  return yield* runCapturedProcess({
+                    command,
+                    args,
+                    cwd,
+                    env,
+                    extendEnv: false,
+                    onSpawn: (handle) => {
+                      children.add(handle);
+                    },
+                    onSettle: (handle) => {
+                      children.delete(handle);
+                    },
+                  }).pipe(
+                    Effect.mapError(
+                      (cause) =>
+                        new SandboxExecError({
+                          message: `Failed to exec in sandbox ${id}`,
+                          cause,
+                        })
+                    )
+                  );
                 }),
               destroy,
             } satisfies Sandbox;
