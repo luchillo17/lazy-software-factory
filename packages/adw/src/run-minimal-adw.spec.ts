@@ -31,6 +31,34 @@ describe("runMinimalAdw happy path", () => {
                 cwd: "/tmp/sandbox-1",
                 exec: (command, args = []) =>
                   Effect.gen(function* () {
+                    if (command === "git" && args[0] === "rev-parse") {
+                      yield* record("provision-git");
+                      return { exitCode: 0, stdout: ".git\n", stderr: "" };
+                    }
+                    if (command === "git" && args[0] === "checkout") {
+                      yield* record("provision-branch");
+                      assert.deepStrictEqual(
+                        [...args],
+                        ["checkout", "-B", "adw/TICKET-1"]
+                      );
+                      return { exitCode: 0, stdout: "", stderr: "" };
+                    }
+                    if (command === "test" && args[0] === "-f") {
+                      yield* record("provision-lockfile");
+                      return {
+                        exitCode: args[1] === "pnpm-lock.yaml" ? 0 : 1,
+                        stdout: "",
+                        stderr: "",
+                      };
+                    }
+                    if (command === "pnpm") {
+                      yield* record("provision-install");
+                      assert.deepStrictEqual(
+                        [...args],
+                        ["install", "--frozen-lockfile"]
+                      );
+                      return { exitCode: 0, stdout: "", stderr: "" };
+                    }
                     yield* record("test");
                     assert.strictEqual(command, "node");
                     assert.deepStrictEqual(
@@ -46,12 +74,7 @@ describe("runMinimalAdw happy path", () => {
         })
       );
 
-      const provisionLayer = Layer.succeed(
-        WorkspaceProvision,
-        WorkspaceProvision.of({
-          provision: () => record("provision"),
-        })
-      );
+      const provisionLayer = WorkspaceProvision.Host;
 
       const buildLayer = Layer.succeed(
         BuildAgentProvider,
@@ -134,7 +157,10 @@ describe("runMinimalAdw happy path", () => {
       const observed = yield* Ref.get(steps);
       assert.deepStrictEqual(observed, [
         "sandbox",
-        "provision",
+        "provision-git",
+        "provision-branch",
+        "provision-lockfile",
+        "provision-install",
         "build",
         "test",
         "review",
