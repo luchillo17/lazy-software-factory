@@ -1,6 +1,7 @@
 import {
   BuildAgentProvider,
   ReviewAgentProvider,
+  RuntimeErrorTag,
   SandboxProvider,
 } from "@lazy-software-factory/runtime";
 import { Effect, Schema } from "effect";
@@ -34,6 +35,12 @@ export interface MinimalAdwResult {
 }
 
 const ticketBranch = (ticketId: string) => `adw/${ticketId}`;
+
+/** Local Test-exec branch tags (not Runtime `_tag` / not ADW status). */
+const TestExecBranch = {
+  Ok: "ok",
+  ExecError: "execError",
+} as const;
 
 export type MinimalAdwServices =
   | SandboxProvider
@@ -75,15 +82,18 @@ export const runMinimalAdw = (
         const gateOrError = yield* sandbox
           .exec(step.command, step.args ?? [])
           .pipe(
-            Effect.map((gate) => ({ _tag: "ok" as const, gate })),
-            Effect.catchTag("SandboxExecError", (err) =>
+            Effect.map((gate) => ({
+              _tag: TestExecBranch.Ok,
+              gate,
+            })),
+            Effect.catchTag(RuntimeErrorTag.SandboxExecError, (err) =>
               Effect.succeed({
-                _tag: "execError" as const,
+                _tag: TestExecBranch.ExecError,
                 message: err.message,
               })
             )
           );
-        if (gateOrError._tag === "execError") {
+        if (gateOrError._tag === TestExecBranch.ExecError) {
           return {
             ticketId: input.ticketId,
             status: AdwStatus.Failed,
