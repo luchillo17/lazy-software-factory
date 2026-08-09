@@ -12,10 +12,10 @@ Defaults: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `w
 
 Single-context: root `CONTEXT.md` + `docs/adr/`. See `docs/agents/domain.md`.
 
+### Skills install (Claude + Cursor)
+
+Canonical skills live in `.agents/skills/`. Claude Code uses `.claude/skills/` as **symlinks** to that tree — not copies. When adding or re-linking project skills, run `npx skills add <owner/repo> --agent claude-code cursor -y` (never Claude alone: the CLI copies). Full recipe and verify steps: `docs/agents/skills-install.md`.
+
 ### Effect (vendored reference)
 
-**Default:** Effect for `packages/*` and `apps/*` unless a real constraint blocks it; root `scripts/` may stay plain Node (ADR-0008). When writing or reviewing Effect code, inspect `repos/effect/` for idiomatic usage, tests, module structure, and API design (ADR-0012). Prefer that source over web search or guesses. Read `repos/effect/LLMS.md` before writing Effect code when present. Treat `repos/` as read-only reference — do not edit it or import from it; app code imports `effect` from npm. Optional: add concise notes under `docs/agents/effect-patterns/` after studying the vendored tree.
-
-### Related skills
-
-`gh-stack-compact` lives in [`luchillo17/gh-stack-compact`](https://github.com/luchillo17/gh-stack-compact) — install with `npx skills add luchillo17/gh-stack-compact`. Compact skill (membership, non-interactive, recipes); distinct from the official `gh-stack` skill id; not part of this monorepo.
+**Default:** Effect **4 beta** (exact `4.0.0-beta.x` pins) for `packages/*` and `apps/*` unless a real constraint blocks it; root `scripts/` may stay plain Node (ADR-0008). Prefer `effect/*` over `effect/unstable/*`. When writing or reviewing Effect code, read `repos/effect/` (and `repos/effect/LLMS.md` if present) for idiomatic usage, tests, module layout, and API design (ADR-0012). Treat `repos/` as read-only reference — do not edit or import from it; app code imports `effect` from npm. After studying the tree, you may add short notes under `docs/agents/effect-patterns/`.

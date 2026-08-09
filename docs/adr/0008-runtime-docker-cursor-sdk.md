@@ -4,6 +4,8 @@ The Factory Runtime (`packages/runtime`, EffectTS) owns sandbox lifecycle and ag
 
 **EffectTS is the default TypeScript style** for Factory `packages/*` and `apps/*` unless a real constraint blocks it (e.g. a host API is Promise-only and wrapping at the edge is enough, or a tool has no workable Effect path). Prefer Effect services, Layers, Schema, and Effect programs—not Promise-first public APIs with Effect only “inside.” Foreign async APIs use `Effect.tryPromise` (or equivalent) at the boundary. That includes Runtime, ADW (`runMinimalAdw` and gates), and Git host. **Exception:** root monorepo `scripts/` (and similar one-off Node glue at the repo root) may stay plain TypeScript/Node; that exception does not apply to packages or apps.
 
+**Effect version:** pin Effect **4 beta** (`4.0.0-beta.x`, exact versions in package manifests) while the Factory is early alpha. Prefer stable `effect/*` imports; treat `effect/unstable/*` as opt-in. Bump betas deliberately; expect breaking changes until v4 stable (see ADR-0012).
+
 [Sandcastle](https://github.com/mattpocock/sandcastle) is **not** part of our stack (no `@ai-hero/sandcastle` dependency for product paths). It remains prior-art reference for provider/worktree ideas only. Docker Sandboxes (`sbx`) are **not** required (Docker login tax); they may appear later as an optional `SandboxProvider`. Cloud/BYO providers (e.g. Vercel Sandbox on the Organization’s account) plug the same seam so orgs keep control of code and compute.
 
 ## Status
@@ -19,3 +21,4 @@ accepted
 - **Promise-first public APIs with Effect only inside** — rejected; Layers/services/errors are the seam.
 - **Effect including root `scripts/`** — rejected for now; husky/ensure helpers and thin CLI glue stay cheaper as plain Node until a script itself becomes a product surface.
 - **Require Effect with no escape hatch** — rejected; real interop and tooling limits may force a local exception, documented at the call site or in a follow-up ADR if systemic.
+- **Stay on Effect 3 until v4 stable** — rejected for early alpha; see ADR-0012.
