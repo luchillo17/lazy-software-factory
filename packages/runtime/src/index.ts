@@ -12,6 +12,8 @@ export type { CreateSandboxOptions, ExecResult, Sandbox } from "./sandbox.ts";
 export { SandboxProvider } from "./sandbox-provider.ts";
 export {
   AgentError,
+  RuntimeErrorTag,
+  RuntimeErrorTagSchema,
   SandboxBusyError,
   SandboxCreateError,
   SandboxDestroyError,

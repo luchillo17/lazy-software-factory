@@ -24,15 +24,35 @@ Call sites: `ExampleKind.Alpha`. Decode/encode: `ExampleKindSchema`. Field types
 ## Prefer other tools instead
 
 - **`Schema.Literals([...])`** — anonymous literal union only (no key map). Fine for one-off decode; not for repeated call-site construction.
-- **`Schema.TaggedError` / tagged structs** — error and variant _shapes_ (`_tag`), not closed-value maps.
 - **Open strings** (`Schema.String`) — free text, ids, messages.
+
+## With `Schema.TaggedError`
+
+`TaggedError` owns the **shape** (fields + `_tag`). The **`_tag` string itself** is still a closed wire set when the package has a finite list of error kinds — put those tags in a const object + `Schema.Enum`, pass `FooErrorTag.Bar` into `TaggedError(...)` and `Effect.catchTag(...)`, never bare `"Bar"` at call sites.
+
+```ts
+export const RuntimeErrorTag = {
+  SandboxExecError: "SandboxExecError",
+  AgentError: "AgentError",
+} as const;
+
+export const RuntimeErrorTagSchema = Schema.Enum(RuntimeErrorTag);
+
+export class SandboxExecError extends Schema.TaggedError<SandboxExecError>()(
+  RuntimeErrorTag.SandboxExecError,
+  { message: Schema.String }
+) {}
+
+Effect.catchTag(RuntimeErrorTag.SandboxExecError, (err) => /* … */);
+```
 
 ## Do not
 
 - Hand-write `"a" | "b" | "c"` on public APIs when a const map exists or should.
-- Hardcode wire strings at call sites when `Foo.Bar` exists.
+- Hardcode wire strings at call sites when `Foo.Bar` exists (includes `TaggedError` tags and `catchTag`).
 - Treat this pattern as ADW-only or “status-field-only.”
 
 ## Workspace illustrations (not an allowlist)
 
 - `packages/adw/src/enums.ts` — `AdwStatus`, `ReviewVerdict`
+- `packages/runtime/src/errors.ts` — `RuntimeErrorTag`
