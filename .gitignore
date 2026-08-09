@@ -29,3 +29,6 @@ Thumbs.db
 coverage/
 .nyc_output/
 
+
+.claude/worktrees
+.claude/settings.local.json
