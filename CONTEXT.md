@@ -33,8 +33,8 @@ The LLM agent session that implements the ticket in the warm sandbox. Its `Agent
 _Avoid_: Treating Review’s session as the place to keep coding
 
 **Test agent**:
-A coded ADW graph node that runs tests (and related checks) via the Runtime — not an LLM. Fail feeds output back to the Build agent (same session, same sandbox); pass advances to Review.
-_Avoid_: Test-writing agent, QA agent (unless we add a separate LLM role later)
+A coded ADW graph node that runs **check-only** gates (lint, format check, typecheck, unit tests, policy) via the Runtime — not an LLM. Independent checks run **in parallel**; any red resumes Build with a **combined** fail report (all failing gates’ output), same session and sandbox. Pass all → Review.
+_Avoid_: Test-writing agent, QA agent (unless we add a separate LLM role later); fail-fast on first red; mutating format/write steps inside the Test agent
 
 **Review agent**:
 The LLM agent that critiques the change after the Test agent passes — same _shape_ as a Bugbot-style review (findings with location/severity), but orchestration does **not** auto-fix. Always a **new** `AgentSession` in the same warm sandbox. Emits a structured **Review verdict**; on fail, the fail report is the feedback passed when resuming Build.
@@ -57,8 +57,12 @@ A resumable LLM thread owned by an `AgentProvider`, identified by an **opaque** 
 _Avoid_: Equating session with sandbox; putting `cursorAgentId` (or similar) on ADW/domain types; treating session id format as domain knowledge
 
 **Skill**:
-Agent-facing process guidance (prompts/procedures), not the Runtime or the ADW control plane.
-_Avoid_: Workflow, ADW
+Agent-facing process guidance (prompts/procedures), not the Runtime or the ADW control plane. LLM agent roles in an ADW are **role-skill-bound**: orchestration injects the mandatory skill set for that role at session bootstrap (e.g. Build → `/implement`; Review → review skills). Skills do not own pass/fail routing.
+_Avoid_: Workflow, ADW; hoping the agent “just remembers” the skill with no orchestration bind
+
+**Role skill binding**:
+The ADW/control-plane policy that maps an LLM agent role (Build, Review, …) to the skill set that role must always run. Content lives in skills; the binding and injection live in orchestration.
+_Avoid_: Encoding each skill as its own ADW graph; putting skill selection only inside Runtime/AgentProvider; treating skill use as optional agent whim
 
 **Runtime**:
 Our Effect TypeScript layer (`packages/runtime`) that owns sandbox lifecycle and agent providers (e.g. Cursor SDK). The Factory control plane calls the Runtime; skills do not.

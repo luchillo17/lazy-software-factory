@@ -4,13 +4,14 @@ import {
   RuntimeErrorTag,
   SandboxProvider,
   type AgentSession,
+  type ExecResult,
 } from "@lazy-software-factory/runtime";
 import { Effect, Schema } from "effect";
 import { AdwBuildAttemptCap, AdwReviewAttemptCap } from "./attempt-caps.ts";
 import { AdwStatus, AdwStatusSchema, ReviewVerdict } from "./enums.ts";
 import { GitHost } from "./git-host.ts";
 import { ReviewOutput } from "./review-output.ts";
-import { AdwTestCommands } from "./test-commands.ts";
+import { AdwTestCommands, type AdwTestCommand } from "./test-commands.ts";
 import { ticketBranch } from "./ticket-branch.ts";
 import { WorkspaceProvision } from "./workspace-provision.ts";
 
@@ -44,17 +45,28 @@ const TestExecBranch = {
   ExecError: "execError",
 } as const;
 
-const gateDetail = (gate: {
-  readonly exitCode: number;
-  readonly stdout: string;
-  readonly stderr: string;
-}) => {
+const formatStep = (step: AdwTestCommand) =>
+  [step.command, ...(step.args ?? [])].join(" ");
+
+const gateDetail = (step: AdwTestCommand, gate: ExecResult) => {
   const parts = [
-    `Test agent failed (exit ${gate.exitCode})`,
+    `### ${formatStep(step)} (exit ${gate.exitCode})`,
     gate.stdout ? `stdout:\n${gate.stdout}` : undefined,
     gate.stderr ? `stderr:\n${gate.stderr}` : undefined,
   ].filter((p): p is string => p !== undefined);
   return parts.join("\n");
+};
+
+const combinedGateDetail = (
+  failures: ReadonlyArray<{
+    readonly step: AdwTestCommand;
+    readonly gate: ExecResult;
+  }>
+) => {
+  const body = failures
+    .map(({ step, gate }) => gateDetail(step, gate))
+    .join("\n\n");
+  return `Test agent failed (${failures.length} check gate(s) red)\n\n${body}`;
 };
 
 export type MinimalAdwServices =
@@ -107,37 +119,51 @@ export const runMinimalAdw = (
           let lastGateDetail = "Test agent failed";
           let allGreen = true;
 
-          for (const step of testCommands.commands) {
-            const gateOrError = yield* sandbox
-              .exec(step.command, step.args ?? [])
-              .pipe(
+          const stepResults = yield* Effect.all(
+            testCommands.commands.map((step) =>
+              sandbox.exec(step.command, step.args ?? []).pipe(
                 Effect.map((gate) => ({
                   _tag: TestExecBranch.Ok,
+                  step,
                   gate,
                 })),
                 Effect.catchTag(RuntimeErrorTag.SandboxExecError, (err) =>
                   Effect.succeed({
                     _tag: TestExecBranch.ExecError,
+                    step,
                     message: err.message,
                   })
                 )
-              );
-            if (gateOrError._tag === TestExecBranch.ExecError) {
-              return {
-                ticketId: input.ticketId,
-                status: AdwStatus.Failed,
-                detail: `Test agent exec error: ${gateOrError.message}`,
-                sandboxId: sandbox.id,
-                buildSessionId: buildSession.sessionId,
-                reviewSessionId,
-              } satisfies MinimalAdwResult;
-            }
-            const { gate } = gateOrError;
-            if (gate.exitCode !== 0) {
-              allGreen = false;
-              lastGateDetail = gateDetail(gate);
-              break;
-            }
+              )
+            ),
+            { concurrency: "unbounded" }
+          );
+
+          const execErrors = stepResults.filter(
+            (r) => r._tag === TestExecBranch.ExecError
+          );
+          if (execErrors.length > 0) {
+            return {
+              ticketId: input.ticketId,
+              status: AdwStatus.Failed,
+              detail: `Test agent exec error: ${execErrors
+                .map((e) => `${formatStep(e.step)}: ${e.message}`)
+                .join("; ")}`,
+              sandboxId: sandbox.id,
+              buildSessionId: buildSession.sessionId,
+              reviewSessionId,
+            } satisfies MinimalAdwResult;
+          }
+
+          const failures = stepResults.flatMap((r) =>
+            r._tag === TestExecBranch.Ok && r.gate.exitCode !== 0
+              ? [{ step: r.step, gate: r.gate }]
+              : []
+          );
+
+          if (failures.length > 0) {
+            allGreen = false;
+            lastGateDetail = combinedGateDetail(failures);
           }
 
           if (allGreen) {

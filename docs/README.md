@@ -14,6 +14,11 @@ Design notes and ADRs for the factory live here. Domain language: [`CONTEXT.md`]
 | [0006](./adr/0006-factory-is-self-building.md)           | Factory is self-building (ADWs develop this repo)                    |
 | [0007](./adr/0007-minimal-adw-build-test-review.md)      | Minimal ADW: Build → Test agent → Review                             |
 | [0008](./adr/0008-runtime-docker-cursor-sdk.md)          | Effect Runtime: classic Docker + Cursor SDK; Sandcastle out of stack |
+| [0009](./adr/0009-adw-attempt-caps-review-verdict.md)    | Separate Build/Review attempt caps + structured Review verdict       |
+| [0010](./adr/0010-workspace-provision-before-build.md)   | Workspace provision before Build                                     |
+| [0011](./adr/0011-git-host-ship-statuses.md)             | Git host seam + `shipped` / `ready_for_pr`                           |
+| [0012](./adr/0012-vendor-effect-source-for-agents.md)    | Vendored Effect source for agents                                    |
+| [0013](./adr/0013-test-agent-parallel-check-gates.md)    | Test agent: parallel check-only gates + full fail report             |
 
 ## Open decisions
 
@@ -24,6 +29,6 @@ Agent skills config: [`AGENTS.md`](../AGENTS.md) (SoT) → [`docs/agents/`](./ag
 
 ## Next setup
 
-1. Implement Runtime Docker adapter + Cursor SDK resume (ADR-0008)
-2. Wire minimal ADW loop (ADR-0007) for self-building
+1. Harden Host dogfood loop (`pnpm adw:host`) once parallel Test gates + Docker land
+2. Implement Runtime Docker adapter + Cursor SDK resume (ADR-0008) for parallel ADWs
 3. Enable GitHub **stacked PRs** on the repo if `gh stack` reports exit 9
