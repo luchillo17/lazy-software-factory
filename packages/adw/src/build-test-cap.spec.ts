@@ -47,6 +47,33 @@ const passThroughShip = Layer.mergeAll(
   )
 );
 
+const passThroughShipWithoutGates = Layer.mergeAll(
+  Layer.succeed(
+    WorkspaceProvision,
+    WorkspaceProvision.of({ provision: () => Effect.void })
+  ),
+  Layer.succeed(
+    ReviewAgentProvider,
+    ReviewAgentProvider.of({
+      run: () =>
+        Effect.succeed({
+          sessionId: "review-session-1",
+          output: { verdict: ReviewVerdict.Pass },
+        }),
+      resume: () => Effect.die("unused"),
+    })
+  ),
+  Layer.succeed(
+    GitHost,
+    GitHost.of({
+      clone: () => Effect.void,
+      push: () => Effect.void,
+      openPullRequest: () =>
+        Effect.succeed({ url: "https://example.test/pr/1" }),
+    })
+  )
+);
+
 describe("runMinimalAdw Build↔Test resume + cap", () => {
   it.effect("Test fail resumes same Build session with gate output", () =>
     Effect.gen(function* () {
@@ -189,6 +216,95 @@ describe("runMinimalAdw Build↔Test resume + cap", () => {
 
         const calls = yield* Ref.get(buildCalls);
         assert.strictEqual(calls, 3);
+      })
+  );
+
+  it.effect(
+    "multiple check gates all run; Build resume gets combined fail report",
+    () =>
+      Effect.gen(function* () {
+        const resumes = yield* Ref.make<string[]>([]);
+        const round = yield* Ref.make(0);
+
+        const sandboxLayer = Layer.succeed(
+          SandboxProvider,
+          SandboxProvider.of({
+            create: () =>
+              Effect.succeed({
+                id: "sandbox-1",
+                cwd: "/tmp/sandbox-1",
+                exec: (command) =>
+                  Effect.gen(function* () {
+                    const n = yield* Ref.get(round);
+                    if (n === 0) {
+                      if (command === "lint") {
+                        return {
+                          exitCode: 1,
+                          stdout: "",
+                          stderr: "lint-red",
+                        };
+                      }
+                      if (command === "format-check") {
+                        return {
+                          exitCode: 1,
+                          stdout: "",
+                          stderr: "format-red",
+                        };
+                      }
+                      return { exitCode: 0, stdout: "ok", stderr: "" };
+                    }
+                    return { exitCode: 0, stdout: "ok", stderr: "" };
+                  }),
+                destroy: () => Effect.void,
+              } satisfies Sandbox),
+          })
+        );
+
+        const buildLayer = Layer.succeed(
+          BuildAgentProvider,
+          BuildAgentProvider.of({
+            run: () => Effect.succeed({ sessionId: "build-session-1" }),
+            resume: (session, options) =>
+              Effect.gen(function* () {
+                yield* Ref.update(resumes, (rs) => [...rs, options.prompt]);
+                yield* Ref.update(round, (n) => n + 1);
+                return session;
+              }),
+          })
+        );
+
+        const result = yield* runMinimalAdw({
+          ticketId: "T-PARALLEL",
+          prompt: "fix gates",
+        }).pipe(
+          Effect.provide(
+            Layer.mergeAll(
+              sandboxLayer,
+              buildLayer,
+              passThroughShipWithoutGates,
+              Layer.succeed(
+                AdwTestCommands,
+                AdwTestCommands.of({
+                  commands: [
+                    { command: "lint" },
+                    { command: "format-check" },
+                    { command: "unit" },
+                  ],
+                })
+              ),
+              AdwBuildAttemptCap.Default,
+              AdwReviewAttemptCap.Default
+            )
+          )
+        );
+
+        assert.strictEqual(result.status, AdwStatus.Shipped);
+        const seen = yield* Ref.get(resumes);
+        assert.strictEqual(seen.length, 1);
+        assert.isTrue(seen[0]!.includes("lint-red"));
+        assert.isTrue(seen[0]!.includes("format-red"));
+        assert.isTrue(seen[0]!.includes("lint"));
+        assert.isTrue(seen[0]!.includes("format-check"));
       })
   );
 });

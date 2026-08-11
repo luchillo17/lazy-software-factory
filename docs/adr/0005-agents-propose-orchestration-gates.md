@@ -2,7 +2,7 @@
 
 Agents **can** run lint, format, typecheck, and tests while building when that helps (e.g. TDD / `/implement`). We do not prescribe how agents work. What must not blur: **pass/fail routing** belongs to orchestration — those same checks run again as hard gates between (or after) agent steps; green advances, red routes back. Code decides whether the workflow may continue.
 
-In the minimal ADW (ADR-0007), the **Test agent** is a coded graph node (not an LLM) that runs those checks via the Runtime; it is the orchestration-owned gate step in the graph.
+In the minimal ADW (ADR-0007), the **Test agent** is a coded graph node (not an LLM) that runs those checks via the Runtime; it is the orchestration-owned gate step in the graph. Check-only gates run in parallel with a full combined fail report (see ADR-0013).
 
 ## Status
 

@@ -141,6 +141,21 @@ export const hostMinimalAdwLayer = Layer.mergeAll(
             "adw,runtime,git-host",
           ],
         },
+        {
+          command: "pnpm",
+          args: ["nx", "run-many", "-t", "test", "-p", "adw,runtime,git-host"],
+        },
+        {
+          command: "pnpm",
+          args: [
+            "exec",
+            "prettier",
+            "--check",
+            "packages/adw",
+            "packages/runtime",
+            "packages/git-host",
+          ],
+        },
       ],
     })
   ),
