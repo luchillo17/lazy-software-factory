@@ -7,6 +7,12 @@ import {
   type ExecResult,
 } from "@lazy-software-factory/runtime";
 import { Effect, Schema } from "effect";
+import {
+  AdwProgressKind,
+  AdwStep,
+  AdwStepResult,
+} from "./adw-progress-event.ts";
+import { emitAdwProgress } from "./adw-progress.ts";
 import { AdwBuildAttemptCap, AdwReviewAttemptCap } from "./attempt-caps.ts";
 import { AdwStatus, AdwStatusSchema, ReviewVerdict } from "./enums.ts";
 import { GitHost } from "./git-host.ts";
@@ -53,6 +59,20 @@ const TestExecBranch = {
 
 const formatStep = (step: AdwTestCommand) =>
   [step.command, ...(step.args ?? [])].join(" ");
+
+const reviewOutputRaw = (output: unknown): string => {
+  if (output === undefined) {
+    return "undefined";
+  }
+  if (typeof output === "string") {
+    return output;
+  }
+  try {
+    return JSON.stringify(output);
+  } catch {
+    return String(output);
+  }
+};
 
 const gateDetail = (step: AdwTestCommand, gate: ExecResult) => {
   const parts = [
@@ -104,11 +124,30 @@ export const runMinimalAdw = (
         env: input.env,
       });
 
-      yield* provisioner.provision({
-        sandbox,
-        ticketId: input.ticketId,
-        repoUrl: input.repoUrl,
-        env: input.env,
+      yield* emitAdwProgress({
+        kind: AdwProgressKind.StepEnter,
+        step: AdwStep.Provision,
+      });
+      yield* provisioner
+        .provision({
+          sandbox,
+          ticketId: input.ticketId,
+          repoUrl: input.repoUrl,
+          env: input.env,
+        })
+        .pipe(
+          Effect.tapError(() =>
+            emitAdwProgress({
+              kind: AdwProgressKind.StepResult,
+              step: AdwStep.Provision,
+              result: AdwStepResult.Fail,
+            })
+          )
+        );
+      yield* emitAdwProgress({
+        kind: AdwProgressKind.StepResult,
+        step: AdwStep.Provision,
+        result: AdwStepResult.Ok,
       });
 
       if (!skillPackRootExists(sandbox.cwd)) {
@@ -120,6 +159,12 @@ export const runMinimalAdw = (
         } satisfies MinimalAdwResult;
       }
 
+      yield* emitAdwProgress({
+        kind: AdwProgressKind.StepEnter,
+        step: AdwStep.Build,
+        buildAttempts: 0,
+        reviewAttempts: 0,
+      });
       let buildSession: AgentSession = yield* buildAgent.run({
         prompt: bootstrapRoleSkillPrompt(AgentRole.Build, input.prompt),
         sandbox,
@@ -128,11 +173,25 @@ export const runMinimalAdw = (
       let buildAttempts = 1;
       let reviewAttempts = 0;
       let reviewSessionId: string | undefined;
+      yield* emitAdwProgress({
+        kind: AdwProgressKind.StepResult,
+        step: AdwStep.Build,
+        result: AdwStepResult.Ok,
+        buildAttempts,
+        reviewAttempts,
+      });
 
       adw: while (true) {
         buildTest: while (true) {
           let lastGateDetail = "Test agent failed";
           let allGreen = true;
+
+          yield* emitAdwProgress({
+            kind: AdwProgressKind.StepEnter,
+            step: AdwStep.Test,
+            buildAttempts,
+            reviewAttempts,
+          });
 
           const stepResults = yield* Effect.all(
             testCommands.commands.map((step) =>
@@ -158,6 +217,13 @@ export const runMinimalAdw = (
             (r) => r._tag === TestExecBranch.ExecError
           );
           if (execErrors.length > 0) {
+            yield* emitAdwProgress({
+              kind: AdwProgressKind.StepResult,
+              step: AdwStep.Test,
+              result: AdwStepResult.Fail,
+              buildAttempts,
+              reviewAttempts,
+            });
             return {
               ticketId: input.ticketId,
               status: AdwStatus.Failed,
@@ -182,8 +248,23 @@ export const runMinimalAdw = (
           }
 
           if (allGreen) {
+            yield* emitAdwProgress({
+              kind: AdwProgressKind.StepResult,
+              step: AdwStep.Test,
+              result: AdwStepResult.Ok,
+              buildAttempts,
+              reviewAttempts,
+            });
             break buildTest;
           }
+
+          yield* emitAdwProgress({
+            kind: AdwProgressKind.StepResult,
+            step: AdwStep.Test,
+            result: AdwStepResult.Fail,
+            buildAttempts,
+            reviewAttempts,
+          });
 
           if (buildAttempts >= buildAttemptCap) {
             return {
@@ -196,6 +277,13 @@ export const runMinimalAdw = (
             } satisfies MinimalAdwResult;
           }
 
+          yield* emitAdwProgress({
+            kind: AdwProgressKind.StepResult,
+            step: AdwStep.Build,
+            result: AdwStepResult.BuildResume,
+            buildAttempts,
+            reviewAttempts,
+          });
           buildSession = yield* buildAgent.resume(buildSession, {
             prompt: lastGateDetail,
             sandbox,
@@ -204,6 +292,12 @@ export const runMinimalAdw = (
           buildAttempts += 1;
         }
 
+        yield* emitAdwProgress({
+          kind: AdwProgressKind.StepEnter,
+          step: AdwStep.Review,
+          buildAttempts,
+          reviewAttempts,
+        });
         const reviewSession = yield* reviewAgent.run({
           prompt: bootstrapRoleSkillPrompt(
             AgentRole.Review,
@@ -219,16 +313,38 @@ export const runMinimalAdw = (
           reviewSession.output
         ).pipe(
           Effect.catchTag("SchemaError", () =>
-            Effect.succeed({
-              verdict: ReviewVerdict.Fail,
-              failReport: "malformed or missing Review verdict",
-            } satisfies ReviewOutput)
+            Effect.gen(function* () {
+              yield* emitAdwProgress({
+                kind: AdwProgressKind.SchemaMiss,
+                reviewAttempts,
+                raw: reviewOutputRaw(reviewSession.output),
+              });
+              return {
+                verdict: ReviewVerdict.Fail,
+                failReport: "malformed or missing Review verdict",
+              } satisfies ReviewOutput;
+            })
           )
         );
 
         if (decoded.verdict === ReviewVerdict.Pass) {
+          yield* emitAdwProgress({
+            kind: AdwProgressKind.StepResult,
+            step: AdwStep.Review,
+            result: AdwStepResult.Ok,
+            buildAttempts,
+            reviewAttempts,
+          });
           break adw;
         }
+
+        yield* emitAdwProgress({
+          kind: AdwProgressKind.StepResult,
+          step: AdwStep.Review,
+          result: AdwStepResult.Fail,
+          buildAttempts,
+          reviewAttempts,
+        });
 
         const failReport =
           decoded.failReport ?? "Review failed without a fail report";
@@ -245,6 +361,13 @@ export const runMinimalAdw = (
         }
 
         // Review→Build: same Build session; does NOT spend a Build attempt.
+        yield* emitAdwProgress({
+          kind: AdwProgressKind.StepResult,
+          step: AdwStep.Build,
+          result: AdwStepResult.BuildResume,
+          buildAttempts,
+          reviewAttempts,
+        });
         buildSession = yield* buildAgent.resume(buildSession, {
           prompt: failReport,
           sandbox,
@@ -254,11 +377,24 @@ export const runMinimalAdw = (
 
       const branch = ticketBranch(input.ticketId);
 
+      yield* emitAdwProgress({
+        kind: AdwProgressKind.StepEnter,
+        step: AdwStep.Ship,
+        buildAttempts,
+        reviewAttempts,
+      });
       const pushResult = yield* gitHost
         .push({ cwd: sandbox.cwd, branch, env: input.env })
         .pipe(Effect.exit);
 
       if (pushResult._tag === "Failure") {
+        yield* emitAdwProgress({
+          kind: AdwProgressKind.StepResult,
+          step: AdwStep.Ship,
+          result: AdwStepResult.Fail,
+          buildAttempts,
+          reviewAttempts,
+        });
         return {
           ticketId: input.ticketId,
           status: AdwStatus.ReadyForPr,
@@ -279,6 +415,13 @@ export const runMinimalAdw = (
         .pipe(Effect.exit);
 
       if (prResult._tag === "Failure") {
+        yield* emitAdwProgress({
+          kind: AdwProgressKind.StepResult,
+          step: AdwStep.Ship,
+          result: AdwStepResult.Fail,
+          buildAttempts,
+          reviewAttempts,
+        });
         return {
           ticketId: input.ticketId,
           status: AdwStatus.ReadyForPr,
@@ -289,6 +432,13 @@ export const runMinimalAdw = (
         } satisfies MinimalAdwResult;
       }
 
+      yield* emitAdwProgress({
+        kind: AdwProgressKind.StepResult,
+        step: AdwStep.Ship,
+        result: AdwStepResult.Ok,
+        buildAttempts,
+        reviewAttempts,
+      });
       return {
         ticketId: input.ticketId,
         status: AdwStatus.Shipped,
