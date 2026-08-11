@@ -37,8 +37,8 @@ One Build agent run (create or resume) in the **Build↔Test** loop only. Own co
 _Avoid_: One shared budget with Review; counting Review→Build resumes as Build attempts; counting Test agent execs as attempts; unbounded Test→Build resume
 
 **Review attempt**:
-One Review agent run (always a new session). Own counter (v0 default cap **3**), **separate from Build attempts**. Caps Review↔Build thrash; exhaust → ADW `failed` even if Build attempts remain. After Review fail, resuming Build with the fail report does not decrement the Build counter.
-_Avoid_: Sharing one counter with Build↔Test; charging Review→Build to the Build cap; unlimited Review retries
+One Review agent **create** when entering Review from the Build/Test path (new session). Own counter (v0 default cap **3**), **separate from Build attempts**. Schema-repair **resumes** of that session do **not** spend an extra Review attempt; they use an inner schema-resume cap (v0 default **3**) per Review session. Caps Review↔Build thrash; exhaust Review attempts or schema-resume cap → ADW `failed` even if Build attempts remain. After a valid Review fail, resuming Build with the fail report does not decrement the Build counter.
+_Avoid_: Sharing one counter with Build↔Test; charging Review→Build or schema resumes to the Build cap; charging every schema resume as a new Review attempt; unlimited Review or schema-repair retries
 
 **Build agent**:
 The LLM agent session that implements the ticket in the warm sandbox. Its `AgentSession` is the durable resume target when the Test agent fails or Review fails.
@@ -49,8 +49,8 @@ A coded ADW graph node that runs **check-only** gates (lint, format check, typec
 _Avoid_: Test-writing agent, QA agent (unless we add a separate LLM role later); fail-fast on first red; mutating format/write steps inside the Test agent
 
 **Review agent**:
-The LLM agent that critiques the change after the Test agent passes — same _shape_ as a Bugbot-style review (findings with location/severity), but orchestration does **not** auto-fix. Always a **new** `AgentSession` in the same warm sandbox. Emits a structured **Review verdict**; on fail, the fail report is the feedback passed when resuming Build.
-_Avoid_: Same-session Review-as-Build; new Build session on every Review fail; Review that only chats with no machine-readable verdict; Review that applies fixes itself in the Minimal ADW
+The LLM agent that critiques the change after the Test agent passes — same _shape_ as a Bugbot-style review (findings with location/severity), but orchestration does **not** auto-fix. Entering Review from Build/Test always starts a **new** `AgentSession` in the same warm sandbox; create prompt includes the **ReviewOutput** wire contract. On **schema miss** (output fails decode), orchestration **resumes that Review session** with schema guidance until a valid **Review verdict** or the inner schema-resume cap. A valid **fail** verdict’s fail report is the feedback when resuming Build.
+_Avoid_: Same-session Review-as-Build; new Build session on every Review fail; treating schema-repair resume like content-fail→Build; Review that only chats with no machine-readable verdict; Review that applies fixes itself in the Minimal ADW
 
 **Ship**:
 After Review **pass**, orchestration runs the Ship step via the **Git host**: **push** the ticket branch from the warm sandbox, then open a pull/merge request. Build only commits locally; Test/Review do not push. v0 result: **`shipped`** only when a PR/MR exists (URL recorded); **`ready_for_pr`** when Review passed but push or PR open skipped/failed. Do not burn Build/Review attempts retrying Ship.
@@ -61,12 +61,16 @@ Pluggable forge for clone/push/PR-MR (GitHub via `gh` + `GH_TOKEN` first; later 
 _Avoid_: Assuming GitHub-only; calling every forge “GitHub”; baking `gh` into Runtime or ADW control-flow code; putting clone/push inside `AgentProvider`
 
 **Review verdict**:
-Structured Review output orchestration parses: **pass** or **fail**, plus on fail a fail report (findings + reasons) used as Build-resume feedback. Malformed/unknown verdict counts as fail and spends a Review attempt. Dismiss-with-reason is a human/later concern — v0 Review either fails (block + feedback) or passes (advance to Ship).
-_Avoid_: Free-text-only Review; trusting Review to merge/ship; treating false-positive dismissal as v0 ADW logic
+Structured Review output (`ReviewOutput`) orchestration parses: **pass** or **fail**, plus on fail a fail report (findings + reasons) used as Build-resume feedback. Create-time prompt states this wire contract. Malformed/unknown output is a **schema miss**: resume Review with decode guidance (not Build); only a **valid fail** resumes Build. Dismiss-with-reason is a human/later concern — once valid, v0 Review either fails (block + feedback) or passes (advance to Ship).
+_Avoid_: Free-text-only Review; routing schema miss to Build; trusting Review to merge/ship; treating false-positive dismissal as v0 ADW logic
 
 **Agent session**:
-A resumable LLM thread owned by an `AgentProvider`, identified by an **opaque** `sessionId` the orchestration stores as a pointer. The Cursor adapter maps that id to whatever `@cursor/sdk` needs for create/resume; ADW types do not expose Cursor-specific field names. Build keeps one durable session per ticket; Review may have its own short-lived session.
+A resumable LLM thread owned by an `AgentProvider`, identified by an **opaque** `sessionId` the orchestration stores as a pointer. The Cursor adapter maps that id to whatever `@cursor/sdk` needs for create/resume; ADW types do not expose Cursor-specific field names. Build keeps one durable session per ticket; Review keeps one session per Review attempt (new on entry from Build/Test; resumable for schema repair).
 _Avoid_: Equating session with sandbox; putting `cursorAgentId` (or similar) on ADW/domain types; treating session id format as domain knowledge
+
+**ADW progress event**:
+A discrete typed mid-run signal emitted by ADW orchestration (step enter/result, schema miss, attempt counters, and similar) for Host operators and later sinks — not a separate ADW graph.
+_Avoid_: Observability as a domain noun; equating with Cursor SDK stream fan-out; an “Observability ADW” whose job is telemetry; treating free-text-only log lines as the canonical model
 
 **Skill**:
 Agent-facing process guidance (prompts/procedures), not the Runtime or the ADW control plane. Configured **Agents** are **role-skill-bound**: the Agent carries root skill(s) from a **Skill pack** plus transitive closure; ADW/Runtime loads that into the **Agent session**. Build’s root is `/implement` (`tdd` and others enter via that closure). Skills do not own pass/fail routing.
