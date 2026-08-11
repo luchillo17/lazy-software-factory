@@ -14,7 +14,7 @@ Design notes and ADRs for the factory live here. Domain language: [`CONTEXT.md`]
 | [0006](./adr/0006-factory-is-self-building.md)           | Factory is self-building (ADWs develop this repo)                    |
 | [0007](./adr/0007-minimal-adw-build-test-review.md)      | Minimal ADW: Build → Test agent → Review                             |
 | [0008](./adr/0008-runtime-docker-cursor-sdk.md)          | Effect Runtime: classic Docker + Cursor SDK; Sandcastle out of stack |
-| [0009](./adr/0009-adw-attempt-caps-review-verdict.md)    | Separate Build/Review attempt caps + structured Review verdict       |
+| [0009](./adr/0009-adw-attempt-caps-review-verdict.md)    | Build/Review caps + ReviewOutput wire; schema miss resumes Review    |
 | [0010](./adr/0010-workspace-provision-before-build.md)   | Workspace provision before Build                                     |
 | [0011](./adr/0011-git-host-ship-statuses.md)             | Git host seam + `shipped` / `ready_for_pr`                           |
 | [0012](./adr/0012-vendor-effect-source-for-agents.md)    | Vendored Effect source for agents                                    |
