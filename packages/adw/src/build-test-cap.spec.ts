@@ -13,6 +13,7 @@ import { GitHost } from "./git-host.ts";
 import { runMinimalAdw } from "./run-minimal-adw.ts";
 import { AdwTestCommands } from "./test-commands.ts";
 import { WorkspaceProvision } from "./workspace-provision.ts";
+import { monorepoRoot } from "./monorepo-root.ts";
 
 const passThroughShip = Layer.mergeAll(
   Layer.succeed(
@@ -88,7 +89,7 @@ describe("runMinimalAdw Build↔Test resume + cap", () => {
           create: () =>
             Effect.succeed({
               id: "sandbox-1",
-              cwd: "/tmp/sandbox-1",
+              cwd: monorepoRoot,
               exec: () =>
                 Effect.gen(function* () {
                   const pass = yield* Ref.get(testPass);
@@ -161,7 +162,7 @@ describe("runMinimalAdw Build↔Test resume + cap", () => {
             create: () =>
               Effect.succeed({
                 id: "sandbox-1",
-                cwd: "/tmp/sandbox-1",
+                cwd: monorepoRoot,
                 exec: () =>
                   Effect.succeed({
                     exitCode: 1,
@@ -232,7 +233,7 @@ describe("runMinimalAdw Build↔Test resume + cap", () => {
             create: () =>
               Effect.succeed({
                 id: "sandbox-1",
-                cwd: "/tmp/sandbox-1",
+                cwd: monorepoRoot,
                 exec: (command) =>
                   Effect.gen(function* () {
                     const n = yield* Ref.get(round);

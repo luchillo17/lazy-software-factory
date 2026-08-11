@@ -12,6 +12,7 @@ import { GitHost, GitHostError } from "./git-host.ts";
 import { runMinimalAdw } from "./run-minimal-adw.ts";
 import { AdwTestCommands } from "./test-commands.ts";
 import { WorkspaceProvision } from "./workspace-provision.ts";
+import { monorepoRoot } from "./monorepo-root.ts";
 
 const greenAgents = Layer.mergeAll(
   Layer.succeed(
@@ -24,7 +25,7 @@ const greenAgents = Layer.mergeAll(
       create: () =>
         Effect.succeed({
           id: "sandbox-1",
-          cwd: "/tmp/sandbox-1",
+          cwd: monorepoRoot,
           exec: () => Effect.succeed({ exitCode: 0, stdout: "", stderr: "" }),
           destroy: () => Effect.void,
         } satisfies Sandbox),

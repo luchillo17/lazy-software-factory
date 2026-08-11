@@ -12,6 +12,7 @@ import { GitHost } from "./git-host.ts";
 import { runMinimalAdw } from "./run-minimal-adw.ts";
 import { AdwTestCommands } from "./test-commands.ts";
 import { ProvisionError, WorkspaceProvision } from "./workspace-provision.ts";
+import { monorepoRoot } from "./monorepo-root.ts";
 
 describe("runMinimalAdw provision failure", () => {
   it.effect("provision failure yields failed with zero agent runs", () =>
@@ -27,7 +28,7 @@ describe("runMinimalAdw provision failure", () => {
             create: () =>
               Effect.succeed({
                 id: "sandbox-1",
-                cwd: "/tmp/sandbox-1",
+                cwd: monorepoRoot,
                 exec: () =>
                   Effect.gen(function* () {
                     yield* Ref.update(testRuns, (n) => n + 1);

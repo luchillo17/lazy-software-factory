@@ -12,6 +12,12 @@ import { AdwStatus, AdwStatusSchema, ReviewVerdict } from "./enums.ts";
 import { GitHost } from "./git-host.ts";
 import { ReviewOutput } from "./review-output.ts";
 import { AdwTestCommands, type AdwTestCommand } from "./test-commands.ts";
+import {
+  AgentRole,
+  bootstrapRoleSkillPrompt,
+  skillPackRootExists,
+  DEFAULT_SKILL_PACK_ROOT,
+} from "./role-skill-binding.ts";
 import { ticketBranch } from "./ticket-branch.ts";
 import { WorkspaceProvision } from "./workspace-provision.ts";
 
@@ -105,8 +111,17 @@ export const runMinimalAdw = (
         env: input.env,
       });
 
+      if (!skillPackRootExists(sandbox.cwd)) {
+        return {
+          ticketId: input.ticketId,
+          status: AdwStatus.Failed,
+          detail: `Skill pack root missing: ${DEFAULT_SKILL_PACK_ROOT} under ${sandbox.cwd}`,
+          sandboxId: sandbox.id,
+        } satisfies MinimalAdwResult;
+      }
+
       let buildSession: AgentSession = yield* buildAgent.run({
-        prompt: input.prompt,
+        prompt: bootstrapRoleSkillPrompt(AgentRole.Build, input.prompt),
         sandbox,
         env: input.env,
       });
@@ -190,7 +205,10 @@ export const runMinimalAdw = (
         }
 
         const reviewSession = yield* reviewAgent.run({
-          prompt: `Review changes for ticket ${input.ticketId}`,
+          prompt: bootstrapRoleSkillPrompt(
+            AgentRole.Review,
+            `Review changes for ticket ${input.ticketId}`
+          ),
           sandbox,
           env: input.env,
         });

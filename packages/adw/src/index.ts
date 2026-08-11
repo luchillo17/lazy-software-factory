@@ -3,6 +3,7 @@ export * from "./enums.ts";
 export * from "./git-host.ts";
 export * from "./host-operator.ts";
 export * from "./review-output.ts";
+export * from "./role-skill-binding.ts";
 export * from "./run-minimal-adw.ts";
 export * from "./test-commands.ts";
 export * from "./ticket-branch.ts";

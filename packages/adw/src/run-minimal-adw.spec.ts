@@ -12,6 +12,7 @@ import { GitHost } from "./git-host.ts";
 import { runMinimalAdw } from "./run-minimal-adw.ts";
 import { AdwTestCommands } from "./test-commands.ts";
 import { WorkspaceProvision } from "./workspace-provision.ts";
+import { monorepoRoot } from "./monorepo-root.ts";
 
 describe("runMinimalAdw happy path", () => {
   it.effect("provision → Build → Test → Review → Ship yields shipped", () =>
@@ -28,7 +29,7 @@ describe("runMinimalAdw happy path", () => {
               yield* record("sandbox");
               const box: Sandbox = {
                 id: "sandbox-1",
-                cwd: "/tmp/sandbox-1",
+                cwd: monorepoRoot,
                 exec: (command, args = []) =>
                   Effect.gen(function* () {
                     if (command === "git" && args[0] === "rev-parse") {
@@ -81,6 +82,8 @@ describe("runMinimalAdw happy path", () => {
             Effect.gen(function* () {
               yield* record("build");
               assert.isDefined(options.sandbox);
+              assert.isTrue(options.prompt.includes("/implement"));
+              assert.isTrue(options.prompt.includes("implement the thing"));
               return { sessionId: "build-session-1" };
             }),
           resume: () => Effect.die("Build resume must not run on happy path"),
@@ -94,6 +97,10 @@ describe("runMinimalAdw happy path", () => {
             Effect.gen(function* () {
               yield* record("review");
               assert.isDefined(options.sandbox);
+              assert.isTrue(options.prompt.toLowerCase().includes("bugbot"));
+              assert.isTrue(
+                options.prompt.includes("Review changes for ticket TICKET-1")
+              );
               return {
                 sessionId: "review-session-1",
                 output: { verdict: ReviewVerdict.Pass },

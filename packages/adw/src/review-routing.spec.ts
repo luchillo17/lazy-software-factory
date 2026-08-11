@@ -13,6 +13,7 @@ import { GitHost } from "./git-host.ts";
 import { runMinimalAdw } from "./run-minimal-adw.ts";
 import { AdwTestCommands } from "./test-commands.ts";
 import { WorkspaceProvision } from "./workspace-provision.ts";
+import { monorepoRoot } from "./monorepo-root.ts";
 
 const provisionAndShip = Layer.mergeAll(
   Layer.succeed(
@@ -46,7 +47,7 @@ describe("runMinimalAdw Review routing + cap", () => {
             create: () =>
               Effect.succeed({
                 id: "sandbox-1",
-                cwd: "/tmp/sandbox-1",
+                cwd: monorepoRoot,
                 exec: () =>
                   Effect.gen(function* () {
                     const phase = yield* Ref.get(testPhase);
@@ -161,7 +162,7 @@ describe("runMinimalAdw Review routing + cap", () => {
             create: () =>
               Effect.succeed({
                 id: "sandbox-1",
-                cwd: "/tmp/sandbox-1",
+                cwd: monorepoRoot,
                 exec: () =>
                   Effect.succeed({ exitCode: 0, stdout: "", stderr: "" }),
                 destroy: () => Effect.void,
@@ -234,7 +235,7 @@ describe("runMinimalAdw Review routing + cap", () => {
           create: () =>
             Effect.succeed({
               id: "sandbox-1",
-              cwd: "/tmp/sandbox-1",
+              cwd: monorepoRoot,
               exec: () =>
                 Effect.succeed({ exitCode: 0, stdout: "", stderr: "" }),
               destroy: () => Effect.void,

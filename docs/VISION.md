@@ -44,11 +44,11 @@ Locked in charting (#28 Build/Review; [#34](https://github.com/luchillo17/lazy-s
 
 | Agent   | Binding                                                                                                                                                                                                                                                                                                                                                                             |
 | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Build   | Root `/implement`; load transitive closure (`tdd`, `code-review`, `codebase-design`, conditional `setup-matt-pocock-skills`)                                                                                                                                                                                                                                                        |
-| Review  | Bugbot-shaped only in v0 — no duplicate `/code-review`; no always-on `/improve-codebase-architecture`                                                                                                                                                                                                                                                                               |
+| Build   | Root `/implement` in session prompt; transitive skills follow from that skill on disk (pack must include them). Do **not** force `/setup-matt-pocock-skills` in Build bootstrap.                                                                                                                                                                                                    |
+| Review  | Root `/adw-review` (Factory skill: ticket-branch diff, findings + `ReviewOutput`, no self-fix). Not Cursor `/review-bugbot` (no Bugbot subagent / PR checkout).                                                                                                                                                                                                                     |
 | Planner | Roots `/codebase-design` + `/domain-modeling`; output skill **`/to-plan`** (custom: handoff discipline + Cursor `.plan.md`-like overview/todos/body). Write plan into warm-sandbox/ADW state (not OS temp). Optional suggested-skills section allowed; Agent Role binding still authoritative. **SKILL.md for `to-plan` ships with Feature ADW impl** — vision names the bind only. |
 
-**Planner excludes (not in Role binding):** `/implement`, `/tdd`, `/code-review`, Review/Bugbot roots, `/grilling`, `/wayfinder`, `/prototype`, `/to-tickets`, `/to-spec`, and using raw `/handoff` as the sole output path.
+**Planner excludes (not in Role binding):** `/implement`, `/tdd`, `/code-review`, `/adw-review`, `/grilling`, `/wayfinder`, `/prototype`, `/to-tickets`, `/to-spec`, and using raw `/handoff` as the sole output path.
 
 ## 3. v0 cut
 
@@ -62,8 +62,8 @@ Acceptance criteria for **Minimal ADW** v0 green (self-building this repo on **H
   - [ ] Build↔Test and Review attempt caps behave per ADR-0009
 - [ ] **One documented manual self-build** on this repo: a real `ready-for-agent` Issue runs through Host Minimal ADW and reaches **`shipped`** (live PR)
 - [ ] **Intake:** thin operator/CLI (or app) starts Minimal ADW from one GitHub Issue labelled `ready-for-agent` (Issue id + body → `ticketId` / prompt) — not full triage automation
-- [ ] **Build Role skill binding:** session bootstrap injects root `/implement` and its transitive skill closure (includes `tdd`, `code-review`, …); pack root `.agents/skills` present on agent cwd
-- [ ] **Review Role skill binding:** Bugbot-shaped review bind only (no second `/code-review` pass; no always-on `/improve-codebase-architecture`)
+- [ ] **Build Role skill binding:** session bootstrap injects root `/implement` (flat skills + work; no role speech, no closure laundry list, no forced `/setup-matt-pocock-skills`); pack root `.agents/skills` present on agent cwd
+- [ ] **Review Role skill binding:** session bootstrap injects root `/adw-review`; pack root `.agents/skills` present on agent cwd
 - [ ] **Extractability note:** short consumer doc on depending on `runtime` / `adw` (+ git-host seam) outside monorepo apps — DX rough OK; npm publish **not** required
 
 ### Explicitly not required for v0
