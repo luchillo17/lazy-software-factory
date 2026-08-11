@@ -13,8 +13,20 @@ Using this Factory’s ADWs to develop this repo’s apps and packages (apply th
 _Avoid_: Self-hosting (means on-prem/local deploy here), dogfooding (optional prose only)
 
 **ADW**:
-An AI developer workflow — a coded sequence of agent steps and deterministic gates for a unit of work (see `packages/adw`).
-_Avoid_: Pipeline, agent loop (a single agent chat iteration is not the whole ADW)
+An AI developer workflow — a composable coded graph of agent steps, deterministic gates, and/or nested ADWs for a unit of work (see `packages/adw`). Leaf ADWs wire agents + gates; composite ADWs chain Agents and/or nested ADWs (e.g. **Feature ADW** = Planner Agent + **Minimal ADW**). Do not wrap a single Agent as its own ADW.
+_Avoid_: Pipeline, agent loop (a single agent chat iteration is not the whole ADW); treating ADWs as non-nestable flat scripts only; one-node ADW wrappers around a single Agent
+
+**Minimal ADW**:
+The leaf ADW: **Build agent** ↔ **Test agent** (gate) → **Review agent** → **Ship** (ADR-0007 shape). Own Build/Review attempt caps and warm-sandbox loop.
+_Avoid_: Calling this Feature; dropping Review from Minimal
+
+**Feature ADW**:
+A composite ADW: **Planner Agent** then nested **Minimal ADW**. Shares one warm sandbox with the child. Ship stays on Minimal after Review pass.
+_Avoid_: Planner-as-ADW when it is only one Agent; renaming Minimal to Feature
+
+**Agent** (configured):
+A reusable LLM role primitive with its **Skill pack** and **Role skill binding** (e.g. Build, Review, Planner). ADWs compose Agents and nested ADWs; Agents do not embed ADW routing. Distinct from **Agent session** (one running thread).
+_Avoid_: Letting each ADW re-own skill policy; equating Agent with Agent session or with the whole ADW; wrapping one Agent in a throwaway ADW just for symmetry
 
 **Gate**:
 A deterministic pass/fail check owned by orchestration (lint, typecheck, test, policy). Green advances the ADW; red routes back.
@@ -38,7 +50,7 @@ _Avoid_: Test-writing agent, QA agent (unless we add a separate LLM role later);
 
 **Review agent**:
 The LLM agent that critiques the change after the Test agent passes — same _shape_ as a Bugbot-style review (findings with location/severity), but orchestration does **not** auto-fix. Always a **new** `AgentSession` in the same warm sandbox. Emits a structured **Review verdict**; on fail, the fail report is the feedback passed when resuming Build.
-_Avoid_: Same-session Review-as-Build; new Build session on every Review fail; Review that only chats with no machine-readable verdict; Review that applies fixes itself in the minimal ADW
+_Avoid_: Same-session Review-as-Build; new Build session on every Review fail; Review that only chats with no machine-readable verdict; Review that applies fixes itself in the Minimal ADW
 
 **Ship**:
 After Review **pass**, orchestration runs the Ship step via the **Git host**: **push** the ticket branch from the warm sandbox, then open a pull/merge request. Build only commits locally; Test/Review do not push. v0 result: **`shipped`** only when a PR/MR exists (URL recorded); **`ready_for_pr`** when Review passed but push or PR open skipped/failed. Do not burn Build/Review attempts retrying Ship.
@@ -57,12 +69,16 @@ A resumable LLM thread owned by an `AgentProvider`, identified by an **opaque** 
 _Avoid_: Equating session with sandbox; putting `cursorAgentId` (or similar) on ADW/domain types; treating session id format as domain knowledge
 
 **Skill**:
-Agent-facing process guidance (prompts/procedures), not the Runtime or the ADW control plane. LLM agent roles in an ADW are **role-skill-bound**: orchestration injects the mandatory skill set for that role at session bootstrap (e.g. Build → `/implement`; Review → review skills). Skills do not own pass/fail routing.
-_Avoid_: Workflow, ADW; hoping the agent “just remembers” the skill with no orchestration bind
+Agent-facing process guidance (prompts/procedures), not the Runtime or the ADW control plane. Configured **Agents** are **role-skill-bound**: the Agent carries root skill(s) from a **Skill pack** plus transitive closure; ADW/Runtime loads that into the **Agent session**. Build’s root is `/implement` (`tdd` and others enter via that closure). Skills do not own pass/fail routing.
+_Avoid_: Workflow, ADW; hoping the agent “just remembers” the skill with no Agent binding; treating `/tdd` as a second Build root alongside `/implement` when it is already in implement’s closure
 
 **Role skill binding**:
-The ADW/control-plane policy that maps an LLM agent role (Build, Review, …) to the skill set that role must always run. Content lives in skills; the binding and injection live in orchestration.
-_Avoid_: Encoding each skill as its own ADW graph; putting skill selection only inside Runtime/AgentProvider; treating skill use as optional agent whim
+Policy on a configured **Agent** that names the root skill(s) that role must run, plus transitive closure from the **Skill pack**. Content lives in skills; the Agent carries the binding; Runtime/ADW loads it into the **Agent session**.
+_Avoid_: Encoding each skill as its own ADW graph; dumping the entire pack into every role with no binding; re-declaring bindings on every parent ADW
+
+**Skill pack**:
+A rooted set of Skill files available to a configured **Agent** (default for this Factory: `.agents/skills`). Organization-scoped custom packs are a later hosted overlay on the same Agent primitive.
+_Avoid_: Shipping a different AgentProvider per tenant; baking one repo’s skills into the AgentProvider binary
 
 **Runtime**:
 Our Effect TypeScript layer (`packages/runtime`) that owns sandbox lifecycle and agent providers (e.g. Cursor SDK). The Factory control plane calls the Runtime; skills do not.
