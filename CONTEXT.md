@@ -21,8 +21,8 @@ The leaf ADW: **Build agent** ↔ **Test agent** (gate) → **Review agent** →
 _Avoid_: Calling this Feature; dropping Review from Minimal
 
 **Feature ADW**:
-A composite ADW: **Planner Agent** then nested **Minimal ADW**. Shares one warm sandbox with the child. Ship stays on Minimal after Review pass.
-_Avoid_: Planner-as-ADW when it is only one Agent; renaming Minimal to Feature
+A composite ADW: **Planner Agent** then nested **Minimal ADW**. Shares one warm sandbox with the child. Ship stays on Minimal after Review pass. Planner binds `/codebase-design` + `/domain-modeling` and emits a **`/to-plan`** artifact (plan.md-like + handoff discipline) for Minimal. Provisional nested routing: Agent Review-fail stays local inside Minimal; Minimal exhaustion bubbles to Planner for **plan-only** re-entry (not code edits) — see `docs/VISION.md`.
+_Avoid_: Planner-as-ADW when it is only one Agent; renaming Minimal to Feature; treating Agent Review-fail like HITL Engineer Review→Planner; Planner editing code on replan; treating suggested skills in a plan as overriding the Agent’s Role skill binding
 
 **Agent** (configured):
 A reusable LLM role primitive with its **Skill pack** and **Role skill binding** (e.g. Build, Review, Planner). ADWs compose Agents and nested ADWs; Agents do not embed ADW routing. Distinct from **Agent session** (one running thread).
@@ -73,8 +73,8 @@ Agent-facing process guidance (prompts/procedures), not the Runtime or the ADW c
 _Avoid_: Workflow, ADW; hoping the agent “just remembers” the skill with no Agent binding; treating `/tdd` as a second Build root alongside `/implement` when it is already in implement’s closure
 
 **Role skill binding**:
-Policy on a configured **Agent** that names the root skill(s) that role must run, plus transitive closure from the **Skill pack**. Content lives in skills; the Agent carries the binding; Runtime/ADW loads it into the **Agent session**.
-_Avoid_: Encoding each skill as its own ADW graph; dumping the entire pack into every role with no binding; re-declaring bindings on every parent ADW
+Policy on a configured **Agent** that names the root skill(s) that role must run, plus transitive closure from the **Skill pack**. Content lives in skills; the Agent carries the binding; Runtime/ADW loads it into the **Agent session**. Suggested skills inside a `/to-plan` (or similar) artifact are optional hints — they do not replace this binding (important when Organizations customize Agents later).
+_Avoid_: Encoding each skill as its own ADW graph; dumping the entire pack into every role with no binding; re-declaring bindings on every parent ADW; letting plan suggestions silently override the Agent bind
 
 **Skill pack**:
 A rooted set of Skill files available to a configured **Agent** (default for this Factory: `.agents/skills`). Organization-scoped custom packs are a later hosted overlay on the same Agent primitive.
