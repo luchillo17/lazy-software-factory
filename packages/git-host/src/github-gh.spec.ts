@@ -103,7 +103,7 @@ describe("GitHubGh", () => {
 
       yield* host.commitWorkingTree({
         cwd: "/tmp/repo",
-        message: "adw(T-1): ship pending changes",
+        message: "chore(adw): ship pending changes for T-1",
       });
 
       const seen = yield* Ref.get(calls);
@@ -147,7 +147,7 @@ describe("GitHubGh", () => {
 
       yield* host.commitWorkingTree({
         cwd: "/tmp/repo",
-        message: "adw(T-1): ship pending changes",
+        message: "chore(adw): ship pending changes for T-1",
       });
 
       const seen = yield* Ref.get(calls);
@@ -156,7 +156,7 @@ describe("GitHubGh", () => {
         { command: "git", args: ["add", "-A"] },
         {
           command: "git",
-          args: ["commit", "-m", "adw(T-1): ship pending changes"],
+          args: ["commit", "-m", "chore(adw): ship pending changes for T-1"],
         },
       ]);
     })

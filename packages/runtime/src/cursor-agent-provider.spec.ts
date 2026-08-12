@@ -97,7 +97,10 @@ describe("Cursor AgentProvider", () => {
         const createOpts = yield* Ref.get(creates);
         assert.strictEqual(createOpts.length, 1);
         assert.strictEqual(createOpts[0]?.apiKey, "test-key");
-        assert.deepStrictEqual(createOpts[0]?.local, { cwd: "/tmp/repo" });
+        assert.deepStrictEqual(createOpts[0]?.local, {
+          cwd: "/tmp/repo",
+          settingSources: ["project"],
+        });
         assert.deepStrictEqual(createOpts[0]?.model, { id: "composer-2.5" });
         assert.strictEqual(disposed, 1);
       })
