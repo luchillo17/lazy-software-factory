@@ -1,3 +1,8 @@
+/**
+ * One Review entry: create session with submit tools, wire-miss resume until
+ * accepted stash decode, emit Review progress (ADR-0009, ADR-0014).
+ * Caller owns Review attempt cap routing and Build resume.
+ */
 import {
   type AgentError,
   type AgentProviderService,
@@ -11,18 +16,20 @@ import {
 } from "./adw-progress-event.ts";
 import { emitAdwProgress } from "./adw-progress.ts";
 import { ReviewVerdict } from "./enums.ts";
-import {
-  reviewOutputContractPrompt,
-  schemaRepairPrompt,
-} from "./review-output-contract.ts";
 import { ReviewOutput, type ReviewPassOutput } from "./review-output.ts";
 import { AgentRole, bootstrapRoleSkillPrompt } from "./role-skill-binding.ts";
+import {
+  createReviewVerdictToolStash,
+  makeReviewVerdictCustomTools,
+  reviewOutputContractPrompt,
+  wireMissRepairPrompt,
+} from "./review-verdict-tools.ts";
 
-/** Closed outcome set for one Review create + schema-resume loop. */
+/** Closed outcome set for one Review create + wire-miss resume loop. */
 export const ReviewAttemptOutcome = {
   Pass: "pass",
   Fail: "fail",
-  SchemaCapExhausted: "schemaCapExhausted",
+  WireMissCapExhausted: "wireMissCapExhausted",
 } as const;
 
 export const ReviewAttemptOutcomeSchema = Schema.Enum(ReviewAttemptOutcome);
@@ -42,7 +49,7 @@ export type ReviewAttemptResult =
       readonly reviewAttempts: number;
     }
   | {
-      readonly outcome: typeof ReviewAttemptOutcome.SchemaCapExhausted;
+      readonly outcome: typeof ReviewAttemptOutcome.WireMissCapExhausted;
       readonly detail: string;
       readonly sessionId: string;
       readonly reviewAttempts: number;
@@ -53,7 +60,8 @@ export interface RunReviewAttemptInput {
   readonly sandbox: Sandbox;
   readonly ticketId: string;
   readonly env?: Readonly<Record<string, string>>;
-  readonly schemaResumeCap: number;
+  /** Inner wire-miss resume budget (ADR-0009). */
+  readonly wireMissCap: number;
   readonly buildAttempts: number;
   /** Review creates charged before this attempt. */
   readonly reviewAttempts: number;
@@ -73,22 +81,12 @@ const reviewOutputRaw = (output: unknown): string => {
   }
 };
 
-/**
- * One Review entry: create session, schema-resume until decode, emit Review
- * progress. Caller owns Review attempt cap routing and Build resume.
- */
 export const runReviewAttempt = (
   input: RunReviewAttemptInput
 ): Effect.Effect<ReviewAttemptResult, AgentError> =>
   Effect.gen(function* () {
-    const {
-      reviewAgent,
-      sandbox,
-      ticketId,
-      env,
-      schemaResumeCap,
-      buildAttempts,
-    } = input;
+    const { reviewAgent, sandbox, ticketId, env, wireMissCap, buildAttempts } =
+      input;
 
     yield* emitAdwProgress({
       kind: AdwProgressKind.StepEnter,
@@ -97,26 +95,33 @@ export const runReviewAttempt = (
       reviewAttempts: input.reviewAttempts,
     });
 
+    const toolStash = createReviewVerdictToolStash();
+    const customTools = makeReviewVerdictCustomTools(toolStash);
+
     let reviewSession = yield* reviewAgent.run({
       prompt: bootstrapRoleSkillPrompt(
         AgentRole.Review,
         [
           reviewOutputContractPrompt(),
           "",
-          `Review changes for ticket ${ticketId}`,
+          `Review changes for ticket ${ticketId}.`,
+          "Inspect git status / diff if needed, then submit the verdict via submit_review_pass or submit_review_fail.",
         ].join("\n")
       ),
       sandbox,
       env,
+      customTools,
     });
     const reviewAttempts = input.reviewAttempts + 1;
     const sessionId = reviewSession.sessionId;
-    let schemaResumes = 0;
+    let wireMissResumes = 0;
 
     let decoded: ReviewOutput | undefined;
     while (decoded === undefined) {
+      // Tool-only wire (ADR-0014): ignore session.output prose.
+      const candidate = toolStash.value;
       const decodeAttempt = yield* Schema.decodeUnknownEffect(ReviewOutput)(
-        reviewSession.output
+        candidate
       ).pipe(
         Effect.map((value) => ({ ok: true as const, value })),
         Effect.catchTag("SchemaError", (err) =>
@@ -132,15 +137,18 @@ export const runReviewAttempt = (
         break;
       }
 
-      const raw = reviewOutputRaw(reviewSession.output);
+      const raw = reviewOutputRaw(
+        candidate ?? reviewSession.output ?? "no submit_review_* tool call"
+      );
+      const missDetail = `no successful submit_review_* tool call; ${decodeAttempt.message}`;
 
       yield* emitAdwProgress({
-        kind: AdwProgressKind.SchemaMiss,
+        kind: AdwProgressKind.WireMiss,
         reviewAttempts,
         raw,
       });
 
-      if (schemaResumes >= schemaResumeCap) {
+      if (wireMissResumes >= wireMissCap) {
         yield* emitAdwProgress({
           kind: AdwProgressKind.StepResult,
           step: AdwStep.Review,
@@ -149,8 +157,8 @@ export const runReviewAttempt = (
           reviewAttempts,
         });
         return {
-          outcome: ReviewAttemptOutcome.SchemaCapExhausted,
-          detail: `Review schema resume cap exhausted (${schemaResumeCap})`,
+          outcome: ReviewAttemptOutcome.WireMissCapExhausted,
+          detail: `Review wire-miss resume cap exhausted (${wireMissCap})`,
           sessionId,
           reviewAttempts,
         } satisfies ReviewAttemptResult;
@@ -159,16 +167,17 @@ export const runReviewAttempt = (
       yield* emitAdwProgress({
         kind: AdwProgressKind.StepResult,
         step: AdwStep.Review,
-        result: AdwStepResult.SchemaResume,
+        result: AdwStepResult.WireResume,
         buildAttempts,
         reviewAttempts,
       });
       reviewSession = yield* reviewAgent.resume(reviewSession, {
-        prompt: schemaRepairPrompt(decodeAttempt.message, raw),
+        prompt: wireMissRepairPrompt(missDetail, raw),
         sandbox,
         env,
+        customTools,
       });
-      schemaResumes += 1;
+      wireMissResumes += 1;
     }
 
     if (decoded.verdict === ReviewVerdict.Pass) {

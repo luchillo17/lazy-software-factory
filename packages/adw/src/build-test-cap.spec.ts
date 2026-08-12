@@ -14,8 +14,8 @@ import {
 } from "./attempt-caps.ts";
 import { AdwStatus } from "./enums.ts";
 import { GitHost } from "./git-host.ts";
-import { reviewPassFixture } from "./review-pass-fixture.ts";
 import { runMinimalAdw } from "./run-minimal-adw.ts";
+import { submitReviewPassViaTools } from "./review-tool-test-helpers.ts";
 import { AdwTestCommands } from "./test-commands.ts";
 import { WorkspaceProvision } from "./workspace-provision.ts";
 import { monorepoRoot } from "./monorepo-root.ts";
@@ -28,10 +28,10 @@ const passThroughShip = Layer.mergeAll(
   Layer.succeed(
     ReviewAgentProvider,
     ReviewAgentProvider.of({
-      run: () =>
-        Effect.succeed({
-          sessionId: "review-session-1",
-          output: reviewPassFixture(),
+      run: (options) =>
+        Effect.gen(function* () {
+          yield* submitReviewPassViaTools(options);
+          return { sessionId: "review-session-1" };
         }),
       resume: () => Effect.die("unused"),
     })
@@ -62,10 +62,10 @@ const passThroughShipWithoutGates = Layer.mergeAll(
   Layer.succeed(
     ReviewAgentProvider,
     ReviewAgentProvider.of({
-      run: () =>
-        Effect.succeed({
-          sessionId: "review-session-1",
-          output: reviewPassFixture(),
+      run: (options) =>
+        Effect.gen(function* () {
+          yield* submitReviewPassViaTools(options);
+          return { sessionId: "review-session-1" };
         }),
       resume: () => Effect.die("unused"),
     })

@@ -15,7 +15,7 @@ export type AdwStep = typeof AdwStepSchema.Type;
 export const AdwProgressKind = {
   StepEnter: "step_enter",
   StepResult: "step_result",
-  SchemaMiss: "schema_miss",
+  WireMiss: "wire_miss",
 } as const;
 export const AdwProgressKindSchema = Schema.Enum(AdwProgressKind);
 export type AdwProgressKind = typeof AdwProgressKindSchema.Type;
@@ -24,13 +24,13 @@ export const AdwStepResult = {
   Ok: "ok",
   Fail: "fail",
   Resume: "resume",
-  SchemaResume: "schema_resume",
+  WireResume: "wire_resume",
   BuildResume: "build_resume",
 } as const;
 export const AdwStepResultSchema = Schema.Enum(AdwStepResult);
 export type AdwStepResult = typeof AdwStepResultSchema.Type;
 
-/** Default max chars of raw Review output kept on schema_miss lines. */
+/** Default max chars of raw Review output kept on wire_miss lines. */
 export const DEFAULT_PROGRESS_RAW_MAX = 120;
 
 export type AdwProgressEvent =
@@ -48,7 +48,7 @@ export type AdwProgressEvent =
       readonly reviewAttempts?: number;
     }
   | {
-      readonly kind: typeof AdwProgressKind.SchemaMiss;
+      readonly kind: typeof AdwProgressKind.WireMiss;
       readonly reviewAttempts: number;
       readonly raw: string;
     };
@@ -84,7 +84,7 @@ export const formatAdwProgressEvent = (event: AdwProgressEvent): string => {
       return `adw kind=${event.kind} step=${event.step}${attemptsFields(event)}`;
     case AdwProgressKind.StepResult:
       return `adw kind=${event.kind} step=${event.step} result=${event.result}${attemptsFields(event)}`;
-    case AdwProgressKind.SchemaMiss: {
+    case AdwProgressKind.WireMiss: {
       const raw = truncateProgressRaw(redactSecrets(event.raw));
       return `adw kind=${event.kind} reviewAttempts=${event.reviewAttempts} raw=${JSON.stringify(raw)}`;
     }

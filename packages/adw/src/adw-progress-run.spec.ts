@@ -15,8 +15,8 @@ import {
 import { AdwStatus } from "./enums.ts";
 import { GitHost } from "./git-host.ts";
 import { monorepoRoot } from "./monorepo-root.ts";
-import { reviewPassFixture } from "./review-pass-fixture.ts";
 import { runMinimalAdw } from "./run-minimal-adw.ts";
+import { submitReviewPassViaTools } from "./review-tool-test-helpers.ts";
 import { AdwTestCommands } from "./test-commands.ts";
 import { WorkspaceProvision } from "./workspace-provision.ts";
 
@@ -89,10 +89,10 @@ describe("runMinimalAdw progress events", () => {
             Layer.succeed(
               ReviewAgentProvider,
               ReviewAgentProvider.of({
-                run: () =>
-                  Effect.succeed({
-                    sessionId: "review-1",
-                    output: reviewPassFixture(),
+                run: (options) =>
+                  Effect.gen(function* () {
+                    yield* submitReviewPassViaTools(options);
+                    return { sessionId: "review-1" };
                   }),
                 resume: () => Effect.die("unused"),
               })
@@ -155,7 +155,7 @@ describe("runMinimalAdw progress events", () => {
     })
   );
 
-  it.effect("emits schema_miss with raw on malformed Review output", () =>
+  it.effect("emits wire_miss with raw when Review omits submit tools", () =>
     Effect.gen(function* () {
       const lines: string[] = [];
 
@@ -181,7 +181,7 @@ describe("runMinimalAdw progress events", () => {
       );
 
       const result = yield* runMinimalAdw({
-        ticketId: "T-SCHEMA-MISS",
+        ticketId: "T-WIRE-MISS",
         prompt: "work",
       }).pipe(
         Effect.provide(
@@ -243,15 +243,15 @@ describe("runMinimalAdw progress events", () => {
       );
 
       assert.strictEqual(result.status, AdwStatus.Failed);
-      assert.isTrue(result.detail?.includes("schema resume cap exhausted"));
-      const miss = lines.find((l) => l.includes("kind=schema_miss"));
+      assert.isTrue(result.detail?.includes("wire-miss resume cap exhausted"));
+      const miss = lines.find((l) => l.includes("kind=wire_miss"));
       assert.isTrue(miss !== undefined);
       assert.isTrue(miss!.includes("raw="));
       assert.isFalse(miss!.includes("gho_"));
       assert.isTrue(miss!.includes("[REDACTED]"));
       assert.isTrue(
         lines.some((l) =>
-          l.includes("kind=step_result step=review result=schema_resume")
+          l.includes("kind=step_result step=review result=wire_resume")
         )
       );
     })

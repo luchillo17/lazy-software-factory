@@ -15,12 +15,30 @@ export interface AgentSession {
   readonly output?: unknown;
 }
 
+/**
+ * Structural custom-tool shape (Cursor `SDKCustomTool` compatible).
+ * Keeps `@cursor/sdk` out of ADW; adapter casts when calling Agent.create.
+ */
+export interface AgentCustomTool {
+  readonly description?: string;
+  readonly inputSchema?: Record<string, unknown>;
+  readonly execute: (
+    args: Record<string, unknown>,
+    context: { readonly toolCallId?: string }
+  ) => unknown | Promise<unknown>;
+}
+
 export interface AgentRunOptions {
   readonly prompt: string;
   /** Every agent call requires a sandbox pointer — never “no sandbox.” */
   readonly sandbox: Sandbox;
   readonly model?: string;
   readonly env?: Readonly<Record<string, string>>;
+  /**
+   * Local Cursor SDK `customTools` (e.g. Review submit tools, ADR-0014).
+   * Ignored by non-Cursor adapters; Factory ADWs use SDK local agents.
+   */
+  readonly customTools?: Record<string, AgentCustomTool>;
 }
 
 export interface AgentProviderService {

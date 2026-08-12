@@ -9,6 +9,10 @@ import { captureAdwProgressLogger } from "./adw-progress.ts";
 import { ReviewVerdict } from "./enums.ts";
 import { ReviewAttemptOutcome, runReviewAttempt } from "./review-attempt.ts";
 import { reviewPassFixture } from "./review-pass-fixture.ts";
+import {
+  submitReviewFailViaTools,
+  submitReviewPassViaTools,
+} from "./review-tool-test-helpers.ts";
 
 const sandbox: Sandbox = {
   id: "sandbox-1",
@@ -17,26 +21,26 @@ const sandbox: Sandbox = {
   destroy: () => Effect.void,
 };
 
-const session = (
-  output: unknown,
-  sessionId = "review-session-1"
-): AgentSession => ({
+const session = (sessionId = "review-session-1"): AgentSession => ({
   sessionId,
-  output,
 });
 
 describe("runReviewAttempt", () => {
-  it.effect("returns pass when Review output is a pass verdict", () =>
+  it.effect("returns pass when submit_review_pass succeeds", () =>
     Effect.gen(function* () {
       const reviewAgent: AgentProviderService = {
-        run: () => Effect.succeed(session(reviewPassFixture())),
+        run: (options) =>
+          Effect.gen(function* () {
+            yield* submitReviewPassViaTools(options);
+            return session();
+          }),
         resume: () => Effect.die("unused"),
       };
       const result = yield* runReviewAttempt({
         reviewAgent,
         sandbox,
         ticketId: "T-1",
-        schemaResumeCap: 2,
+        wireMissCap: 2,
         buildAttempts: 1,
         reviewAttempts: 0,
       });
@@ -50,23 +54,21 @@ describe("runReviewAttempt", () => {
     })
   );
 
-  it.effect("returns fail with failReport on fail verdict", () =>
+  it.effect("returns fail when submit_review_fail succeeds", () =>
     Effect.gen(function* () {
       const reviewAgent: AgentProviderService = {
-        run: () =>
-          Effect.succeed(
-            session({
-              verdict: ReviewVerdict.Fail,
-              failReport: "missing tests",
-            })
-          ),
+        run: (options) =>
+          Effect.gen(function* () {
+            yield* submitReviewFailViaTools(options, "missing tests");
+            return session();
+          }),
         resume: () => Effect.die("unused"),
       };
       const result = yield* runReviewAttempt({
         reviewAgent,
         sandbox,
         ticketId: "T-1",
-        schemaResumeCap: 2,
+        wireMissCap: 2,
         buildAttempts: 1,
         reviewAttempts: 1,
       });
@@ -78,22 +80,27 @@ describe("runReviewAttempt", () => {
     })
   );
 
-  it.effect("schema-resumes until valid output within cap", () =>
+  it.effect("ignores prose session.output when no tool was called", () =>
     Effect.gen(function* () {
       const resumes = yield* Ref.make(0);
       const reviewAgent: AgentProviderService = {
-        run: () => Effect.succeed(session({ not: "review" })),
-        resume: (prev) =>
+        run: () =>
+          Effect.succeed({
+            sessionId: "review-session-1",
+            output: reviewPassFixture(),
+          }),
+        resume: (prev, options) =>
           Effect.gen(function* () {
             yield* Ref.update(resumes, (n) => n + 1);
-            return session(reviewPassFixture(), prev.sessionId);
+            yield* submitReviewPassViaTools(options);
+            return session(prev.sessionId);
           }),
       };
       const result = yield* runReviewAttempt({
         reviewAgent,
         sandbox,
         ticketId: "T-1",
-        schemaResumeCap: 2,
+        wireMissCap: 2,
         buildAttempts: 1,
         reviewAttempts: 0,
       });
@@ -102,26 +109,50 @@ describe("runReviewAttempt", () => {
     })
   );
 
-  it.effect("returns schemaCapExhausted when resumes exceed cap", () =>
+  it.effect("wire-miss resumes until tool submit within cap", () =>
     Effect.gen(function* () {
+      const resumes = yield* Ref.make(0);
       const reviewAgent: AgentProviderService = {
-        run: () => Effect.succeed(session({ not: "review" })),
-        resume: (prev) =>
-          Effect.succeed(session({ still: "bad" }, prev.sessionId)),
+        run: () => Effect.succeed(session()),
+        resume: (prev, options) =>
+          Effect.gen(function* () {
+            yield* Ref.update(resumes, (n) => n + 1);
+            yield* submitReviewPassViaTools(options);
+            return session(prev.sessionId);
+          }),
       };
       const result = yield* runReviewAttempt({
         reviewAgent,
         sandbox,
         ticketId: "T-1",
-        schemaResumeCap: 1,
+        wireMissCap: 2,
+        buildAttempts: 1,
+        reviewAttempts: 0,
+      });
+      assert.strictEqual(result.outcome, ReviewAttemptOutcome.Pass);
+      assert.strictEqual(yield* Ref.get(resumes), 1);
+    })
+  );
+
+  it.effect("returns wireMissCapExhausted when resumes exceed cap", () =>
+    Effect.gen(function* () {
+      const reviewAgent: AgentProviderService = {
+        run: () => Effect.succeed(session()),
+        resume: (prev) => Effect.succeed(session(prev.sessionId)),
+      };
+      const result = yield* runReviewAttempt({
+        reviewAgent,
+        sandbox,
+        ticketId: "T-1",
+        wireMissCap: 1,
         buildAttempts: 1,
         reviewAttempts: 0,
       });
       assert.strictEqual(
         result.outcome,
-        ReviewAttemptOutcome.SchemaCapExhausted
+        ReviewAttemptOutcome.WireMissCapExhausted
       );
-      if (result.outcome === ReviewAttemptOutcome.SchemaCapExhausted) {
+      if (result.outcome === ReviewAttemptOutcome.WireMissCapExhausted) {
         assert.isTrue(result.detail.includes("1"));
         assert.strictEqual(result.sessionId, "review-session-1");
         assert.strictEqual(result.reviewAttempts, 1);
@@ -129,19 +160,52 @@ describe("runReviewAttempt", () => {
     })
   );
 
-  it.effect("emits Review StepEnter/ok and SchemaMiss on resume path", () =>
+  it.effect("last successful tool call wins", () =>
+    Effect.gen(function* () {
+      const reviewAgent: AgentProviderService = {
+        run: (options) =>
+          Effect.gen(function* () {
+            yield* submitReviewPassViaTools(options, {
+              verdict: ReviewVerdict.Pass,
+              prTitle: "first title",
+              prBody: "first body",
+            });
+            yield* submitReviewFailViaTools(options, "later fail wins");
+            return session();
+          }),
+        resume: () => Effect.die("unused"),
+      };
+      const result = yield* runReviewAttempt({
+        reviewAgent,
+        sandbox,
+        ticketId: "T-1",
+        wireMissCap: 2,
+        buildAttempts: 1,
+        reviewAttempts: 0,
+      });
+      assert.strictEqual(result.outcome, ReviewAttemptOutcome.Fail);
+      if (result.outcome === ReviewAttemptOutcome.Fail) {
+        assert.strictEqual(result.failReport, "later fail wins");
+      }
+    })
+  );
+
+  it.effect("emits Review StepEnter/ok and WireMiss on resume path", () =>
     Effect.gen(function* () {
       const lines: string[] = [];
       const reviewAgent: AgentProviderService = {
-        run: () => Effect.succeed(session({ not: "review" })),
-        resume: (prev) =>
-          Effect.succeed(session(reviewPassFixture(), prev.sessionId)),
+        run: () => Effect.succeed(session()),
+        resume: (prev, options) =>
+          Effect.gen(function* () {
+            yield* submitReviewPassViaTools(options);
+            return session(prev.sessionId);
+          }),
       };
       yield* runReviewAttempt({
         reviewAgent,
         sandbox,
         ticketId: "T-1",
-        schemaResumeCap: 2,
+        wireMissCap: 2,
         buildAttempts: 1,
         reviewAttempts: 0,
       }).pipe(Effect.provide(Logger.layer([captureAdwProgressLogger(lines)])));
@@ -149,7 +213,7 @@ describe("runReviewAttempt", () => {
       assert.isTrue(
         lines.some((l) => l.includes("step_enter") && l.includes("review"))
       );
-      assert.isTrue(lines.some((l) => l.includes("schema_miss")));
+      assert.isTrue(lines.some((l) => l.includes("wire_miss")));
       assert.isTrue(
         lines.some(
           (l) =>

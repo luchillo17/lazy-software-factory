@@ -36,15 +36,13 @@ describe("formatAdwProgressEvent", () => {
     );
   });
 
-  it("formats schema_miss with redacted truncated raw", () => {
+  it("formats wire_miss with redacted truncated raw", () => {
     const line = formatAdwProgressEvent({
-      kind: AdwProgressKind.SchemaMiss,
+      kind: AdwProgressKind.WireMiss,
       reviewAttempts: 1,
       raw: `verdict missing gho_${"x".repeat(40)} ${"y".repeat(600)}`,
     });
-    assert.isTrue(
-      line.startsWith("adw kind=schema_miss reviewAttempts=1 raw=")
-    );
+    assert.isTrue(line.startsWith("adw kind=wire_miss reviewAttempts=1 raw="));
     assert.isFalse(line.includes("gho_"));
     assert.isTrue(line.includes("[REDACTED]"));
     assert.isTrue(line.includes("…"));

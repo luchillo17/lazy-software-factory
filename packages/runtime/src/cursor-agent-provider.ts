@@ -1,4 +1,9 @@
-import type { AgentOptions, RunResult, SDKAgent } from "@cursor/sdk";
+import type {
+  AgentOptions,
+  RunResult,
+  SDKAgent,
+  SDKCustomTool,
+} from "@cursor/sdk";
 import { Config, ConfigProvider, Effect, Layer, Option } from "effect";
 import type {
   AgentProviderService,
@@ -125,7 +130,12 @@ const createOptions = (
 ): AgentOptions => ({
   ...(apiKey ? { apiKey } : {}),
   ...(modelId ? { model: { id: modelId } } : {}),
-  local: { cwd: options.sandbox.cwd },
+  local: {
+    cwd: options.sandbox.cwd,
+    ...(options.customTools
+      ? { customTools: options.customTools as Record<string, SDKCustomTool> }
+      : {}),
+  },
 });
 
 /** Build AgentProviderService against an injectable CursorSdk. */
