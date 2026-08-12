@@ -15,8 +15,53 @@ Hosted multi-org **Organization** Platform is a later packaging of the same core
 - **Agent** (configured): reusable LLM role primitive; owns **Skill pack** + **Role skill binding** (plus transitive skill refs). Distinct from **Agent session**.
 - **Skill pack**: default root `.agents/skills`. Organization custom packs = later hosted overlay on the same Agent primitive.
 - **ADW**: composable graph of Agents, deterministic gates, and/or nested ADWs. Never wrap a single Agent as a one-node ADW.
-- **Minimal ADW**: Build ↔ Test → Review → Ship (ADR-0007 shape).
-- **Feature ADW**: Planner Agent → nested Minimal ADW (one shared **warm sandbox**; Ship stays on Minimal after Review pass). Planner emits a **`/to-plan`** artifact into ADW/warm-sandbox state; Minimal consumes it.
+- **Minimal ADW**: Build ↔ Test agent → Review → Ship agent (ADR-0007 shape). Test + Ship are **Code agents** (schema in; not LLMs). Canonical colored flow: [ADR-0007](adr/0007-minimal-adw-build-test-review.md).
+- **Feature ADW**: Planner Agent → nested Minimal ADW (one shared **warm sandbox**; Ship agent stays on Minimal after Review pass). Planner emits a **`/to-plan`** artifact into ADW/warm-sandbox state; Minimal consumes it.
+
+![ADW diagram legend](diagrams/adw-legend.svg)
+
+![Feature ADW flow](diagrams/feature-adw.svg)
+
+**Human layout:** [`docs/diagrams/feature-adw.svg`](diagrams/feature-adw.svg) (+ shared [`adw-legend.svg`](diagrams/adw-legend.svg)). **Agents:** read the Mermaid graph below — not the SVG. Keep Mermaid and SVG semantically aligned. Colors: [`docs/README.md` — ADW diagram colors](README.md#adw-diagram-colors). Exhaustion bubble (Minimal → Planner, plan-only) omitted — see Feature Review-fail routing table below.
+
+```mermaid
+%%{init: {"flowchart": {"defaultRenderer": "elk"}} }%%
+flowchart TB
+  Prompt(["Initial prompt / ticket"])
+  Planner["Planner Agent"]
+  subgraph Minimal["Minimal ADW (ADR-0007)"]
+    direction TB
+    Build["Build agent"]
+    Test["Test agent"]
+    Review["Agent Review"]
+    Ship["Ship agent\nopen PR"]
+    Build --> Test
+    Test -->|green| Review
+    Review -->|"pass + prTitle/prBody"| Ship
+    Test -.->|fail| Build
+    Review -.->|fail| Build
+  end
+  Eng(["Engineer Review"])
+
+  Prompt --> Planner --> Build
+  Ship -->|"shipped = PR opened"| Eng
+  Eng -.->|fail| Planner
+
+  classDef human fill:#3b1a1a,stroke:#fca5a5,color:#fee2e2
+  classDef llm fill:#3b2f1a,stroke:#fbbf24,color:#fef3c7
+  classDef gate fill:#1a2e1a,stroke:#86efac,color:#dcfce7
+  classDef agent fill:#2e1a3b,stroke:#c4b5fd,color:#ede9fe
+  classDef ship fill:#1a2e2e,stroke:#5eead4,color:#ccfbf1
+
+  class Prompt,Eng human
+  class Planner,Build llm
+  class Test gate
+  class Review agent
+  class Ship ship
+```
+
+Ship **opens the PR** inside Minimal; it does **not** merge or deploy. Dashed fail inside Minimal → Build (local resume). Engineer Review fail → Planner (HITL) is in Mermaid + SVG.
+
 - **Role skill binding**: soft guidance loaded into the session (Cursor SDK has no skills API — binding invented in ADW prompts; pack discovery is workspace filesystem). Hard pass/fail stays ADW gates (ADR-0001). Optional **suggested skills** inside a plan are hints only — the configured Agent’s Role skill binding remains authoritative (matters more when cloud tenants customize Agents).
 
 ### Feature intake vs Planning/PM ADW
@@ -34,7 +79,7 @@ Locked in [Decide Feature Review-fail routing vs Minimal local loop](https://git
 | Nested under Feature — **Agent Review-fail**  | **Local** — resume Build inside Minimal (not each-fail bubble to Planner)                                                                         |
 | Nested under Feature — Minimal **exhaustion** | Bubble to Planner for **plan-only** re-entry (rewrite slice / instructions); Build still owns code; then retry nested Minimal or Feature `failed` |
 
-Not IndyDevDan’s HITL Engineer Review→Planner loop — that is human review, not Agent Review.
+Agent Review-fail stays local (not Planner). Engineer Review fail → Planner is the separate HITL loop — in Feature Mermaid + SVG.
 
 **Finalize when:** Track A static gold routing + Track B stub/CI dynamic compare local/bubble/tiered; root-Minimal invariance must hold (#32 decision rule). Until then this provisional stands.
 
@@ -44,11 +89,11 @@ Locked in charting (#28 Build/Review; [#34](https://github.com/luchillo17/lazy-s
 
 | Agent   | Binding                                                                                                                                                                                                                                                                                                                                                                             |
 | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Build   | Root `/implement`; load transitive closure (`tdd`, `code-review`, `codebase-design`, conditional `setup-matt-pocock-skills`)                                                                                                                                                                                                                                                        |
-| Review  | Bugbot-shaped only in v0 — no duplicate `/code-review`; no always-on `/improve-codebase-architecture`                                                                                                                                                                                                                                                                               |
+| Build   | Root `/implement` in session prompt; transitive skills follow from that skill on disk (pack must include them). Do **not** force `/setup-matt-pocock-skills` in Build bootstrap.                                                                                                                                                                                                    |
+| Review  | Root `/adw-review` (Factory skill: ticket-branch diff, findings + `ReviewOutput`, no self-fix). Not Cursor `/review-bugbot` (no Bugbot subagent / PR checkout).                                                                                                                                                                                                                     |
 | Planner | Roots `/codebase-design` + `/domain-modeling`; output skill **`/to-plan`** (custom: handoff discipline + Cursor `.plan.md`-like overview/todos/body). Write plan into warm-sandbox/ADW state (not OS temp). Optional suggested-skills section allowed; Agent Role binding still authoritative. **SKILL.md for `to-plan` ships with Feature ADW impl** — vision names the bind only. |
 
-**Planner excludes (not in Role binding):** `/implement`, `/tdd`, `/code-review`, Review/Bugbot roots, `/grilling`, `/wayfinder`, `/prototype`, `/to-tickets`, `/to-spec`, and using raw `/handoff` as the sole output path.
+**Planner excludes (not in Role binding):** `/implement`, `/tdd`, `/code-review`, `/adw-review`, `/grilling`, `/wayfinder`, `/prototype`, `/to-tickets`, `/to-spec`, and using raw `/handoff` as the sole output path.
 
 ## 3. v0 cut
 
@@ -62,8 +107,8 @@ Acceptance criteria for **Minimal ADW** v0 green (self-building this repo on **H
   - [ ] Build↔Test and Review attempt caps behave per ADR-0009
 - [ ] **One documented manual self-build** on this repo: a real `ready-for-agent` Issue runs through Host Minimal ADW and reaches **`shipped`** (live PR)
 - [ ] **Intake:** thin operator/CLI (or app) starts Minimal ADW from one GitHub Issue labelled `ready-for-agent` (Issue id + body → `ticketId` / prompt) — not full triage automation
-- [ ] **Build Role skill binding:** session bootstrap injects root `/implement` and its transitive skill closure (includes `tdd`, `code-review`, …); pack root `.agents/skills` present on agent cwd
-- [ ] **Review Role skill binding:** Bugbot-shaped review bind only (no second `/code-review` pass; no always-on `/improve-codebase-architecture`)
+- [ ] **Build Role skill binding:** session bootstrap injects root `/implement` (flat skills + work; no role speech, no closure laundry list, no forced `/setup-matt-pocock-skills`); pack root `.agents/skills` present on agent cwd
+- [ ] **Review Role skill binding:** session bootstrap injects root `/adw-review`; pack root `.agents/skills` present on agent cwd
 - [ ] **Extractability note:** short consumer doc on depending on `runtime` / `adw` (+ git-host seam) outside monorepo apps — DX rough OK; npm publish **not** required
 
 ### Explicitly not required for v0

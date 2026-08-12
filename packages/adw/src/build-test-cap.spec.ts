@@ -7,12 +7,18 @@ import {
   type Sandbox,
 } from "@lazy-software-factory/runtime";
 import { Effect, Layer, Ref } from "effect";
-import { AdwBuildAttemptCap, AdwReviewAttemptCap } from "./attempt-caps.ts";
-import { AdwStatus, ReviewVerdict } from "./enums.ts";
+import {
+  AdwBuildAttemptCap,
+  AdwReviewAttemptCap,
+  AdwSchemaResumeCap,
+} from "./attempt-caps.ts";
+import { AdwStatus } from "./enums.ts";
 import { GitHost } from "./git-host.ts";
+import { reviewPassFixture } from "./review-pass-fixture.ts";
 import { runMinimalAdw } from "./run-minimal-adw.ts";
 import { AdwTestCommands } from "./test-commands.ts";
 import { WorkspaceProvision } from "./workspace-provision.ts";
+import { monorepoRoot } from "./monorepo-root.ts";
 
 const passThroughShip = Layer.mergeAll(
   Layer.succeed(
@@ -25,7 +31,7 @@ const passThroughShip = Layer.mergeAll(
       run: () =>
         Effect.succeed({
           sessionId: "review-session-1",
-          output: { verdict: ReviewVerdict.Pass },
+          output: reviewPassFixture(),
         }),
       resume: () => Effect.die("unused"),
     })
@@ -33,6 +39,7 @@ const passThroughShip = Layer.mergeAll(
   Layer.succeed(
     GitHost,
     GitHost.of({
+      commitWorkingTree: () => Effect.void,
       clone: () => Effect.void,
       push: () => Effect.void,
       openPullRequest: () =>
@@ -58,7 +65,7 @@ const passThroughShipWithoutGates = Layer.mergeAll(
       run: () =>
         Effect.succeed({
           sessionId: "review-session-1",
-          output: { verdict: ReviewVerdict.Pass },
+          output: reviewPassFixture(),
         }),
       resume: () => Effect.die("unused"),
     })
@@ -66,6 +73,7 @@ const passThroughShipWithoutGates = Layer.mergeAll(
   Layer.succeed(
     GitHost,
     GitHost.of({
+      commitWorkingTree: () => Effect.void,
       clone: () => Effect.void,
       push: () => Effect.void,
       openPullRequest: () =>
@@ -88,7 +96,7 @@ describe("runMinimalAdw Build↔Test resume + cap", () => {
           create: () =>
             Effect.succeed({
               id: "sandbox-1",
-              cwd: "/tmp/sandbox-1",
+              cwd: monorepoRoot,
               exec: () =>
                 Effect.gen(function* () {
                   const pass = yield* Ref.get(testPass);
@@ -133,7 +141,8 @@ describe("runMinimalAdw Build↔Test resume + cap", () => {
             buildLayer,
             passThroughShip,
             AdwBuildAttemptCap.Default,
-            AdwReviewAttemptCap.Default
+            AdwReviewAttemptCap.Default,
+            AdwSchemaResumeCap.Default
           )
         )
       );
@@ -161,7 +170,7 @@ describe("runMinimalAdw Build↔Test resume + cap", () => {
             create: () =>
               Effect.succeed({
                 id: "sandbox-1",
-                cwd: "/tmp/sandbox-1",
+                cwd: monorepoRoot,
                 exec: () =>
                   Effect.succeed({
                     exitCode: 1,
@@ -204,7 +213,8 @@ describe("runMinimalAdw Build↔Test resume + cap", () => {
               buildLayer,
               passThroughShip,
               capLayer,
-              AdwReviewAttemptCap.Default
+              AdwReviewAttemptCap.Default,
+              AdwSchemaResumeCap.Default
             )
           )
         );
@@ -232,7 +242,7 @@ describe("runMinimalAdw Build↔Test resume + cap", () => {
             create: () =>
               Effect.succeed({
                 id: "sandbox-1",
-                cwd: "/tmp/sandbox-1",
+                cwd: monorepoRoot,
                 exec: (command) =>
                   Effect.gen(function* () {
                     const n = yield* Ref.get(round);
@@ -293,7 +303,8 @@ describe("runMinimalAdw Build↔Test resume + cap", () => {
                 })
               ),
               AdwBuildAttemptCap.Default,
-              AdwReviewAttemptCap.Default
+              AdwReviewAttemptCap.Default,
+              AdwSchemaResumeCap.Default
             )
           )
         );

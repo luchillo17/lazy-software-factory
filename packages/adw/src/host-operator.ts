@@ -6,15 +6,23 @@ import {
 } from "@lazy-software-factory/runtime";
 import { Config, ConfigProvider, Effect, Layer, Option } from "effect";
 import { parseArgs } from "node:util";
-import { AdwBuildAttemptCap, AdwReviewAttemptCap } from "./attempt-caps.ts";
+import {
+  AdwBuildAttemptCap,
+  AdwReviewAttemptCap,
+  AdwSchemaResumeCap,
+} from "./attempt-caps.ts";
+import { AdwProgressStderrLive } from "./adw-progress.ts";
 import { AdwStatus } from "./enums.ts";
 import {
   runMinimalAdw,
   type MinimalAdwInput,
   type MinimalAdwResult,
 } from "./run-minimal-adw.ts";
+import { redactSecrets } from "./redact-secrets.ts";
 import { AdwTestCommands } from "./test-commands.ts";
 import { WorkspaceProvision } from "./workspace-provision.ts";
+
+export { redactSecrets } from "./redact-secrets.ts";
 
 export interface HostOperatorArgs {
   readonly ticketId: string;
@@ -84,26 +92,6 @@ export const parseHostOperatorArgs = (
   };
 };
 
-const SECRET_PATTERNS: ReadonlyArray<RegExp> = [
-  /gh[pousr]_[A-Za-z0-9_]{20,}/gi,
-  /github_pat_[A-Za-z0-9_]{20,}/gi,
-  /CURSOR_API_KEY\s*[=:]\s*\S+/gi,
-  /GH_TOKEN\s*[=:]\s*\S+/gi,
-  /api[_-]?key\s*[=:]\s*\S+/gi,
-  /Bearer\s+[A-Za-z0-9._\-]+/gi,
-  /x-access-token:[^\s@/]+/gi,
-  /https?:\/\/[^\s/@:]+:[^\s/@]+@/gi,
-];
-
-/** Redact common credential shapes from operator-facing text. */
-export const redactSecrets = (text: string): string => {
-  let out = text;
-  for (const pattern of SECRET_PATTERNS) {
-    out = out.replace(pattern, "[REDACTED]");
-  }
-  return out;
-};
-
 /** Operator-facing one-line status (redacts secrets in detail). */
 export const formatOperatorResult = (result: MinimalAdwResult): string => {
   const parts = [`status=${result.status}`, `ticket=${result.ticketId}`];
@@ -160,7 +148,9 @@ export const hostMinimalAdwLayer = Layer.mergeAll(
     })
   ),
   AdwBuildAttemptCap.Default,
-  AdwReviewAttemptCap.Default
+  AdwReviewAttemptCap.Default,
+  AdwSchemaResumeCap.Default,
+  AdwProgressStderrLive
 );
 
 /**

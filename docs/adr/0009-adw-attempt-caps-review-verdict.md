@@ -5,13 +5,13 @@ Orchestration owns loop termination and Review routing for the minimal ADW (ADR-
 - **Build attempt** (default cap **5**): each Build agent create/resume in the **Build↔Test** loop only. Test-agent fail → resume Build spends one Build attempt. Exhaust Build attempts → ADW `failed`.
 - **Review attempt** (default cap **3**): each Review agent **create** when entering Review from Build/Test (always a **new** agent session for that entry). A valid Review-fail → resume Build with the fail report does **not** spend a Build attempt; only that Review **create** spent a Review attempt. Exhaust Review attempts → ADW `failed` even if Build attempts remain.
 
-Review must emit a **structured Review verdict** (`ReviewOutput`: `pass` | `fail` plus, on fail, a fail report of Bugbot-shaped findings). Orchestration owns the wire contract: the Review **create** prompt includes the expected shape; orchestration parses with schema decode to route.
+Review must emit a **structured Review verdict** (`ReviewOutput`: **pass** with non-empty **`prTitle` + `prBody`**, or **fail** with a fail report of Bugbot-shaped findings). Orchestration owns the wire contract: the Review **create** prompt includes the expected shape; orchestration parses with schema decode to route.
 
-- **Schema miss** (malformed/unknown output): **resume the same Review session** with decode error + expected shape + redacted/truncated prior output. Schema resumes do **not** spend an extra Review attempt; they use an **inner schema-resume cap** (v0 default **3**) per Review session. Exhaust that cap → ADW `failed`. Do **not** send schema miss to Build.
+- **Schema miss** (malformed/unknown output, including pass missing PR draft fields): **resume the same Review session** with decode error + expected shape + redacted/truncated prior output. Schema resumes do **not** spend an extra Review attempt; they use an **inner schema-resume cap** (v0 default **3**) per Review session. Exhaust that cap → ADW `failed`. Do **not** send schema miss to Build.
 - **Valid fail**: fail report is feedback when resuming the **original Build** session.
-- **Valid pass**: advance to Ship.
+- **Valid pass**: build **`ShipInput`** from pass fields + sandbox/ticket context; advance to the **Ship agent**.
 
-Review does **not** auto-fix. This keeps hard Test gates coded (ADR-0005) while still giving Review a machine-checkable advance decision and keeping agent-to-agent output schema-compatible.
+Review does **not** auto-fix. This keeps hard Test gates and Ship forge ops as **Code agents** (ADR-0005) while still giving Review a machine-checkable advance decision and keeping agent-to-agent output schema-compatible.
 
 ## Status
 

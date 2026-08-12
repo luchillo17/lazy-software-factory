@@ -17,16 +17,20 @@ An AI developer workflow — a composable coded graph of agent steps, determinis
 _Avoid_: Pipeline, agent loop (a single agent chat iteration is not the whole ADW); treating ADWs as non-nestable flat scripts only; one-node ADW wrappers around a single Agent
 
 **Minimal ADW**:
-The leaf ADW: **Build agent** ↔ **Test agent** (gate) → **Review agent** → **Ship** (ADR-0007 shape). Own Build/Review attempt caps and warm-sandbox loop.
+The leaf ADW: **Build agent** ↔ **Test agent** (Code agent) → **Review agent** → **Ship agent** (Code agent) (ADR-0007 shape). Own Build/Review attempt caps and warm-sandbox loop.
 _Avoid_: Calling this Feature; dropping Review from Minimal
 
+**Code agent**:
+A deterministic, composable ADW graph node — **not** an LLM. Schema-guaranteed inputs (and coded outputs/statuses). Examples: **Test agent**, **Ship agent**. Distinct from configured LLM **Agent** (Build, Review, Planner).
+_Avoid_: Calling Code agents “LLM agents”; giving Ship forge credentials to an LLM session; free-text-only inputs to Code agents
+
 **Feature ADW**:
-A composite ADW: **Planner Agent** then nested **Minimal ADW**. Shares one warm sandbox with the child. Ship stays on Minimal after Review pass. Planner binds `/codebase-design` + `/domain-modeling` and emits a **`/to-plan`** artifact (plan.md-like + handoff discipline) for Minimal. Provisional nested routing: Agent Review-fail stays local inside Minimal; Minimal exhaustion bubbles to Planner for **plan-only** re-entry (not code edits) — see `docs/VISION.md`.
+A composite ADW: **Planner Agent** then nested **Minimal ADW**. Shares one warm sandbox with the child. Ship agent stays on Minimal after Review pass. Planner binds `/codebase-design` + `/domain-modeling` and emits a **`/to-plan`** artifact (plan.md-like + handoff discipline) for Minimal. Provisional nested routing: Agent Review-fail stays local inside Minimal; Minimal exhaustion bubbles to Planner for **plan-only** re-entry (not code edits) — see `docs/VISION.md`.
 _Avoid_: Planner-as-ADW when it is only one Agent; renaming Minimal to Feature; treating Agent Review-fail like HITL Engineer Review→Planner; Planner editing code on replan; treating suggested skills in a plan as overriding the Agent’s Role skill binding
 
 **Agent** (configured):
-A reusable LLM role primitive with its **Skill pack** and **Role skill binding** (e.g. Build, Review, Planner). ADWs compose Agents and nested ADWs; Agents do not embed ADW routing. Distinct from **Agent session** (one running thread).
-_Avoid_: Letting each ADW re-own skill policy; equating Agent with Agent session or with the whole ADW; wrapping one Agent in a throwaway ADW just for symmetry
+A reusable **LLM** role primitive with its **Skill pack** and **Role skill binding** (e.g. Build, Review, Planner). ADWs compose LLM Agents, **Code agents**, and nested ADWs; Agents do not embed ADW routing. Distinct from **Agent session** (one running thread) and from **Code agent**.
+_Avoid_: Letting each ADW re-own skill policy; equating Agent with Agent session or with the whole ADW; wrapping one Agent in a throwaway ADW just for symmetry; calling Test/Ship LLM Agents
 
 **Gate**:
 A deterministic pass/fail check owned by orchestration (lint, typecheck, test, policy). Green advances the ADW; red routes back.
@@ -45,24 +49,24 @@ The LLM agent session that implements the ticket in the warm sandbox. Its `Agent
 _Avoid_: Treating Review’s session as the place to keep coding
 
 **Test agent**:
-A coded ADW graph node that runs **check-only** gates (lint, format check, typecheck, unit tests, policy) via the Runtime — not an LLM. Independent checks run **in parallel**; any red resumes Build with a **combined** fail report (all failing gates’ output), same session and sandbox. Pass all → Review.
+A **Code agent** that runs **check-only** gates (lint, format check, typecheck, unit tests, policy) via the Runtime — not an LLM. Independent checks run **in parallel**; any red resumes Build with a **combined** fail report (all failing gates’ output), same session and sandbox. Pass all → Review.
 _Avoid_: Test-writing agent, QA agent (unless we add a separate LLM role later); fail-fast on first red; mutating format/write steps inside the Test agent
 
 **Review agent**:
-The LLM agent that critiques the change after the Test agent passes — same _shape_ as a Bugbot-style review (findings with location/severity), but orchestration does **not** auto-fix. Entering Review from Build/Test always starts a **new** `AgentSession` in the same warm sandbox; create prompt includes the **ReviewOutput** wire contract. On **schema miss** (output fails decode), orchestration **resumes that Review session** with schema guidance until a valid **Review verdict** or the inner schema-resume cap. A valid **fail** verdict’s fail report is the feedback when resuming Build.
-_Avoid_: Same-session Review-as-Build; new Build session on every Review fail; treating schema-repair resume like content-fail→Build; Review that only chats with no machine-readable verdict; Review that applies fixes itself in the Minimal ADW
+The LLM agent that critiques the change after the Test agent passes — same _shape_ as a Bugbot-style review (findings with location/severity), but orchestration does **not** auto-fix. Entering Review from Build/Test always starts a **new** `AgentSession` in the same warm sandbox; create prompt includes the **ReviewOutput** wire contract. On **schema miss** (output fails decode), orchestration **resumes that Review session** with schema guidance until a valid **Review verdict** or the inner schema-resume cap. A valid **fail** verdict’s fail report is the feedback when resuming Build. A valid **pass** includes **`prTitle` + `prBody`** (PR draft for the Ship agent). Review judges the **full pending delta**: committed ticket-branch tip **plus** unstaged/untracked worktree edits — not `merge-base...HEAD` alone. Review does **not** commit, push, or open PRs (Ship agent owns forge).
+_Avoid_: Same-session Review-as-Build; new Build session on every Review fail; treating schema-repair resume like content-fail→Build; Review that only chats with no machine-readable verdict; Review that applies fixes itself in the Minimal ADW; HEAD-only Review that ignores pending disk edits; Review that invents forge ops
 
-**Ship**:
-After Review **pass**, orchestration runs the Ship step via the **Git host**: **push** the ticket branch from the warm sandbox, then open a pull/merge request. Build only commits locally; Test/Review do not push. v0 result: **`shipped`** only when a PR/MR exists (URL recorded); **`ready_for_pr`** when Review passed but push or PR open skipped/failed. Do not burn Build/Review attempts retrying Ship.
-_Avoid_: Equating shipped with merged; requiring Docker for Ship; failing the whole ADW solely because Ship could not open a PR; hard-coding GitHub as the only forge forever; making the Build agent responsible for push/PR
+**Ship agent**:
+A **Code agent** (same class as Test agent). After Review **pass**, orchestration decodes **`ShipInput`** (from pass `prTitle`/`prBody` + cwd/branch/ticket/env) and runs Ship: **commit working tree if dirty**, then **push**, then **open a pull/merge request** via the **Git host** using that schema input. Build **may** commit mid-run; Ship still flushes leftovers. Test/Review do not push. v0 result: **`shipped`** only when a PR/MR exists (URL recorded); **`ready_for_pr`** when Review passed but commit, push, or PR open skipped/failed. Do not burn Build/Review attempts retrying Ship. Merge-conflict rebase is out of v0 Ship. Post-`shipped` **Engineer Review** is HITL on the PR (outside Minimal ADW automation). **Ship ≠ merge/deploy/release** — name is “ship the change into a PR,” not production ship.
+_Avoid_: Equating shipped with merged or deployed; drawing Merge→Ship as if Ship deploys; requiring Docker for Ship; failing the whole ADW solely because Ship could not open a PR; hard-coding GitHub as the only forge forever; making the Build or Review LLM responsible for push/PR; treating Ship as an LLM agent; Ship that only pushes HEAD and leaves dirty worktree behind; free-text Ship inputs without schema decode
 
 **Git host**:
-Pluggable forge for clone/push/PR-MR (GitHub via `gh` + `GH_TOKEN` first; later GitLab/Bitbucket/etc. behind the same seam). Lives in its own package seam (`packages/git-host` or equivalent): ADW decides _when_ to provision/Ship; the adapter decides _how_. Not part of Runtime (sandbox/agents) and not raw `gh` calls inside the ADW loop.
+Pluggable forge for clone/commit-pending/push/PR-MR (GitHub via `gh` + `GH_TOKEN` first; later GitLab/Bitbucket/etc. behind the same seam). Lives in its own package seam (`packages/git-host` or equivalent): ADW decides _when_ to provision/Ship; the adapter decides _how_. Not part of Runtime (sandbox/agents) and not raw `gh` calls inside the ADW loop.
 _Avoid_: Assuming GitHub-only; calling every forge “GitHub”; baking `gh` into Runtime or ADW control-flow code; putting clone/push inside `AgentProvider`
 
 **Review verdict**:
-Structured Review output (`ReviewOutput`) orchestration parses: **pass** or **fail**, plus on fail a fail report (findings + reasons) used as Build-resume feedback. Create-time prompt states this wire contract. Malformed/unknown output is a **schema miss**: resume Review with decode guidance (not Build); only a **valid fail** resumes Build. Dismiss-with-reason is a human/later concern — once valid, v0 Review either fails (block + feedback) or passes (advance to Ship).
-_Avoid_: Free-text-only Review; routing schema miss to Build; trusting Review to merge/ship; treating false-positive dismissal as v0 ADW logic
+Structured Review output (`ReviewOutput`) orchestration parses: **pass** (with non-empty **`prTitle` + `prBody`**) or **fail** (with fail report for Build). Create-time prompt states the wire shape; **PR draft** quality SoT is `/adw-review` (`pr-draft.md`) — title + lead paragraph alone name the concrete change. Malformed/unknown output (including pass missing PR draft fields) is a **schema miss**: resume Review with decode guidance (not Build); only a **valid fail** resumes Build. Valid pass advances to Ship with those fields as `ShipInput`. Dismiss-with-reason is a human/later concern.
+_Avoid_: Free-text-only Review; routing schema miss to Build; trusting Review to merge/ship; treating false-positive dismissal as v0 ADW logic; pass without PR draft fields; ticket-id-only or `ADW: …` titles; vague “updates” bodies; duplicating PR draft rules outside `/adw-review`
 
 **Agent session**:
 A resumable LLM thread owned by an `AgentProvider`, identified by an **opaque** `sessionId` the orchestration stores as a pointer. The Cursor adapter maps that id to whatever `@cursor/sdk` needs for create/resume; ADW types do not expose Cursor-specific field names. Build keeps one durable session per ticket; Review keeps one session per Review attempt (new on entry from Build/Test; resumable for schema repair).

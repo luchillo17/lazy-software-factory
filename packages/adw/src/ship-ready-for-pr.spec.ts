@@ -6,12 +6,18 @@ import {
   type Sandbox,
 } from "@lazy-software-factory/runtime";
 import { Effect, Layer, Ref } from "effect";
-import { AdwBuildAttemptCap, AdwReviewAttemptCap } from "./attempt-caps.ts";
-import { AdwStatus, ReviewVerdict } from "./enums.ts";
+import {
+  AdwBuildAttemptCap,
+  AdwReviewAttemptCap,
+  AdwSchemaResumeCap,
+} from "./attempt-caps.ts";
+import { AdwStatus } from "./enums.ts";
 import { GitHost, GitHostError } from "./git-host.ts";
+import { reviewPassFixture } from "./review-pass-fixture.ts";
 import { runMinimalAdw } from "./run-minimal-adw.ts";
 import { AdwTestCommands } from "./test-commands.ts";
 import { WorkspaceProvision } from "./workspace-provision.ts";
+import { monorepoRoot } from "./monorepo-root.ts";
 
 const greenAgents = Layer.mergeAll(
   Layer.succeed(
@@ -24,7 +30,7 @@ const greenAgents = Layer.mergeAll(
       create: () =>
         Effect.succeed({
           id: "sandbox-1",
-          cwd: "/tmp/sandbox-1",
+          cwd: monorepoRoot,
           exec: () => Effect.succeed({ exitCode: 0, stdout: "", stderr: "" }),
           destroy: () => Effect.void,
         } satisfies Sandbox),
@@ -43,7 +49,7 @@ const greenAgents = Layer.mergeAll(
       run: () =>
         Effect.succeed({
           sessionId: "review-session-1",
-          output: { verdict: ReviewVerdict.Pass },
+          output: reviewPassFixture(),
         }),
       resume: () => Effect.die("unused"),
     })
@@ -53,7 +59,8 @@ const greenAgents = Layer.mergeAll(
     AdwTestCommands.of({ commands: [{ command: "t" }] })
   ),
   AdwBuildAttemptCap.Default,
-  AdwReviewAttemptCap.Default
+  AdwReviewAttemptCap.Default,
+  AdwSchemaResumeCap.Default
 );
 
 describe("runMinimalAdw Ship → ready_for_pr", () => {
@@ -82,7 +89,7 @@ describe("runMinimalAdw Ship → ready_for_pr", () => {
               yield* Ref.update(reviewRuns, (n) => n + 1);
               return {
                 sessionId: "review-session-1",
-                output: { verdict: ReviewVerdict.Pass },
+                output: reviewPassFixture(),
               };
             }),
           resume: () => Effect.die("unused"),
@@ -92,6 +99,7 @@ describe("runMinimalAdw Ship → ready_for_pr", () => {
       const gitLayer = Layer.succeed(
         GitHost,
         GitHost.of({
+          commitWorkingTree: () => Effect.void,
           clone: () => Effect.void,
           push: () =>
             Effect.fail(new GitHostError({ message: "gh not available" })),
@@ -124,6 +132,7 @@ describe("runMinimalAdw Ship → ready_for_pr", () => {
       const gitLayer = Layer.succeed(
         GitHost,
         GitHost.of({
+          commitWorkingTree: () => Effect.void,
           clone: () => Effect.void,
           push: () => Ref.set(pushed, true),
           openPullRequest: () =>
@@ -144,23 +153,107 @@ describe("runMinimalAdw Ship → ready_for_pr", () => {
 
   it.effect("successful push+PR still yields shipped", () =>
     Effect.gen(function* () {
+      const opened = yield* Ref.make<{ title: string; body?: string } | null>(
+        null
+      );
+      const draft = reviewPassFixture({
+        prTitle: "feat: ship draft from review",
+        prBody: "## Summary\n- from Review pass",
+      });
+
+      const reviewLayer = Layer.succeed(
+        ReviewAgentProvider,
+        ReviewAgentProvider.of({
+          run: () =>
+            Effect.succeed({
+              sessionId: "review-session-1",
+              output: draft,
+            }),
+          resume: () => Effect.die("unused"),
+        })
+      );
+
       const gitLayer = Layer.succeed(
         GitHost,
         GitHost.of({
+          commitWorkingTree: () => Effect.void,
           clone: () => Effect.void,
           push: () => Effect.void,
-          openPullRequest: () =>
-            Effect.succeed({ url: "https://example.test/pr/9" }),
+          openPullRequest: (opts) =>
+            Effect.gen(function* () {
+              yield* Ref.set(opened, { title: opts.title, body: opts.body });
+              return { url: "https://example.test/pr/9" };
+            }),
         })
       );
 
       const result = yield* runMinimalAdw({
         ticketId: "T-OK",
         prompt: "work",
-      }).pipe(Effect.provide(Layer.mergeAll(greenAgents, gitLayer)));
+      }).pipe(
+        Effect.provide(Layer.mergeAll(greenAgents, reviewLayer, gitLayer))
+      );
 
       assert.strictEqual(result.status, AdwStatus.Shipped);
       assert.strictEqual(result.prUrl, "https://example.test/pr/9");
+      assert.deepStrictEqual(yield* Ref.get(opened), {
+        title: draft.prTitle,
+        body: draft.prBody,
+      });
+    })
+  );
+
+  it.effect("Ship runs commit then push then openPR", () =>
+    Effect.gen(function* () {
+      const steps = yield* Ref.make<string[]>([]);
+
+      const gitLayer = Layer.succeed(
+        GitHost,
+        GitHost.of({
+          commitWorkingTree: () => Ref.update(steps, (s) => [...s, "commit"]),
+          clone: () => Effect.void,
+          push: () => Ref.update(steps, (s) => [...s, "push"]),
+          openPullRequest: () =>
+            Effect.gen(function* () {
+              yield* Ref.update(steps, (s) => [...s, "pr"]);
+              return { url: "https://example.test/pr/10" };
+            }),
+        })
+      );
+
+      const result = yield* runMinimalAdw({
+        ticketId: "T-ORDER",
+        prompt: "work",
+      }).pipe(Effect.provide(Layer.mergeAll(greenAgents, gitLayer)));
+
+      assert.strictEqual(result.status, AdwStatus.Shipped);
+      assert.deepStrictEqual(yield* Ref.get(steps), ["commit", "push", "pr"]);
+    })
+  );
+
+  it.effect("commit failure yields ready_for_pr without push", () =>
+    Effect.gen(function* () {
+      const pushed = yield* Ref.make(false);
+
+      const gitLayer = Layer.succeed(
+        GitHost,
+        GitHost.of({
+          commitWorkingTree: () =>
+            Effect.fail(new GitHostError({ message: "commit failed" })),
+          clone: () => Effect.void,
+          push: () => Ref.set(pushed, true),
+          openPullRequest: () => Effect.die("unused"),
+        })
+      );
+
+      const result = yield* runMinimalAdw({
+        ticketId: "T-COMMIT",
+        prompt: "work",
+      }).pipe(Effect.provide(Layer.mergeAll(greenAgents, gitLayer)));
+
+      assert.strictEqual(result.status, AdwStatus.ReadyForPr);
+      assert.strictEqual(result.detail, "Ship commit failed");
+      assert.isFalse(yield* Ref.get(pushed));
     })
   );
 });

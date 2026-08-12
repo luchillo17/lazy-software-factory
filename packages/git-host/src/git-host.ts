@@ -15,6 +15,16 @@ export interface GitHostService {
     readonly env?: Readonly<Record<string, string>>;
   }) => Effect.Effect<void, GitHostError>;
 
+  /**
+   * Ship helper: if the worktree at `cwd` is dirty, stage and commit with
+   * `message`. Clean tree is a no-op success.
+   */
+  readonly commitWorkingTree: (options: {
+    readonly cwd: string;
+    readonly message: string;
+    readonly env?: Readonly<Record<string, string>>;
+  }) => Effect.Effect<void, GitHostError>;
+
   readonly push: (options: {
     readonly cwd: string;
     readonly branch: string;

@@ -104,6 +104,102 @@ describe("Cursor AgentProvider", () => {
   );
 
   it.effect(
+    "run resolves model from ADW_MODEL when options.model omitted",
+    () =>
+      Effect.gen(function* () {
+        const creates = yield* Ref.make<AgentOptions[]>([]);
+
+        const sdkLayer = Layer.succeed(
+          CursorSdk,
+          CursorSdk.of({
+            create: (options) =>
+              Effect.gen(function* () {
+                yield* Ref.update(creates, (c) => [...c, options]);
+                return fakeAgent({
+                  agentId: "local-env-model",
+                  onSend: async () => ({
+                    id: "run-env",
+                    status: "finished",
+                    result: "ok",
+                  }),
+                });
+              }),
+            resume: () => Effect.die("resume unused"),
+          })
+        );
+
+        yield* Effect.gen(function* () {
+          const agent = yield* BuildAgentProvider;
+          return yield* agent.run({
+            prompt: "build it",
+            sandbox: fakeSandbox,
+            env: {
+              CURSOR_API_KEY: "test-key",
+              ADW_MODEL: "composer-2.5",
+            },
+          });
+        }).pipe(Effect.provide(CursorBuildAgent.pipe(Layer.provide(sdkLayer))));
+
+        const createOpts = yield* Ref.get(creates);
+        assert.deepStrictEqual(createOpts[0]?.model, { id: "composer-2.5" });
+      })
+  );
+
+  it.effect("run defaults to grok-4.5 when no model env is set", () =>
+    Effect.gen(function* () {
+      const creates = yield* Ref.make<AgentOptions[]>([]);
+      const prevAdw = process.env["ADW_MODEL"];
+      const prevCursor = process.env["CURSOR_MODEL"];
+      delete process.env["ADW_MODEL"];
+      delete process.env["CURSOR_MODEL"];
+
+      try {
+        const sdkLayer = Layer.succeed(
+          CursorSdk,
+          CursorSdk.of({
+            create: (options) =>
+              Effect.gen(function* () {
+                yield* Ref.update(creates, (c) => [...c, options]);
+                return fakeAgent({
+                  agentId: "local-default-model",
+                  onSend: async () => ({
+                    id: "run-default",
+                    status: "finished",
+                    result: "ok",
+                  }),
+                });
+              }),
+            resume: () => Effect.die("resume unused"),
+          })
+        );
+
+        yield* Effect.gen(function* () {
+          const agent = yield* BuildAgentProvider;
+          return yield* agent.run({
+            prompt: "build it",
+            sandbox: fakeSandbox,
+            env: { CURSOR_API_KEY: "test-key" },
+          });
+        }).pipe(Effect.provide(CursorBuildAgent.pipe(Layer.provide(sdkLayer))));
+
+        const createOpts = yield* Ref.get(creates);
+        assert.deepStrictEqual(createOpts[0]?.model, { id: "grok-4.5" });
+      } finally {
+        if (prevAdw === undefined) {
+          delete process.env["ADW_MODEL"];
+        } else {
+          process.env["ADW_MODEL"] = prevAdw;
+        }
+        if (prevCursor === undefined) {
+          delete process.env["CURSOR_MODEL"];
+        } else {
+          process.env["CURSOR_MODEL"] = prevCursor;
+        }
+      }
+    })
+  );
+
+  it.effect(
     "resume uses opaque sessionId with sandbox cwd and per-run api key",
     () =>
       Effect.gen(function* () {

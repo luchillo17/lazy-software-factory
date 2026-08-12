@@ -6,12 +6,17 @@ import {
   type Sandbox,
 } from "@lazy-software-factory/runtime";
 import { Effect, Layer, Ref } from "effect";
-import { AdwBuildAttemptCap, AdwReviewAttemptCap } from "./attempt-caps.ts";
+import {
+  AdwBuildAttemptCap,
+  AdwReviewAttemptCap,
+  AdwSchemaResumeCap,
+} from "./attempt-caps.ts";
 import { AdwStatus } from "./enums.ts";
 import { GitHost } from "./git-host.ts";
 import { runMinimalAdw } from "./run-minimal-adw.ts";
 import { AdwTestCommands } from "./test-commands.ts";
 import { ProvisionError, WorkspaceProvision } from "./workspace-provision.ts";
+import { monorepoRoot } from "./monorepo-root.ts";
 
 describe("runMinimalAdw provision failure", () => {
   it.effect("provision failure yields failed with zero agent runs", () =>
@@ -27,7 +32,7 @@ describe("runMinimalAdw provision failure", () => {
             create: () =>
               Effect.succeed({
                 id: "sandbox-1",
-                cwd: "/tmp/sandbox-1",
+                cwd: monorepoRoot,
                 exec: () =>
                   Effect.gen(function* () {
                     yield* Ref.update(testRuns, (n) => n + 1);
@@ -71,6 +76,7 @@ describe("runMinimalAdw provision failure", () => {
         Layer.succeed(
           GitHost,
           GitHost.of({
+            commitWorkingTree: () => Effect.void,
             clone: () => Effect.die("unused"),
             push: () => Effect.die("unused"),
             openPullRequest: () => Effect.die("unused"),
@@ -81,7 +87,8 @@ describe("runMinimalAdw provision failure", () => {
           AdwTestCommands.of({ commands: [{ command: "t" }] })
         ),
         AdwBuildAttemptCap.Default,
-        AdwReviewAttemptCap.Default
+        AdwReviewAttemptCap.Default,
+        AdwSchemaResumeCap.Default
       );
 
       const result = yield* runMinimalAdw({

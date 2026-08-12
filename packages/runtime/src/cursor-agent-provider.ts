@@ -15,6 +15,7 @@ import {
   CursorSdkLive,
   type CursorSdkService,
 } from "./cursor-sdk.ts";
+import { DEFAULT_LOCAL_ADW_MODEL } from "./default-local-model.ts";
 import { AgentError } from "./errors.ts";
 
 const resolveApiKey = (
@@ -88,12 +89,42 @@ const toSession = (
   } satisfies AgentSession);
 };
 
+/** Local SDK requires explicit model; prefer call opts, then per-run / process env. */
+const resolveModelId = (
+  options: AgentRunOptions
+): Effect.Effect<string | undefined> => {
+  if (options.model !== undefined && options.model !== "") {
+    return Effect.succeed(options.model);
+  }
+  const fromRunEnv =
+    options.env?.["ADW_MODEL"] ?? options.env?.["CURSOR_MODEL"];
+  if (fromRunEnv !== undefined && fromRunEnv !== "") {
+    return Effect.succeed(fromRunEnv);
+  }
+  return Config.option(Config.string("ADW_MODEL"))
+    .parse(ConfigProvider.fromEnvRecord(process.env))
+    .pipe(
+      Effect.flatMap((opt) =>
+        Option.match(opt, {
+          onNone: () =>
+            Config.option(Config.string("CURSOR_MODEL")).parse(
+              ConfigProvider.fromEnvRecord(process.env)
+            ),
+          onSome: (value) => Effect.succeed(Option.some(value)),
+        })
+      ),
+      Effect.map((opt) => Option.getOrElse(opt, () => DEFAULT_LOCAL_ADW_MODEL)),
+      Effect.orElseSucceed(() => DEFAULT_LOCAL_ADW_MODEL)
+    );
+};
+
 const createOptions = (
   options: AgentRunOptions,
-  apiKey: string | undefined
+  apiKey: string | undefined,
+  modelId: string | undefined
 ): AgentOptions => ({
   ...(apiKey ? { apiKey } : {}),
-  ...(options.model ? { model: { id: options.model } } : {}),
+  ...(modelId ? { model: { id: modelId } } : {}),
   local: { cwd: options.sandbox.cwd },
 });
 
@@ -105,7 +136,10 @@ export const makeCursorAgentService = (
     Effect.scoped(
       Effect.gen(function* () {
         const apiKey = yield* resolveApiKey(options.env);
-        const agent = yield* sdk.create(createOptions(options, apiKey));
+        const modelId = yield* resolveModelId(options);
+        const agent = yield* sdk.create(
+          createOptions(options, apiKey, modelId)
+        );
         yield* Effect.addFinalizer(() => disposeAgent(agent));
         const result = yield* waitRun(agent, options.prompt);
         return yield* toSession(agent.agentId, result);
@@ -116,11 +150,11 @@ export const makeCursorAgentService = (
     Effect.scoped(
       Effect.gen(function* () {
         const apiKey = yield* resolveApiKey(options.env);
-        const agent = yield* sdk.resume(session.sessionId, {
-          ...(apiKey ? { apiKey } : {}),
-          ...(options.model ? { model: { id: options.model } } : {}),
-          local: { cwd: options.sandbox.cwd },
-        });
+        const modelId = yield* resolveModelId(options);
+        const agent = yield* sdk.resume(
+          session.sessionId,
+          createOptions(options, apiKey, modelId)
+        );
         yield* Effect.addFinalizer(() => disposeAgent(agent));
         const result = yield* waitRun(agent, options.prompt);
         return yield* toSession(agent.agentId, result);
