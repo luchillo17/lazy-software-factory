@@ -1,3 +1,2 @@
 npx lint-staged
-corepack pnpm run typecheck
-corepack pnpm run test
+corepack pnpm nx run-many -t typecheck,test
