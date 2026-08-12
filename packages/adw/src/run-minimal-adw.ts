@@ -1,10 +1,8 @@
 import {
   BuildAgentProvider,
   ReviewAgentProvider,
-  RuntimeErrorTag,
   SandboxProvider,
   type AgentSession,
-  type ExecResult,
 } from "@lazy-software-factory/runtime";
 import { Effect, Schema } from "effect";
 import {
@@ -18,16 +16,14 @@ import {
   AdwReviewAttemptCap,
   AdwSchemaResumeCap,
 } from "./attempt-caps.ts";
-import { AdwStatus, AdwStatusSchema, ReviewVerdict } from "./enums.ts";
+import { AdwStatus, AdwStatusSchema } from "./enums.ts";
 import { GitHost } from "./git-host.ts";
-import {
-  reviewOutputContractPrompt,
-  schemaRepairPrompt,
-} from "./review-output-contract.ts";
-import { ReviewOutput, type ReviewPassOutput } from "./review-output.ts";
+import { ReviewAttemptOutcome, runReviewAttempt } from "./review-attempt.ts";
+import type { ReviewPassOutput } from "./review-output.ts";
 import { runShipAgent } from "./ship-agent.ts";
 import { ShipInput } from "./ship-input.ts";
-import { AdwTestCommands, type AdwTestCommand } from "./test-commands.ts";
+import { AdwTestCommands } from "./test-commands.ts";
+import { TestAgentOutcome, runTestAgent } from "./test-agent.ts";
 import {
   AgentRole,
   bootstrapRoleSkillPrompt,
@@ -61,50 +57,6 @@ export interface MinimalAdwResult {
   readonly reviewSessionId?: string;
   readonly prUrl?: string;
 }
-
-/** Local Test-exec branch tags (not Runtime `_tag` / not ADW status). */
-const TestExecBranch = {
-  Ok: "ok",
-  ExecError: "execError",
-} as const;
-
-const formatStep = (step: AdwTestCommand) =>
-  [step.command, ...(step.args ?? [])].join(" ");
-
-const reviewOutputRaw = (output: unknown): string => {
-  if (output === undefined) {
-    return "undefined";
-  }
-  if (typeof output === "string") {
-    return output;
-  }
-  try {
-    return JSON.stringify(output);
-  } catch {
-    return String(output);
-  }
-};
-
-const gateDetail = (step: AdwTestCommand, gate: ExecResult) => {
-  const parts = [
-    `### ${formatStep(step)} (exit ${gate.exitCode})`,
-    gate.stdout ? `stdout:\n${gate.stdout}` : undefined,
-    gate.stderr ? `stderr:\n${gate.stderr}` : undefined,
-  ].filter((p): p is string => p !== undefined);
-  return parts.join("\n");
-};
-
-const combinedGateDetail = (
-  failures: ReadonlyArray<{
-    readonly step: AdwTestCommand;
-    readonly gate: ExecResult;
-  }>
-) => {
-  const body = failures
-    .map(({ step, gate }) => gateDetail(step, gate))
-    .join("\n\n");
-  return `Test agent failed (${failures.length} check gate(s) red)\n\n${body}`;
-};
 
 export type MinimalAdwServices =
   | SandboxProvider
@@ -196,94 +148,33 @@ export const runMinimalAdw = (
 
       adw: while (true) {
         buildTest: while (true) {
-          let lastGateDetail = "Test agent failed";
-          let allGreen = true;
-
-          yield* emitAdwProgress({
-            kind: AdwProgressKind.StepEnter,
-            step: AdwStep.Test,
+          const testResult = yield* runTestAgent({
+            sandbox,
+            commands: testCommands.commands,
             buildAttempts,
             reviewAttempts,
           });
 
-          const stepResults = yield* Effect.all(
-            testCommands.commands.map((step) =>
-              sandbox.exec(step.command, step.args ?? []).pipe(
-                Effect.map((gate) => ({
-                  _tag: TestExecBranch.Ok,
-                  step,
-                  gate,
-                })),
-                Effect.catchTag(RuntimeErrorTag.SandboxExecError, (err) =>
-                  Effect.succeed({
-                    _tag: TestExecBranch.ExecError,
-                    step,
-                    message: err.message,
-                  })
-                )
-              )
-            ),
-            { concurrency: "unbounded" }
-          );
-
-          const execErrors = stepResults.filter(
-            (r) => r._tag === TestExecBranch.ExecError
-          );
-          if (execErrors.length > 0) {
-            yield* emitAdwProgress({
-              kind: AdwProgressKind.StepResult,
-              step: AdwStep.Test,
-              result: AdwStepResult.Fail,
-              buildAttempts,
-              reviewAttempts,
-            });
+          if (testResult.outcome === TestAgentOutcome.ExecFail) {
             return {
               ticketId: input.ticketId,
               status: AdwStatus.Failed,
-              detail: `Test agent exec error: ${execErrors
-                .map((e) => `${formatStep(e.step)}: ${e.message}`)
-                .join("; ")}`,
+              detail: testResult.detail,
               sandboxId: sandbox.id,
               buildSessionId: buildSession.sessionId,
               reviewSessionId,
             } satisfies MinimalAdwResult;
           }
 
-          const failures = stepResults.flatMap((r) =>
-            r._tag === TestExecBranch.Ok && r.gate.exitCode !== 0
-              ? [{ step: r.step, gate: r.gate }]
-              : []
-          );
-
-          if (failures.length > 0) {
-            allGreen = false;
-            lastGateDetail = combinedGateDetail(failures);
-          }
-
-          if (allGreen) {
-            yield* emitAdwProgress({
-              kind: AdwProgressKind.StepResult,
-              step: AdwStep.Test,
-              result: AdwStepResult.Ok,
-              buildAttempts,
-              reviewAttempts,
-            });
+          if (testResult.outcome === TestAgentOutcome.Green) {
             break buildTest;
           }
-
-          yield* emitAdwProgress({
-            kind: AdwProgressKind.StepResult,
-            step: AdwStep.Test,
-            result: AdwStepResult.Fail,
-            buildAttempts,
-            reviewAttempts,
-          });
 
           if (buildAttempts >= buildAttemptCap) {
             return {
               ticketId: input.ticketId,
               status: AdwStatus.Failed,
-              detail: lastGateDetail,
+              detail: testResult.detail,
               sandboxId: sandbox.id,
               buildSessionId: buildSession.sessionId,
               reviewSessionId,
@@ -298,123 +189,46 @@ export const runMinimalAdw = (
             reviewAttempts,
           });
           buildSession = yield* buildAgent.resume(buildSession, {
-            prompt: lastGateDetail,
+            prompt: testResult.detail,
             sandbox,
             env: input.env,
           });
           buildAttempts += 1;
         }
 
-        yield* emitAdwProgress({
-          kind: AdwProgressKind.StepEnter,
-          step: AdwStep.Review,
+        const reviewResult = yield* runReviewAttempt({
+          reviewAgent,
+          sandbox,
+          ticketId: input.ticketId,
+          env: input.env,
+          schemaResumeCap,
           buildAttempts,
           reviewAttempts,
         });
-        let reviewSession = yield* reviewAgent.run({
-          prompt: bootstrapRoleSkillPrompt(
-            AgentRole.Review,
-            [
-              reviewOutputContractPrompt(),
-              "",
-              `Review changes for ticket ${input.ticketId}`,
-            ].join("\n")
-          ),
-          sandbox,
-          env: input.env,
-        });
-        reviewSessionId = reviewSession.sessionId;
-        reviewAttempts += 1;
-        let schemaResumes = 0;
+        reviewSessionId = reviewResult.sessionId;
+        reviewAttempts = reviewResult.reviewAttempts;
 
-        let decoded: ReviewOutput | undefined;
-        while (decoded === undefined) {
-          const decodeAttempt = yield* Schema.decodeUnknownEffect(ReviewOutput)(
-            reviewSession.output
-          ).pipe(
-            Effect.map((value) => ({ ok: true as const, value })),
-            Effect.catchTag("SchemaError", (err) =>
-              Effect.succeed({
-                ok: false as const,
-                message: err.message,
-              })
-            )
-          );
-
-          if (decodeAttempt.ok) {
-            decoded = decodeAttempt.value;
-            break;
-          }
-
-          const raw = reviewOutputRaw(reviewSession.output);
-
-          yield* emitAdwProgress({
-            kind: AdwProgressKind.SchemaMiss,
-            reviewAttempts,
-            raw,
-          });
-
-          if (schemaResumes >= schemaResumeCap) {
-            yield* emitAdwProgress({
-              kind: AdwProgressKind.StepResult,
-              step: AdwStep.Review,
-              result: AdwStepResult.Fail,
-              buildAttempts,
-              reviewAttempts,
-            });
-            return {
-              ticketId: input.ticketId,
-              status: AdwStatus.Failed,
-              detail: `Review schema resume cap exhausted (${schemaResumeCap})`,
-              sandboxId: sandbox.id,
-              buildSessionId: buildSession.sessionId,
-              reviewSessionId,
-            } satisfies MinimalAdwResult;
-          }
-
-          yield* emitAdwProgress({
-            kind: AdwProgressKind.StepResult,
-            step: AdwStep.Review,
-            result: AdwStepResult.SchemaResume,
-            buildAttempts,
-            reviewAttempts,
-          });
-          reviewSession = yield* reviewAgent.resume(reviewSession, {
-            prompt: schemaRepairPrompt(decodeAttempt.message, raw),
-            sandbox,
-            env: input.env,
-          });
-          schemaResumes += 1;
+        if (reviewResult.outcome === ReviewAttemptOutcome.SchemaCapExhausted) {
+          return {
+            ticketId: input.ticketId,
+            status: AdwStatus.Failed,
+            detail: reviewResult.detail,
+            sandboxId: sandbox.id,
+            buildSessionId: buildSession.sessionId,
+            reviewSessionId,
+          } satisfies MinimalAdwResult;
         }
 
-        if (decoded.verdict === ReviewVerdict.Pass) {
-          passReview = decoded;
-          yield* emitAdwProgress({
-            kind: AdwProgressKind.StepResult,
-            step: AdwStep.Review,
-            result: AdwStepResult.Ok,
-            buildAttempts,
-            reviewAttempts,
-          });
+        if (reviewResult.outcome === ReviewAttemptOutcome.Pass) {
+          passReview = reviewResult.pass;
           break adw;
         }
-
-        yield* emitAdwProgress({
-          kind: AdwProgressKind.StepResult,
-          step: AdwStep.Review,
-          result: AdwStepResult.Fail,
-          buildAttempts,
-          reviewAttempts,
-        });
-
-        const failReport =
-          decoded.failReport ?? "Review failed without a fail report";
 
         if (reviewAttempts >= reviewAttemptCap) {
           return {
             ticketId: input.ticketId,
             status: AdwStatus.Failed,
-            detail: failReport,
+            detail: reviewResult.failReport,
             sandboxId: sandbox.id,
             buildSessionId: buildSession.sessionId,
             reviewSessionId,
@@ -430,7 +244,7 @@ export const runMinimalAdw = (
           reviewAttempts,
         });
         buildSession = yield* buildAgent.resume(buildSession, {
-          prompt: failReport,
+          prompt: reviewResult.failReport,
           sandbox,
           env: input.env,
         });
