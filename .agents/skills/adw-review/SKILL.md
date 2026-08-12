@@ -1,12 +1,12 @@
 ---
 name: adw-review
-description: "Minimal ADW Review — pending-delta findings, structured verdict, PR draft on pass."
+description: "Minimal ADW Review — pending-delta findings, tool verdict (pass/fail), PR draft on pass."
 disable-model-invocation: true
 ---
 
 # ADW Review
 
-Produce a **verdict** on the ticket branch for the ADW: **findings**, then one JSON object. Review emits that JSON only — the **Ship agent** commits, pushes, and opens the PR.
+Produce a **verdict** on the ticket branch for the ADW: **findings**, then submit via **Review verdict tools**. Orchestration routes on the tool stash only (ADR-0014) — **not** final-message JSON. The **Ship agent** commits, pushes, and opens the PR; do **not** forge yourself.
 
 ## 1. Pending delta
 
@@ -32,33 +32,24 @@ Each **finding**: `path:line` (or range), severity (`high` / `medium` / `low`), 
 
 **Done when:** every such issue in the pending delta is listed, or the list is empty.
 
-## 3. Verdict
+## 3. Verdict (tool wire)
 
-Emit exactly one JSON object as the **last** block.
+Call **exactly one** submit tool to end the review. Assistant prose may stream for humans; it is **not** the routing wire. Do **not** emit `ReviewOutput` JSON as the final message.
+
+If the tool returns an error, fix the arguments and call again in this **same** session (in-run repair — not a Build handoff).
 
 ### Pass
 
-Empty **findings** (or empty pending). Write the **PR draft** first — see [pr-draft.md](pr-draft.md) — then emit:
+Empty **findings** (or empty pending). Write the **PR draft** first — see [pr-draft.md](pr-draft.md) — then call:
 
-```json
-{
-  "verdict": "pass",
-  "prTitle": "<from PR draft>",
-  "prBody": "<from PR draft>"
-}
-```
+`submit_review_pass` with `{ prTitle, prBody }` — both non-empty strings from the PR draft.
 
-**Done when:** **PR draft** meets [pr-draft.md](pr-draft.md), and JSON includes non-empty `prTitle` + `prBody`.
+**Done when:** **PR draft** meets [pr-draft.md](pr-draft.md), and `submit_review_pass` is accepted.
 
 ### Fail
 
-Non-empty **findings**. Emit **verdict** + `failReport` only:
+Non-empty **findings**. Call:
 
-```json
-{
-  "verdict": "fail",
-  "failReport": "<all findings: location, severity, problem, fix hint>"
-}
-```
+`submit_review_fail` with `{ failReport }` — non-empty string listing every **finding** from step 2 (`path:line`, severity, problem, fix hint).
 
-**Done when:** `failReport` lists every **finding** from step 2.
+**Done when:** `submit_review_fail` is accepted with a complete `failReport`.
