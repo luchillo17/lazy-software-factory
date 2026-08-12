@@ -6,6 +6,8 @@ export * from "./enums.ts";
 export * from "./git-host.ts";
 export * from "./github-ticket-intake.ts";
 export * from "./host-operator.ts";
+export * from "./host-skill-pack-root.ts";
+export * from "./package-json-test-commands.ts";
 export * from "./redact-secrets.ts";
 export * from "./review-attempt.ts";
 export * from "./review-output-contract.ts";

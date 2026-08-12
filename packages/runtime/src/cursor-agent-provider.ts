@@ -134,7 +134,11 @@ const createOptions = (
     cwd: options.sandbox.cwd,
     // Project ambient: rules + MCP config; workspace scan from cwd also
     // picks up AGENTS.md + .agents/skills (IDE-like Host mirror).
+    // Extra dirs (e.g. Host-bundled `/adw-review`) merge into that scan.
     settingSources: ["project"],
+    ...(options.workspaceDirs && options.workspaceDirs.length > 0
+      ? { dirs: [...options.workspaceDirs] }
+      : {}),
     ...(options.customTools
       ? { customTools: options.customTools as Record<string, SDKCustomTool> }
       : {}),

@@ -130,7 +130,9 @@ describe("runMinimalAdw Review routing + cap", () => {
               provisionAndShip,
               Layer.succeed(
                 AdwTestCommands,
-                AdwTestCommands.of({ commands: [{ command: "t" }] })
+                AdwTestCommands.of({
+                  resolve: () => [{ command: "t" }],
+                })
               ),
               Layer.succeed(
                 AdwBuildAttemptCap,
@@ -207,7 +209,9 @@ describe("runMinimalAdw Review routing + cap", () => {
             provisionAndShip,
             Layer.succeed(
               AdwTestCommands,
-              AdwTestCommands.of({ commands: [{ command: "t" }] })
+              AdwTestCommands.of({
+                resolve: () => [{ command: "t" }],
+              })
             ),
             AdwBuildAttemptCap.Default,
             AdwReviewAttemptCap.Default,
@@ -295,7 +299,9 @@ describe("runMinimalAdw Review routing + cap", () => {
               provisionAndShip,
               Layer.succeed(
                 AdwTestCommands,
-                AdwTestCommands.of({ commands: [{ command: "t" }] })
+                AdwTestCommands.of({
+                  resolve: () => [{ command: "t" }],
+                })
               ),
               AdwBuildAttemptCap.Default,
               Layer.succeed(
@@ -373,7 +379,9 @@ describe("runMinimalAdw Review routing + cap", () => {
             provisionAndShip,
             Layer.succeed(
               AdwTestCommands,
-              AdwTestCommands.of({ commands: [{ command: "t" }] })
+              AdwTestCommands.of({
+                resolve: () => [{ command: "t" }],
+              })
             ),
             AdwBuildAttemptCap.Default,
             AdwReviewAttemptCap.Default,
@@ -463,7 +471,9 @@ describe("runMinimalAdw Review routing + cap", () => {
               provisionAndShip,
               Layer.succeed(
                 AdwTestCommands,
-                AdwTestCommands.of({ commands: [{ command: "t" }] })
+                AdwTestCommands.of({
+                  resolve: () => [{ command: "t" }],
+                })
               ),
               AdwBuildAttemptCap.Default,
               AdwReviewAttemptCap.Default,
@@ -548,7 +558,9 @@ describe("runMinimalAdw Review routing + cap", () => {
               provisionAndShip,
               Layer.succeed(
                 AdwTestCommands,
-                AdwTestCommands.of({ commands: [{ command: "t" }] })
+                AdwTestCommands.of({
+                  resolve: () => [{ command: "t" }],
+                })
               ),
               AdwBuildAttemptCap.Default,
               Layer.succeed(
@@ -632,7 +644,9 @@ describe("runMinimalAdw Review routing + cap", () => {
             provisionAndShip,
             Layer.succeed(
               AdwTestCommands,
-              AdwTestCommands.of({ commands: [{ command: "t" }] })
+              AdwTestCommands.of({
+                resolve: () => [{ command: "t" }],
+              })
             ),
             Layer.succeed(
               AdwBuildAttemptCap,

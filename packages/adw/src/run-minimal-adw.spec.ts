@@ -136,7 +136,7 @@ describe("runMinimalAdw happy path", () => {
       const testCommandsLayer = Layer.succeed(
         AdwTestCommands,
         AdwTestCommands.of({
-          commands: [{ command: "node", args: ["-e", "process.exit(0)"] }],
+          resolve: () => [{ command: "node", args: ["-e", "process.exit(0)"] }],
         })
       );
 

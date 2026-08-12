@@ -124,7 +124,7 @@ describe("runMinimalAdw progress events", () => {
             Layer.succeed(
               AdwTestCommands,
               AdwTestCommands.of({
-                commands: [
+                resolve: () => [
                   { command: "node", args: ["-e", "process.exit(0)"] },
                 ],
               })
@@ -223,7 +223,9 @@ describe("runMinimalAdw progress events", () => {
             ),
             Layer.succeed(
               AdwTestCommands,
-              AdwTestCommands.of({ commands: [{ command: "t" }] })
+              AdwTestCommands.of({
+                resolve: () => [{ command: "t" }],
+              })
             ),
             Layer.succeed(
               AdwBuildAttemptCap,

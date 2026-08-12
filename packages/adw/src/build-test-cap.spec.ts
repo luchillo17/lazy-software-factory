@@ -49,7 +49,7 @@ const passThroughShip = Layer.mergeAll(
   Layer.succeed(
     AdwTestCommands,
     AdwTestCommands.of({
-      commands: [{ command: "test", args: [] }],
+      resolve: () => [{ command: "test", args: [] }],
     })
   )
 );
@@ -295,7 +295,7 @@ describe("runMinimalAdw Build↔Test resume + cap", () => {
               Layer.succeed(
                 AdwTestCommands,
                 AdwTestCommands.of({
-                  commands: [
+                  resolve: () => [
                     { command: "lint" },
                     { command: "format-check" },
                     { command: "unit" },
