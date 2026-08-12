@@ -46,6 +46,9 @@ const TestExecBranch = {
   ExecError: "execError",
 } as const;
 
+const TestExecBranchSchema = Schema.Enum(TestExecBranch);
+type TestExecBranch = typeof TestExecBranchSchema.Type;
+
 const formatStep = (step: AdwTestCommand) =>
   [step.command, ...(step.args ?? [])].join(" ");
 

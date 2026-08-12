@@ -4,7 +4,8 @@ import type {
   AgentSession,
   Sandbox,
 } from "@lazy-software-factory/runtime";
-import { Effect, Ref } from "effect";
+import { Effect, Logger, Ref } from "effect";
+import { captureAdwProgressLogger } from "./adw-progress.ts";
 import { ReviewVerdict } from "./enums.ts";
 import { ReviewAttemptOutcome, runReviewAttempt } from "./review-attempt.ts";
 import { reviewPassFixture } from "./review-pass-fixture.ts";
@@ -125,6 +126,38 @@ describe("runReviewAttempt", () => {
         assert.strictEqual(result.sessionId, "review-session-1");
         assert.strictEqual(result.reviewAttempts, 1);
       }
+    })
+  );
+
+  it.effect("emits Review StepEnter/ok and SchemaMiss on resume path", () =>
+    Effect.gen(function* () {
+      const lines: string[] = [];
+      const reviewAgent: AgentProviderService = {
+        run: () => Effect.succeed(session({ not: "review" })),
+        resume: (prev) =>
+          Effect.succeed(session(reviewPassFixture(), prev.sessionId)),
+      };
+      yield* runReviewAttempt({
+        reviewAgent,
+        sandbox,
+        ticketId: "T-1",
+        schemaResumeCap: 2,
+        buildAttempts: 1,
+        reviewAttempts: 0,
+      }).pipe(Effect.provide(Logger.layer([captureAdwProgressLogger(lines)])));
+
+      assert.isTrue(
+        lines.some((l) => l.includes("step_enter") && l.includes("review"))
+      );
+      assert.isTrue(lines.some((l) => l.includes("schema_miss")));
+      assert.isTrue(
+        lines.some(
+          (l) =>
+            l.includes("step_result") &&
+            l.includes("review") &&
+            l.includes("result=ok")
+        )
+      );
     })
   );
 });

@@ -1,6 +1,7 @@
 import { assert, describe, it } from "@effect/vitest";
 import { SandboxExecError, type Sandbox } from "@lazy-software-factory/runtime";
-import { Effect } from "effect";
+import { Effect, Logger } from "effect";
+import { captureAdwProgressLogger } from "./adw-progress.ts";
 import { TestAgentOutcome, runTestAgent } from "./test-agent.ts";
 
 const sandboxWith = (exec: Sandbox["exec"]): Sandbox => ({
@@ -69,6 +70,32 @@ describe("runTestAgent", () => {
         assert.isTrue(result.detail.includes("missing"));
         assert.isTrue(result.detail.includes("spawn ENOENT"));
       }
+    })
+  );
+
+  it.effect("emits Test StepEnter and StepResult ok on green", () =>
+    Effect.gen(function* () {
+      const lines: string[] = [];
+      yield* runTestAgent({
+        sandbox: sandboxWith(() =>
+          Effect.succeed({ exitCode: 0, stdout: "", stderr: "" })
+        ),
+        commands: [{ command: "t" }],
+        buildAttempts: 1,
+        reviewAttempts: 0,
+      }).pipe(Effect.provide(Logger.layer([captureAdwProgressLogger(lines)])));
+
+      assert.isTrue(
+        lines.some((l) => l.includes("step_enter") && l.includes("test"))
+      );
+      assert.isTrue(
+        lines.some(
+          (l) =>
+            l.includes("step_result") &&
+            l.includes("test") &&
+            l.includes("result=ok")
+        )
+      );
     })
   );
 });

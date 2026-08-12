@@ -16,6 +16,7 @@ import {
   AdwReviewAttemptCap,
   AdwSchemaResumeCap,
 } from "./attempt-caps.ts";
+import { BuildTestOutcome, runBuildTestLoop } from "./build-test-loop.ts";
 import { AdwStatus, AdwStatusSchema } from "./enums.ts";
 import { GitHost } from "./git-host.ts";
 import { ReviewAttemptOutcome, runReviewAttempt } from "./review-attempt.ts";
@@ -23,7 +24,6 @@ import type { ReviewPassOutput } from "./review-output.ts";
 import { runShipAgent } from "./ship-agent.ts";
 import { ShipInput } from "./ship-input.ts";
 import { AdwTestCommands } from "./test-commands.ts";
-import { TestAgentOutcome, runTestAgent } from "./test-agent.ts";
 import {
   AgentRole,
   bootstrapRoleSkillPrompt,
@@ -147,53 +147,39 @@ export const runMinimalAdw = (
       });
 
       adw: while (true) {
-        buildTest: while (true) {
-          const testResult = yield* runTestAgent({
-            sandbox,
-            commands: testCommands.commands,
-            buildAttempts,
-            reviewAttempts,
-          });
+        const buildTest = yield* runBuildTestLoop({
+          buildAgent,
+          sandbox,
+          env: input.env,
+          commands: testCommands.commands,
+          buildSession,
+          buildAttempts,
+          reviewAttempts,
+          buildAttemptCap,
+        });
+        buildSession = buildTest.buildSession;
+        buildAttempts = buildTest.buildAttempts;
 
-          if (testResult.outcome === TestAgentOutcome.ExecFail) {
-            return {
-              ticketId: input.ticketId,
-              status: AdwStatus.Failed,
-              detail: testResult.detail,
-              sandboxId: sandbox.id,
-              buildSessionId: buildSession.sessionId,
-              reviewSessionId,
-            } satisfies MinimalAdwResult;
-          }
+        if (buildTest.outcome === BuildTestOutcome.ExecFail) {
+          return {
+            ticketId: input.ticketId,
+            status: AdwStatus.Failed,
+            detail: buildTest.detail,
+            sandboxId: sandbox.id,
+            buildSessionId: buildSession.sessionId,
+            reviewSessionId,
+          } satisfies MinimalAdwResult;
+        }
 
-          if (testResult.outcome === TestAgentOutcome.Green) {
-            break buildTest;
-          }
-
-          if (buildAttempts >= buildAttemptCap) {
-            return {
-              ticketId: input.ticketId,
-              status: AdwStatus.Failed,
-              detail: testResult.detail,
-              sandboxId: sandbox.id,
-              buildSessionId: buildSession.sessionId,
-              reviewSessionId,
-            } satisfies MinimalAdwResult;
-          }
-
-          yield* emitAdwProgress({
-            kind: AdwProgressKind.StepResult,
-            step: AdwStep.Build,
-            result: AdwStepResult.BuildResume,
-            buildAttempts,
-            reviewAttempts,
-          });
-          buildSession = yield* buildAgent.resume(buildSession, {
-            prompt: testResult.detail,
-            sandbox,
-            env: input.env,
-          });
-          buildAttempts += 1;
+        if (buildTest.outcome === BuildTestOutcome.CapExhausted) {
+          return {
+            ticketId: input.ticketId,
+            status: AdwStatus.Failed,
+            detail: buildTest.detail,
+            sandboxId: sandbox.id,
+            buildSessionId: buildSession.sessionId,
+            reviewSessionId,
+          } satisfies MinimalAdwResult;
         }
 
         const reviewResult = yield* runReviewAttempt({

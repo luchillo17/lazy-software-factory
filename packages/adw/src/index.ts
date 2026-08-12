@@ -1,6 +1,7 @@
 export * from "./adw-progress-event.ts";
 export * from "./adw-progress.ts";
 export * from "./attempt-caps.ts";
+export * from "./build-test-loop.ts";
 export * from "./enums.ts";
 export * from "./git-host.ts";
 export * from "./host-operator.ts";
