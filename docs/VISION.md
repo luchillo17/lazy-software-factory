@@ -71,7 +71,7 @@ Ship **opens the PR** inside Minimal; it does **not** merge or deploy. Dashed fa
 
 ### Feature Review-fail routing (provisional)
 
-Locked in [Decide Feature Review-fail routing vs Minimal local loop](https://github.com/luchillo17/lazy-software-factory/issues/33). Eval design: [research #32](https://github.com/luchillo17/lazy-software-factory/issues/32) / `docs/agents/research/feature-review-fail-eval.md` (on `research/feature-review-fail-eval` until merged).
+Locked in [Decide Feature Review-fail routing vs Minimal local loop](https://github.com/luchillo17/lazy-software-factory/issues/33). Eval design: [research #32](https://github.com/luchillo17/lazy-software-factory/issues/32) / `docs/agents/research/feature-review-fail-eval.md`.
 
 | Case                                          | Policy                                                                                                                                            |
 | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
