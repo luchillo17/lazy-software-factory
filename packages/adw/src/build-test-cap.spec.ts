@@ -7,7 +7,11 @@ import {
   type Sandbox,
 } from "@lazy-software-factory/runtime";
 import { Effect, Layer, Ref } from "effect";
-import { AdwBuildAttemptCap, AdwReviewAttemptCap } from "./attempt-caps.ts";
+import {
+  AdwBuildAttemptCap,
+  AdwReviewAttemptCap,
+  AdwSchemaResumeCap,
+} from "./attempt-caps.ts";
 import { AdwStatus, ReviewVerdict } from "./enums.ts";
 import { GitHost } from "./git-host.ts";
 import { runMinimalAdw } from "./run-minimal-adw.ts";
@@ -134,7 +138,8 @@ describe("runMinimalAdw Build↔Test resume + cap", () => {
             buildLayer,
             passThroughShip,
             AdwBuildAttemptCap.Default,
-            AdwReviewAttemptCap.Default
+            AdwReviewAttemptCap.Default,
+            AdwSchemaResumeCap.Default
           )
         )
       );
@@ -205,7 +210,8 @@ describe("runMinimalAdw Build↔Test resume + cap", () => {
               buildLayer,
               passThroughShip,
               capLayer,
-              AdwReviewAttemptCap.Default
+              AdwReviewAttemptCap.Default,
+              AdwSchemaResumeCap.Default
             )
           )
         );
@@ -294,7 +300,8 @@ describe("runMinimalAdw Build↔Test resume + cap", () => {
                 })
               ),
               AdwBuildAttemptCap.Default,
-              AdwReviewAttemptCap.Default
+              AdwReviewAttemptCap.Default,
+              AdwSchemaResumeCap.Default
             )
           )
         );

@@ -7,7 +7,11 @@ import {
 } from "@lazy-software-factory/runtime";
 import { Effect, Layer, Logger } from "effect";
 import { captureAdwProgressLogger } from "./adw-progress.ts";
-import { AdwBuildAttemptCap, AdwReviewAttemptCap } from "./attempt-caps.ts";
+import {
+  AdwBuildAttemptCap,
+  AdwReviewAttemptCap,
+  AdwSchemaResumeCap,
+} from "./attempt-caps.ts";
 import { AdwStatus, ReviewVerdict } from "./enums.ts";
 import { GitHost } from "./git-host.ts";
 import { monorepoRoot } from "./monorepo-root.ts";
@@ -124,6 +128,7 @@ describe("runMinimalAdw progress events", () => {
             ),
             AdwBuildAttemptCap.Default,
             AdwReviewAttemptCap.Default,
+            AdwSchemaResumeCap.Default,
             Logger.layer([captureAdwProgressLogger(lines)])
           )
         )
@@ -196,7 +201,11 @@ describe("runMinimalAdw progress events", () => {
                     output:
                       "not-a-verdict gho_abcdefghijklmnopqrstuvwxyz012345",
                   }),
-                resume: () => Effect.die("unused"),
+                resume: (session) =>
+                  Effect.succeed({
+                    sessionId: session.sessionId,
+                    output: "still-not-a-verdict",
+                  }),
               })
             ),
             Layer.succeed(
@@ -220,18 +229,27 @@ describe("runMinimalAdw progress events", () => {
               AdwReviewAttemptCap,
               AdwReviewAttemptCap.of({ maxAttempts: 1 })
             ),
+            Layer.succeed(
+              AdwSchemaResumeCap,
+              AdwSchemaResumeCap.of({ maxAttempts: 1 })
+            ),
             Logger.layer([captureAdwProgressLogger(lines)])
           )
         )
       );
 
       assert.strictEqual(result.status, AdwStatus.Failed);
-      assert.strictEqual(result.detail, "malformed or missing Review verdict");
+      assert.isTrue(result.detail?.includes("schema resume cap exhausted"));
       const miss = lines.find((l) => l.includes("kind=schema_miss"));
       assert.isTrue(miss !== undefined);
       assert.isTrue(miss!.includes("raw="));
       assert.isFalse(miss!.includes("gho_"));
       assert.isTrue(miss!.includes("[REDACTED]"));
+      assert.isTrue(
+        lines.some((l) =>
+          l.includes("kind=step_result step=review result=schema_resume")
+        )
+      );
     })
   );
 });

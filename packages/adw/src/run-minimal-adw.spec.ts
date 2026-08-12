@@ -6,7 +6,11 @@ import {
   type Sandbox,
 } from "@lazy-software-factory/runtime";
 import { Effect, Layer, Ref } from "effect";
-import { AdwBuildAttemptCap, AdwReviewAttemptCap } from "./attempt-caps.ts";
+import {
+  AdwBuildAttemptCap,
+  AdwReviewAttemptCap,
+  AdwSchemaResumeCap,
+} from "./attempt-caps.ts";
 import { AdwStatus, ReviewVerdict } from "./enums.ts";
 import { GitHost } from "./git-host.ts";
 import { runMinimalAdw } from "./run-minimal-adw.ts";
@@ -97,7 +101,8 @@ describe("runMinimalAdw happy path", () => {
             Effect.gen(function* () {
               yield* record("review");
               assert.isDefined(options.sandbox);
-              assert.isTrue(options.prompt.toLowerCase().includes("bugbot"));
+              assert.isTrue(options.prompt.includes("/adw-review"));
+              assert.isTrue(options.prompt.includes("ReviewOutput"));
               assert.isTrue(
                 options.prompt.includes("Review changes for ticket TICKET-1")
               );
@@ -148,7 +153,8 @@ describe("runMinimalAdw happy path", () => {
             gitLayer,
             testCommandsLayer,
             AdwBuildAttemptCap.Default,
-            AdwReviewAttemptCap.Default
+            AdwReviewAttemptCap.Default,
+            AdwSchemaResumeCap.Default
           )
         )
       );

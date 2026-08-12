@@ -27,6 +27,7 @@ if ("help" in parsed) {
   console.log(
     "Host sandbox: one ADW at a time. Credentials from .env / env (CURSOR_API_KEY, GH_TOKEN) — never printed."
   );
+  console.log("Local SDK model: ADW_MODEL / CURSOR_MODEL (default grok-4.5).");
   process.exit(0);
 }
 if ("error" in parsed) {

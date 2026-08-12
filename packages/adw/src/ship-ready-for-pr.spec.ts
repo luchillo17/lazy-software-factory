@@ -6,7 +6,11 @@ import {
   type Sandbox,
 } from "@lazy-software-factory/runtime";
 import { Effect, Layer, Ref } from "effect";
-import { AdwBuildAttemptCap, AdwReviewAttemptCap } from "./attempt-caps.ts";
+import {
+  AdwBuildAttemptCap,
+  AdwReviewAttemptCap,
+  AdwSchemaResumeCap,
+} from "./attempt-caps.ts";
 import { AdwStatus, ReviewVerdict } from "./enums.ts";
 import { GitHost, GitHostError } from "./git-host.ts";
 import { runMinimalAdw } from "./run-minimal-adw.ts";
@@ -54,7 +58,8 @@ const greenAgents = Layer.mergeAll(
     AdwTestCommands.of({ commands: [{ command: "t" }] })
   ),
   AdwBuildAttemptCap.Default,
-  AdwReviewAttemptCap.Default
+  AdwReviewAttemptCap.Default,
+  AdwSchemaResumeCap.Default
 );
 
 describe("runMinimalAdw Ship → ready_for_pr", () => {

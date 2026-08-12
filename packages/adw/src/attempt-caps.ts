@@ -21,3 +21,17 @@ export class AdwReviewAttemptCap extends Context.Service<
     AdwReviewAttemptCap.of({ maxAttempts: 3 })
   );
 }
+
+/**
+ * Inner schema-resume budget per Review session (ADR-0009). Default 3.
+ * Does not spend Review attempts; exhaust → ADW failed without Build resume.
+ */
+export class AdwSchemaResumeCap extends Context.Service<
+  AdwSchemaResumeCap,
+  { readonly maxAttempts: number }
+>()("@lazy-software-factory/adw/AdwSchemaResumeCap") {
+  static readonly Default = Layer.succeed(
+    AdwSchemaResumeCap,
+    AdwSchemaResumeCap.of({ maxAttempts: 3 })
+  );
+}

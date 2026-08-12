@@ -6,7 +6,11 @@ import {
 } from "@lazy-software-factory/runtime";
 import { Config, ConfigProvider, Effect, Layer, Option } from "effect";
 import { parseArgs } from "node:util";
-import { AdwBuildAttemptCap, AdwReviewAttemptCap } from "./attempt-caps.ts";
+import {
+  AdwBuildAttemptCap,
+  AdwReviewAttemptCap,
+  AdwSchemaResumeCap,
+} from "./attempt-caps.ts";
 import { AdwProgressStderrLive } from "./adw-progress.ts";
 import { AdwStatus } from "./enums.ts";
 import {
@@ -145,6 +149,7 @@ export const hostMinimalAdwLayer = Layer.mergeAll(
   ),
   AdwBuildAttemptCap.Default,
   AdwReviewAttemptCap.Default,
+  AdwSchemaResumeCap.Default,
   AdwProgressStderrLive
 );
 

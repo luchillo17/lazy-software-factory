@@ -13,9 +13,17 @@ import {
   AdwStepResult,
 } from "./adw-progress-event.ts";
 import { emitAdwProgress } from "./adw-progress.ts";
-import { AdwBuildAttemptCap, AdwReviewAttemptCap } from "./attempt-caps.ts";
+import {
+  AdwBuildAttemptCap,
+  AdwReviewAttemptCap,
+  AdwSchemaResumeCap,
+} from "./attempt-caps.ts";
 import { AdwStatus, AdwStatusSchema, ReviewVerdict } from "./enums.ts";
 import { GitHost } from "./git-host.ts";
+import {
+  reviewOutputContractPrompt,
+  schemaRepairPrompt,
+} from "./review-output-contract.ts";
 import { ReviewOutput } from "./review-output.ts";
 import { AdwTestCommands, type AdwTestCommand } from "./test-commands.ts";
 import {
@@ -103,7 +111,8 @@ export type MinimalAdwServices =
   | AdwTestCommands
   | WorkspaceProvision
   | AdwBuildAttemptCap
-  | AdwReviewAttemptCap;
+  | AdwReviewAttemptCap
+  | AdwSchemaResumeCap;
 
 export const runMinimalAdw = (
   input: MinimalAdwInput
@@ -118,6 +127,7 @@ export const runMinimalAdw = (
       const provisioner = yield* WorkspaceProvision;
       const { maxAttempts: buildAttemptCap } = yield* AdwBuildAttemptCap;
       const { maxAttempts: reviewAttemptCap } = yield* AdwReviewAttemptCap;
+      const { maxAttempts: schemaResumeCap } = yield* AdwSchemaResumeCap;
 
       const sandbox = yield* sandboxes.create({
         cwd: process.cwd(),
@@ -298,34 +308,81 @@ export const runMinimalAdw = (
           buildAttempts,
           reviewAttempts,
         });
-        const reviewSession = yield* reviewAgent.run({
+        let reviewSession = yield* reviewAgent.run({
           prompt: bootstrapRoleSkillPrompt(
             AgentRole.Review,
-            `Review changes for ticket ${input.ticketId}`
+            [
+              reviewOutputContractPrompt(),
+              "",
+              `Review changes for ticket ${input.ticketId}`,
+            ].join("\n")
           ),
           sandbox,
           env: input.env,
         });
         reviewSessionId = reviewSession.sessionId;
         reviewAttempts += 1;
+        let schemaResumes = 0;
 
-        const decoded = yield* Schema.decodeUnknownEffect(ReviewOutput)(
-          reviewSession.output
-        ).pipe(
-          Effect.catchTag("SchemaError", () =>
-            Effect.gen(function* () {
-              yield* emitAdwProgress({
-                kind: AdwProgressKind.SchemaMiss,
-                reviewAttempts,
-                raw: reviewOutputRaw(reviewSession.output),
-              });
-              return {
-                verdict: ReviewVerdict.Fail,
-                failReport: "malformed or missing Review verdict",
-              } satisfies ReviewOutput;
-            })
-          )
-        );
+        let decoded: ReviewOutput | undefined;
+        while (decoded === undefined) {
+          const decodeAttempt = yield* Schema.decodeUnknownEffect(ReviewOutput)(
+            reviewSession.output
+          ).pipe(
+            Effect.map((value) => ({ ok: true as const, value })),
+            Effect.catchTag("SchemaError", (err) =>
+              Effect.succeed({
+                ok: false as const,
+                message: err.message,
+              })
+            )
+          );
+
+          if (decodeAttempt.ok) {
+            decoded = decodeAttempt.value;
+            break;
+          }
+
+          const raw = reviewOutputRaw(reviewSession.output);
+
+          yield* emitAdwProgress({
+            kind: AdwProgressKind.SchemaMiss,
+            reviewAttempts,
+            raw,
+          });
+
+          if (schemaResumes >= schemaResumeCap) {
+            yield* emitAdwProgress({
+              kind: AdwProgressKind.StepResult,
+              step: AdwStep.Review,
+              result: AdwStepResult.Fail,
+              buildAttempts,
+              reviewAttempts,
+            });
+            return {
+              ticketId: input.ticketId,
+              status: AdwStatus.Failed,
+              detail: `Review schema resume cap exhausted (${schemaResumeCap})`,
+              sandboxId: sandbox.id,
+              buildSessionId: buildSession.sessionId,
+              reviewSessionId,
+            } satisfies MinimalAdwResult;
+          }
+
+          yield* emitAdwProgress({
+            kind: AdwProgressKind.StepResult,
+            step: AdwStep.Review,
+            result: AdwStepResult.SchemaResume,
+            buildAttempts,
+            reviewAttempts,
+          });
+          reviewSession = yield* reviewAgent.resume(reviewSession, {
+            prompt: schemaRepairPrompt(decodeAttempt.message, raw),
+            sandbox,
+            env: input.env,
+          });
+          schemaResumes += 1;
+        }
 
         if (decoded.verdict === ReviewVerdict.Pass) {
           yield* emitAdwProgress({
