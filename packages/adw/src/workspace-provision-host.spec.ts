@@ -38,6 +38,7 @@ const recordingSandbox = (
 const unusedGitHost = Layer.succeed(
   GitHost,
   GitHost.of({
+    commitWorkingTree: () => Effect.void,
     clone: () => Effect.die("clone must not run when .git present"),
     push: () => Effect.die("unused"),
     openPullRequest: () => Effect.die("unused"),
@@ -191,6 +192,7 @@ describe("WorkspaceProvision.Host", () => {
       const gitLayer = Layer.succeed(
         GitHost,
         GitHost.of({
+          commitWorkingTree: () => Effect.void,
           clone: (options) =>
             Effect.gen(function* () {
               yield* Ref.update(clones, (c) => [...c, options]);
@@ -250,6 +252,7 @@ describe("WorkspaceProvision.Host", () => {
       const gitLayer = Layer.succeed(
         GitHost,
         GitHost.of({
+          commitWorkingTree: () => Effect.void,
           clone: () =>
             Effect.fail(new GitHostError({ message: "auth failed" })),
           push: () => Effect.die("unused"),
@@ -290,6 +293,7 @@ describe("WorkspaceProvision.Host", () => {
       const gitLayer = Layer.succeed(
         GitHost,
         GitHost.of({
+          commitWorkingTree: () => Effect.void,
           clone: () =>
             Effect.gen(function* () {
               yield* Ref.update(clones, (n) => n + 1);

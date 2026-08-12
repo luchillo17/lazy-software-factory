@@ -9,6 +9,8 @@ export * from "./review-output-contract.ts";
 export * from "./review-output.ts";
 export * from "./role-skill-binding.ts";
 export * from "./run-minimal-adw.ts";
+export * from "./ship-agent.ts";
+export * from "./ship-input.ts";
 export * from "./test-commands.ts";
 export * from "./ticket-branch.ts";
 export * from "./workspace-provision.ts";

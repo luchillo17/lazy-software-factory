@@ -98,6 +98,7 @@ describe("runMinimalAdw Ship → ready_for_pr", () => {
       const gitLayer = Layer.succeed(
         GitHost,
         GitHost.of({
+          commitWorkingTree: () => Effect.void,
           clone: () => Effect.void,
           push: () =>
             Effect.fail(new GitHostError({ message: "gh not available" })),
@@ -130,6 +131,7 @@ describe("runMinimalAdw Ship → ready_for_pr", () => {
       const gitLayer = Layer.succeed(
         GitHost,
         GitHost.of({
+          commitWorkingTree: () => Effect.void,
           clone: () => Effect.void,
           push: () => Ref.set(pushed, true),
           openPullRequest: () =>
@@ -153,6 +155,7 @@ describe("runMinimalAdw Ship → ready_for_pr", () => {
       const gitLayer = Layer.succeed(
         GitHost,
         GitHost.of({
+          commitWorkingTree: () => Effect.void,
           clone: () => Effect.void,
           push: () => Effect.void,
           openPullRequest: () =>
@@ -167,6 +170,60 @@ describe("runMinimalAdw Ship → ready_for_pr", () => {
 
       assert.strictEqual(result.status, AdwStatus.Shipped);
       assert.strictEqual(result.prUrl, "https://example.test/pr/9");
+    })
+  );
+
+  it.effect("Ship runs commit then push then openPR", () =>
+    Effect.gen(function* () {
+      const steps = yield* Ref.make<string[]>([]);
+
+      const gitLayer = Layer.succeed(
+        GitHost,
+        GitHost.of({
+          commitWorkingTree: () => Ref.update(steps, (s) => [...s, "commit"]),
+          clone: () => Effect.void,
+          push: () => Ref.update(steps, (s) => [...s, "push"]),
+          openPullRequest: () =>
+            Effect.gen(function* () {
+              yield* Ref.update(steps, (s) => [...s, "pr"]);
+              return { url: "https://example.test/pr/10" };
+            }),
+        })
+      );
+
+      const result = yield* runMinimalAdw({
+        ticketId: "T-ORDER",
+        prompt: "work",
+      }).pipe(Effect.provide(Layer.mergeAll(greenAgents, gitLayer)));
+
+      assert.strictEqual(result.status, AdwStatus.Shipped);
+      assert.deepStrictEqual(yield* Ref.get(steps), ["commit", "push", "pr"]);
+    })
+  );
+
+  it.effect("commit failure yields ready_for_pr without push", () =>
+    Effect.gen(function* () {
+      const pushed = yield* Ref.make(false);
+
+      const gitLayer = Layer.succeed(
+        GitHost,
+        GitHost.of({
+          commitWorkingTree: () =>
+            Effect.fail(new GitHostError({ message: "commit failed" })),
+          clone: () => Effect.void,
+          push: () => Ref.set(pushed, true),
+          openPullRequest: () => Effect.die("unused"),
+        })
+      );
+
+      const result = yield* runMinimalAdw({
+        ticketId: "T-COMMIT",
+        prompt: "work",
+      }).pipe(Effect.provide(Layer.mergeAll(greenAgents, gitLayer)));
+
+      assert.strictEqual(result.status, AdwStatus.ReadyForPr);
+      assert.strictEqual(result.detail, "Ship commit failed");
+      assert.isFalse(yield* Ref.get(pushed));
     })
   );
 });

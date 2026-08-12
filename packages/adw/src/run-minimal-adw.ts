@@ -25,6 +25,8 @@ import {
   schemaRepairPrompt,
 } from "./review-output-contract.ts";
 import { ReviewOutput } from "./review-output.ts";
+import { runShipAgent } from "./ship-agent.ts";
+import { ShipInput } from "./ship-input.ts";
 import { AdwTestCommands, type AdwTestCommand } from "./test-commands.ts";
 import {
   AgentRole,
@@ -36,10 +38,11 @@ import { ticketBranch } from "./ticket-branch.ts";
 import { WorkspaceProvision } from "./workspace-provision.ts";
 
 /**
- * Minimal ADW (ADR-0007): provision → Build ↔ Test → Review → Ship.
+ * Minimal ADW (ADR-0007): provision → Build ↔ Test → Review → Ship agent.
  *
  * Build↔Test and Review have separate attempt caps (ADR-0009). Review fail
  * resumes the original Build session without spending a Build attempt.
+ * Ship is a Code agent with schema {@link ShipInput}.
  */
 export interface MinimalAdwInput {
   readonly ticketId: string;
@@ -122,7 +125,6 @@ export const runMinimalAdw = (
       const sandboxes = yield* SandboxProvider;
       const buildAgent = yield* BuildAgentProvider;
       const reviewAgent = yield* ReviewAgentProvider;
-      const gitHost = yield* GitHost;
       const testCommands = yield* AdwTestCommands;
       const provisioner = yield* WorkspaceProvision;
       const { maxAttempts: buildAttemptCap } = yield* AdwBuildAttemptCap;
@@ -434,44 +436,41 @@ export const runMinimalAdw = (
 
       const branch = ticketBranch(input.ticketId);
 
-      yield* emitAdwProgress({
-        kind: AdwProgressKind.StepEnter,
-        step: AdwStep.Ship,
-        buildAttempts,
-        reviewAttempts,
-      });
-      const pushResult = yield* gitHost
-        .push({ cwd: sandbox.cwd, branch, env: input.env })
-        .pipe(Effect.exit);
+      const shipInputResult = yield* Schema.decodeUnknownEffect(ShipInput)({
+        ticketId: input.ticketId,
+        cwd: sandbox.cwd,
+        branch,
+        prTitle: `ADW: ${input.ticketId}`,
+        prBody: `Automated Minimal ADW ship for ticket ${input.ticketId}.`,
+        env: input.env,
+      }).pipe(
+        Effect.map((value) => ({ ok: true as const, value })),
+        Effect.catchTag("SchemaError", (err) =>
+          Effect.succeed({ ok: false as const, message: err.message })
+        )
+      );
 
-      if (pushResult._tag === "Failure") {
-        yield* emitAdwProgress({
-          kind: AdwProgressKind.StepResult,
-          step: AdwStep.Ship,
-          result: AdwStepResult.Fail,
-          buildAttempts,
-          reviewAttempts,
-        });
+      if (!shipInputResult.ok) {
         return {
           ticketId: input.ticketId,
           status: AdwStatus.ReadyForPr,
-          detail: "Ship push failed",
+          detail: `ShipInput decode failed: ${shipInputResult.message}`,
           sandboxId: sandbox.id,
           buildSessionId: buildSession.sessionId,
           reviewSessionId,
         } satisfies MinimalAdwResult;
       }
 
-      const prResult = yield* gitHost
-        .openPullRequest({
-          cwd: sandbox.cwd,
-          branch,
-          title: `ADW: ${input.ticketId}`,
-          env: input.env,
-        })
-        .pipe(Effect.exit);
+      yield* emitAdwProgress({
+        kind: AdwProgressKind.StepEnter,
+        step: AdwStep.Ship,
+        buildAttempts,
+        reviewAttempts,
+      });
 
-      if (prResult._tag === "Failure") {
+      const shipResult = yield* runShipAgent(shipInputResult.value);
+
+      if (shipResult.status === AdwStatus.ReadyForPr) {
         yield* emitAdwProgress({
           kind: AdwProgressKind.StepResult,
           step: AdwStep.Ship,
@@ -482,7 +481,7 @@ export const runMinimalAdw = (
         return {
           ticketId: input.ticketId,
           status: AdwStatus.ReadyForPr,
-          detail: "Ship open PR failed",
+          detail: shipResult.detail,
           sandboxId: sandbox.id,
           buildSessionId: buildSession.sessionId,
           reviewSessionId,
@@ -502,7 +501,7 @@ export const runMinimalAdw = (
         sandboxId: sandbox.id,
         buildSessionId: buildSession.sessionId,
         reviewSessionId,
-        prUrl: prResult.value.url,
+        prUrl: shipResult.prUrl,
       } satisfies MinimalAdwResult;
     }).pipe(
       Effect.catch((err) =>

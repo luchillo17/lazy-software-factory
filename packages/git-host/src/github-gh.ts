@@ -29,6 +29,34 @@ export const GitHubGh = Layer.effect(
           yield* requireZero(result, "gh repo clone");
         }),
 
+      commitWorkingTree: ({ cwd, message, env }) =>
+        Effect.gen(function* () {
+          const status = yield* cli.run({
+            command: "git",
+            args: ["status", "--porcelain"],
+            cwd,
+            env,
+          });
+          yield* requireZero(status, "git status --porcelain");
+          if (status.stdout.trim() === "") {
+            return;
+          }
+          const add = yield* cli.run({
+            command: "git",
+            args: ["add", "-A"],
+            cwd,
+            env,
+          });
+          yield* requireZero(add, "git add -A");
+          const commit = yield* cli.run({
+            command: "git",
+            args: ["commit", "-m", message],
+            cwd,
+            env,
+          });
+          yield* requireZero(commit, "git commit");
+        }),
+
       push: ({ cwd, branch, env }) =>
         Effect.gen(function* () {
           const push = yield* cli.run({

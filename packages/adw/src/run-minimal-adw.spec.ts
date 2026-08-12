@@ -118,6 +118,7 @@ describe("runMinimalAdw happy path", () => {
       const gitLayer = Layer.succeed(
         GitHost,
         GitHost.of({
+          commitWorkingTree: () => Effect.void,
           clone: () => Effect.void,
           push: () =>
             Effect.gen(function* () {

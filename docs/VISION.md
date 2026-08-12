@@ -15,8 +15,8 @@ Hosted multi-org **Organization** Platform is a later packaging of the same core
 - **Agent** (configured): reusable LLM role primitive; owns **Skill pack** + **Role skill binding** (plus transitive skill refs). Distinct from **Agent session**.
 - **Skill pack**: default root `.agents/skills`. Organization custom packs = later hosted overlay on the same Agent primitive.
 - **ADW**: composable graph of Agents, deterministic gates, and/or nested ADWs. Never wrap a single Agent as a one-node ADW.
-- **Minimal ADW**: Build ↔ Test → Review → Ship (ADR-0007 shape).
-- **Feature ADW**: Planner Agent → nested Minimal ADW (one shared **warm sandbox**; Ship stays on Minimal after Review pass). Planner emits a **`/to-plan`** artifact into ADW/warm-sandbox state; Minimal consumes it.
+- **Minimal ADW**: Build ↔ Test agent → Review → Ship agent (ADR-0007 shape). Test + Ship are **Code agents** (schema in; not LLMs). Canonical colored flow: [ADR-0007](adr/0007-minimal-adw-build-test-review.md).
+- **Feature ADW**: Planner Agent → nested Minimal ADW (one shared **warm sandbox**; Ship agent stays on Minimal after Review pass). Planner emits a **`/to-plan`** artifact into ADW/warm-sandbox state; Minimal consumes it.
 - **Role skill binding**: soft guidance loaded into the session (Cursor SDK has no skills API — binding invented in ADW prompts; pack discovery is workspace filesystem). Hard pass/fail stays ADW gates (ADR-0001). Optional **suggested skills** inside a plan are hints only — the configured Agent’s Role skill binding remains authoritative (matters more when cloud tenants customize Agents).
 
 ### Feature intake vs Planning/PM ADW

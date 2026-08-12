@@ -6,36 +6,47 @@ disable-model-invocation: true
 
 # ADW Review
 
-Produce a **verdict** on the current ticket branch: **findings** (location + severity), then machine-readable JSON for the ADW.
+Produce a **verdict** on the current ticket branch: **findings** (location + severity), then machine-readable JSON for the ADW. Do **not** `git commit`, stage, push, or open a PR — Ship agent owns that.
 
 ## 1. Diff
 
-Capture the three-dot diff from the merge-base with trunk (`origin/main` or `main`) to `HEAD`:
+Capture the **full pending delta** — committed tip **and** dirty worktree:
 
 ```bash
 git merge-base HEAD origin/main 2>/dev/null || git merge-base HEAD main
 git diff <merge-base>...HEAD
+git diff
+git diff --cached
+git status --porcelain
 ```
 
-**Done when:** the diff text is in hand. Empty diff → step 3 with `verdict: pass`.
+Include untracked files from `git status --porcelain` (open them as needed). Empty committed diff **and** empty worktree pending → step 3 with `verdict: pass` and a short PR draft.
+
+**Done when:** committed three-dot diff plus unstaged/staged/untracked pending are in hand.
 
 ## 2. Findings
 
-Inspect the diff (open files only as needed). List every likely bug, regression, broken edge case, or security mistake the change introduces.
+Inspect that full pending delta (open files only as needed). List every likely bug, regression, broken edge case, or security mistake the change introduces — including issues only in uncommitted files.
 
 Each **finding** has: `path:line` (or range), severity (`high` / `medium` / `low`), problem, fix hint for Build.
 
-**Done when:** every such issue in the diff is listed, or the list is empty.
+**Done when:** every such issue in the pending delta is listed, or the list is empty.
 
 ## 3. Verdict
 
-Emit exactly one JSON object as the **last** block:
+Emit exactly one JSON object as the **last** block.
+
+**Pass** (empty findings / empty pending) — include PR draft for the Ship agent:
 
 ```json
-{ "verdict": "pass" }
+{
+  "verdict": "pass",
+  "prTitle": "<concise conventional title>",
+  "prBody": "<markdown: summary + test plan>"
+}
 ```
 
-or
+**Fail** — do not invent PR fields:
 
 ```json
 {
@@ -44,4 +55,4 @@ or
 }
 ```
 
-**Done when:** `verdict` is `pass` (empty findings / empty diff) or `fail` with a non-empty `failReport`.
+**Done when:** `verdict` is `pass` with non-empty `prTitle` + `prBody`, or `fail` with a non-empty `failReport`.

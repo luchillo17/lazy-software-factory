@@ -76,6 +76,7 @@ describe("runMinimalAdw provision failure", () => {
         Layer.succeed(
           GitHost,
           GitHost.of({
+            commitWorkingTree: () => Effect.void,
             clone: () => Effect.die("unused"),
             push: () => Effect.die("unused"),
             openPullRequest: () => Effect.die("unused"),

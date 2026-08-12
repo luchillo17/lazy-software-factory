@@ -38,6 +38,7 @@ const passThroughShip = Layer.mergeAll(
   Layer.succeed(
     GitHost,
     GitHost.of({
+      commitWorkingTree: () => Effect.void,
       clone: () => Effect.void,
       push: () => Effect.void,
       openPullRequest: () =>
@@ -71,6 +72,7 @@ const passThroughShipWithoutGates = Layer.mergeAll(
   Layer.succeed(
     GitHost,
     GitHost.of({
+      commitWorkingTree: () => Effect.void,
       clone: () => Effect.void,
       push: () => Effect.void,
       openPullRequest: () =>

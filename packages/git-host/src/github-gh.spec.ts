@@ -79,4 +79,86 @@ describe("GitHubGh", () => {
       });
     })
   );
+
+  it.effect("commitWorkingTree no-ops when porcelain is empty", () =>
+    Effect.gen(function* () {
+      const calls = yield* Ref.make<
+        Array<{ command: string; args: readonly string[] }>
+      >([]);
+
+      const fakeCli = Layer.succeed(
+        GhRunner,
+        GhRunner.of({
+          run: ({ command, args }) =>
+            Effect.gen(function* () {
+              yield* Ref.update(calls, (cs) => [...cs, { command, args }]);
+              return { exitCode: 0, stdout: "", stderr: "" };
+            }),
+        })
+      );
+
+      const host = yield* GitHost.pipe(
+        Effect.provide(GitHubGh.pipe(Layer.provide(fakeCli)))
+      );
+
+      yield* host.commitWorkingTree({
+        cwd: "/tmp/repo",
+        message: "adw(T-1): ship pending changes",
+      });
+
+      const seen = yield* Ref.get(calls);
+      assert.deepStrictEqual(seen, [
+        { command: "git", args: ["status", "--porcelain"] },
+      ]);
+    })
+  );
+
+  it.effect("commitWorkingTree adds and commits when dirty", () =>
+    Effect.gen(function* () {
+      const calls = yield* Ref.make<
+        Array<{ command: string; args: readonly string[] }>
+      >([]);
+
+      const fakeCli = Layer.succeed(
+        GhRunner,
+        GhRunner.of({
+          run: ({ command, args }) =>
+            Effect.gen(function* () {
+              yield* Ref.update(calls, (cs) => [...cs, { command, args }]);
+              if (
+                command === "git" &&
+                args[0] === "status" &&
+                args[1] === "--porcelain"
+              ) {
+                return {
+                  exitCode: 0,
+                  stdout: " M packages/adw/src/run-minimal-adw.ts\n",
+                  stderr: "",
+                };
+              }
+              return { exitCode: 0, stdout: "", stderr: "" };
+            }),
+        })
+      );
+
+      const host = yield* GitHost.pipe(
+        Effect.provide(GitHubGh.pipe(Layer.provide(fakeCli)))
+      );
+
+      yield* host.commitWorkingTree({
+        cwd: "/tmp/repo",
+        message: "adw(T-1): ship pending changes",
+      });
+
+      const seen = yield* Ref.get(calls);
+      assert.deepStrictEqual(seen, [
+        { command: "git", args: ["status", "--porcelain"] },
+        { command: "git", args: ["add", "-A"] },
+        {
+          command: "git",
+          args: ["commit", "-m", "adw(T-1): ship pending changes"],
+        },
+      ]);
+    })
+  );
 });

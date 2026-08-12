@@ -99,6 +99,7 @@ describe("runMinimalAdw progress events", () => {
             Layer.succeed(
               GitHost,
               GitHost.of({
+                commitWorkingTree: () => Effect.void,
                 ensureRepo: () => Effect.void,
                 push: () => Effect.void,
                 openPullRequest: () =>
@@ -110,6 +111,7 @@ describe("runMinimalAdw progress events", () => {
                 Layer.succeed(
                   GitHost,
                   GitHost.of({
+                    commitWorkingTree: () => Effect.void,
                     ensureRepo: () => Effect.void,
                     push: () => Effect.void,
                     openPullRequest: () =>
@@ -211,6 +213,7 @@ describe("runMinimalAdw progress events", () => {
             Layer.succeed(
               GitHost,
               GitHost.of({
+                commitWorkingTree: () => Effect.void,
                 ensureRepo: () => Effect.void,
                 push: () => Effect.void,
                 openPullRequest: () =>
