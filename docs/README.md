@@ -1,6 +1,10 @@
 # Docs
 
-Design notes and ADRs for the factory live here. Domain language: [`CONTEXT.md`](../CONTEXT.md).
+Design notes and ADRs for the factory live here. Domain language: [`CONTEXT.md`](../CONTEXT.md). Product cut: [`VISION.md`](./VISION.md).
+
+## Consumer notes
+
+- **[Extractability (v0)](./extractability.md)** — depend on `runtime` / `adw` / `git-host` from outside monorepo apps (rough DX OK; npm publish not required)
 
 ## ADW flow diagrams
 
