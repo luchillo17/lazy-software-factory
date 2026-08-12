@@ -23,6 +23,7 @@ describe("Role skill binding bootstrap", () => {
         assert.isTrue(prompt.includes(`/${BuildSkill.Implement}`));
         assert.isTrue(prompt.includes(DEFAULT_SKILL_PACK_ROOT));
         assert.isTrue(prompt.includes("Ship ticket T-1"));
+        assert.isFalse(prompt.includes("AGENTS.md"));
         assert.isFalse(prompt.includes("setup-matt-pocock-skills"));
         assert.isFalse(prompt.includes("transitive"));
         assert.isFalse(prompt.includes("You are the Build agent"));
@@ -43,6 +44,7 @@ describe("Role skill binding bootstrap", () => {
       assert.isTrue(prompt.includes(`Use \`/${ReviewSkill.AdwReview}\``));
       assert.isTrue(prompt.includes("Review changes for ticket T-1"));
       assert.isTrue(prompt.includes(DEFAULT_SKILL_PACK_ROOT));
+      assert.isFalse(prompt.includes("AGENTS.md"));
       assert.isFalse(prompt.includes("Bugbot-shaped"));
       assert.isFalse(prompt.includes("setup-matt-pocock-skills"));
       assert.isFalse(prompt.includes(`/${BuildSkill.Implement}`));

@@ -1,4 +1,4 @@
-import { Effect } from "effect";
+import { Effect, Exit } from "effect";
 import { AdwStatus } from "./enums.ts";
 import { GitHost } from "./git-host.ts";
 import type { ShipInput } from "./ship-input.ts";
@@ -15,6 +15,13 @@ export type ShipAgentResult =
     };
 
 /**
+ * Commitlint-safe message for Ship flush of pending worktree.
+ * Type must be conventional (`chore`); bare `adw(...)` fails husky commit-msg.
+ */
+export const shipCommitMessage = (ticketId: string): string =>
+  `chore(adw): ship pending changes for ${ticketId}`;
+
+/**
  * **Ship agent** — Code agent (same class as Test agent): deterministic
  * commit-if-dirty → push → open PR from schema-decoded {@link ShipInput}.
  */
@@ -27,12 +34,12 @@ export const runShipAgent = (
     const commitResult = yield* gitHost
       .commitWorkingTree({
         cwd: input.cwd,
-        message: `adw(${input.ticketId}): ship pending changes`,
+        message: shipCommitMessage(input.ticketId),
         env: input.env,
       })
       .pipe(Effect.exit);
 
-    if (commitResult._tag === "Failure") {
+    if (Exit.isFailure(commitResult)) {
       return {
         status: AdwStatus.ReadyForPr,
         detail: "Ship commit failed",
@@ -43,7 +50,7 @@ export const runShipAgent = (
       .push({ cwd: input.cwd, branch: input.branch, env: input.env })
       .pipe(Effect.exit);
 
-    if (pushResult._tag === "Failure") {
+    if (Exit.isFailure(pushResult)) {
       return {
         status: AdwStatus.ReadyForPr,
         detail: "Ship push failed",
@@ -60,7 +67,7 @@ export const runShipAgent = (
       })
       .pipe(Effect.exit);
 
-    if (prResult._tag === "Failure") {
+    if (Exit.isFailure(prResult)) {
       return {
         status: AdwStatus.ReadyForPr,
         detail: "Ship open PR failed",

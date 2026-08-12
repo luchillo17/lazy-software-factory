@@ -13,6 +13,7 @@ import {
 } from "./attempt-caps.ts";
 import { AdwProgressStderrLive } from "./adw-progress.ts";
 import { AdwStatus } from "./enums.ts";
+import { GitHubTicketIntakeLive } from "./github-ticket-intake.ts";
 import {
   runMinimalAdw,
   type MinimalAdwInput,
@@ -20,15 +21,25 @@ import {
 } from "./run-minimal-adw.ts";
 import { redactSecrets } from "./redact-secrets.ts";
 import { AdwTestCommands } from "./test-commands.ts";
+import { TicketIntake, type TicketIntakeError } from "./ticket-intake.ts";
 import { WorkspaceProvision } from "./workspace-provision.ts";
 
 export { redactSecrets } from "./redact-secrets.ts";
 
-export interface HostOperatorArgs {
+/** Manual ticket/prompt flags. */
+export interface HostOperatorManualArgs {
   readonly ticketId: string;
   readonly prompt: string;
   readonly repoUrl?: string;
 }
+
+/** Issue-ref intake (GitHub TicketIntake adapter). */
+export interface HostOperatorIssueArgs {
+  readonly issueRef: string;
+  readonly repoUrl?: string;
+}
+
+export type HostOperatorArgs = HostOperatorManualArgs | HostOperatorIssueArgs;
 
 const optionalEnv = (name: string): string | undefined =>
   Option.getOrUndefined(
@@ -39,7 +50,7 @@ const optionalEnv = (name: string): string | undefined =>
     )
   );
 
-/** Parse argv flags: --ticket --prompt --repo-url (env fallbacks OK). */
+/** Parse argv flags: --ticket/--prompt or --issue, plus --repo-url. */
 export const parseHostOperatorArgs = (
   argv: readonly string[]
 ): HostOperatorArgs | { readonly error: string } | { readonly help: true } => {
@@ -49,6 +60,7 @@ export const parseHostOperatorArgs = (
   let values: {
     ticket?: string;
     prompt?: string;
+    issue?: string;
     "repo-url"?: string;
     help?: boolean;
   };
@@ -58,6 +70,7 @@ export const parseHostOperatorArgs = (
       options: {
         ticket: { type: "string" },
         prompt: { type: "string" },
+        issue: { type: "string" },
         "repo-url": { type: "string" },
         help: { type: "boolean", short: "h" },
       },
@@ -76,12 +89,27 @@ export const parseHostOperatorArgs = (
 
   const ticketId = values.ticket ?? optionalEnv("ADW_TICKET_ID");
   const prompt = values.prompt ?? optionalEnv("ADW_PROMPT");
+  const issueRef = values.issue ?? optionalEnv("ADW_ISSUE");
   const repoUrl = values["repo-url"] ?? optionalEnv("ADW_REPO_URL");
+
+  if (issueRef && (ticketId || prompt)) {
+    return {
+      error:
+        "Use either --issue (or ADW_ISSUE) or --ticket/--prompt, not both.",
+    };
+  }
+
+  if (issueRef) {
+    return {
+      issueRef,
+      ...(repoUrl ? { repoUrl } : {}),
+    };
+  }
 
   if (!ticketId || !prompt) {
     return {
       error:
-        "Missing --ticket / --prompt (or ADW_TICKET_ID / ADW_PROMPT). Use --help.",
+        "Missing --issue (or ADW_ISSUE), or --ticket / --prompt (or ADW_TICKET_ID / ADW_PROMPT). Use --help.",
     };
   }
 
@@ -91,6 +119,46 @@ export const parseHostOperatorArgs = (
     ...(repoUrl ? { repoUrl } : {}),
   };
 };
+
+const isIssueArgs = (args: HostOperatorArgs): args is HostOperatorIssueArgs =>
+  "issueRef" in args;
+
+type HostOperatorAdwFields = Pick<
+  MinimalAdwInput,
+  "ticketId" | "prompt" | "repoUrl"
+>;
+
+/**
+ * Resolve Host CLI args to `runMinimalAdw` ticketId/prompt/repoUrl.
+ * Issue refs load through {@link TicketIntake}.
+ */
+export function resolveHostOperatorAdwInput(
+  args: HostOperatorIssueArgs
+): Effect.Effect<HostOperatorAdwFields, TicketIntakeError, TicketIntake>;
+export function resolveHostOperatorAdwInput(
+  args: HostOperatorManualArgs
+): Effect.Effect<HostOperatorAdwFields>;
+export function resolveHostOperatorAdwInput(
+  args: HostOperatorArgs
+): Effect.Effect<HostOperatorAdwFields, TicketIntakeError, TicketIntake> {
+  if (isIssueArgs(args)) {
+    return Effect.gen(function* () {
+      const intake = yield* TicketIntake;
+      const ready = yield* intake.loadReadyTicket(args.issueRef);
+      return {
+        ticketId: ready.ticketId,
+        prompt: ready.prompt,
+        ...(args.repoUrl ? { repoUrl: args.repoUrl } : {}),
+      };
+    });
+  }
+
+  return Effect.succeed({
+    ticketId: args.ticketId,
+    prompt: args.prompt,
+    ...(args.repoUrl ? { repoUrl: args.repoUrl } : {}),
+  });
+}
 
 /** Operator-facing one-line status (redacts secrets in detail). */
 export const formatOperatorResult = (result: MinimalAdwResult): string => {
@@ -106,6 +174,9 @@ export const formatOperatorResult = (result: MinimalAdwResult): string => {
   }
   return parts.join(" ");
 };
+
+/** Live GitHub Issues TicketIntake (`gh` + GhRunner) for Host CLI. */
+export const hostTicketIntakeLayer = GitHubTicketIntakeLive;
 
 /** Host Layers: warm sandbox, Cursor agents, GitHub host, provision, caps. */
 export const hostMinimalAdwLayer = Layer.mergeAll(

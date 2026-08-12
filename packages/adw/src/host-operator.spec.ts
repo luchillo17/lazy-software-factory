@@ -1,23 +1,56 @@
 import { assert, describe, it } from "@effect/vitest";
-import { Effect } from "effect";
+import { Effect, Layer } from "effect";
 import { AdwStatus } from "./enums.ts";
 import {
   exitCodeForStatus,
   formatOperatorResult,
   parseHostOperatorArgs,
   redactSecrets,
+  resolveHostOperatorAdwInput,
 } from "./host-operator.ts";
+import { TicketIntake } from "./ticket-intake.ts";
+
+const ADW_ENV_KEYS = [
+  "ADW_TICKET_ID",
+  "ADW_PROMPT",
+  "ADW_ISSUE",
+  "ADW_REPO_URL",
+] as const;
+
+/** Clear Host CLI env fallbacks for isolated parse tests. */
+const withClearedAdwEnv = <T>(fn: () => T): T => {
+  const previous = new Map(
+    ADW_ENV_KEYS.map((key) => [key, process.env[key]] as const)
+  );
+  for (const key of ADW_ENV_KEYS) {
+    delete process.env[key];
+  }
+  try {
+    return fn();
+  } finally {
+    for (const key of ADW_ENV_KEYS) {
+      const value = previous.get(key);
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+  }
+};
 
 describe("host operator entry", () => {
   it("parseHostOperatorArgs reads flags", () => {
-    const parsed = parseHostOperatorArgs([
-      "--ticket",
-      "T-1",
-      "--prompt",
-      "do the thing",
-      "--repo-url",
-      "https://example.test/r.git",
-    ]);
+    const parsed = withClearedAdwEnv(() =>
+      parseHostOperatorArgs([
+        "--ticket",
+        "T-1",
+        "--prompt",
+        "do the thing",
+        "--repo-url",
+        "https://example.test/r.git",
+      ])
+    );
     assert.deepStrictEqual(parsed, {
       ticketId: "T-1",
       prompt: "do the thing",
@@ -25,10 +58,80 @@ describe("host operator entry", () => {
     });
   });
 
-  it("parseHostOperatorArgs errors without ticket/prompt", () => {
-    const parsed = parseHostOperatorArgs([]);
+  it("parseHostOperatorArgs errors without ticket/prompt or issue", () => {
+    const parsed = withClearedAdwEnv(() => parseHostOperatorArgs([]));
     assert.isTrue("error" in parsed);
   });
+
+  it("parseHostOperatorArgs accepts Issue ref", () => {
+    const parsed = withClearedAdwEnv(() =>
+      parseHostOperatorArgs([
+        "--issue",
+        "37",
+        "--repo-url",
+        "https://example.test/r.git",
+      ])
+    );
+    assert.deepStrictEqual(parsed, {
+      issueRef: "37",
+      repoUrl: "https://example.test/r.git",
+    });
+  });
+
+  it("parseHostOperatorArgs rejects mixing --issue with --ticket/--prompt", () => {
+    const parsed = parseHostOperatorArgs([
+      "--issue",
+      "37",
+      "--ticket",
+      "T-1",
+      "--prompt",
+      "x",
+    ]);
+    assert.isTrue("error" in parsed);
+  });
+
+  it.effect(
+    "resolveHostOperatorAdwInput feeds runMinimalAdw shape from intake",
+    () =>
+      Effect.gen(function* () {
+        const fakeIntake = Layer.succeed(
+          TicketIntake,
+          TicketIntake.of({
+            loadReadyTicket: (ref) =>
+              Effect.succeed({
+                ticketId: ref,
+                prompt: `# Issue ${ref}\n\nbody`,
+              }),
+          })
+        );
+
+        const input = yield* resolveHostOperatorAdwInput({
+          issueRef: "37",
+          repoUrl: "https://example.test/r.git",
+        }).pipe(Effect.provide(fakeIntake));
+
+        assert.deepStrictEqual(input, {
+          ticketId: "37",
+          prompt: "# Issue 37\n\nbody",
+          repoUrl: "https://example.test/r.git",
+        });
+      })
+  );
+
+  it.effect(
+    "resolveHostOperatorAdwInput passes through manual ticket/prompt",
+    () =>
+      Effect.gen(function* () {
+        const input = yield* resolveHostOperatorAdwInput({
+          ticketId: "T-1",
+          prompt: "do the thing",
+        });
+        assert.deepStrictEqual(input, {
+          ticketId: "T-1",
+          prompt: "do the thing",
+        });
+      })
+  );
 
   it.effect(
     "formatOperatorResult surfaces status without inventing secrets",
@@ -61,13 +164,15 @@ describe("host operator entry", () => {
   });
 
   it("parseHostOperatorArgs strips leading -- from pnpm", () => {
-    const parsed = parseHostOperatorArgs([
-      "--",
-      "--ticket",
-      "T-1",
-      "--prompt",
-      "do the thing",
-    ]);
+    const parsed = withClearedAdwEnv(() =>
+      parseHostOperatorArgs([
+        "--",
+        "--ticket",
+        "T-1",
+        "--prompt",
+        "do the thing",
+      ])
+    );
     assert.deepStrictEqual(parsed, {
       ticketId: "T-1",
       prompt: "do the thing",
@@ -75,11 +180,13 @@ describe("host operator entry", () => {
   });
 
   it("parseHostOperatorArgs accepts equals-form flags", () => {
-    const parsed = parseHostOperatorArgs([
-      "--ticket=T-9",
-      "--prompt=do it",
-      "--repo-url=https://example.test/r.git",
-    ]);
+    const parsed = withClearedAdwEnv(() =>
+      parseHostOperatorArgs([
+        "--ticket=T-9",
+        "--prompt=do it",
+        "--repo-url=https://example.test/r.git",
+      ])
+    );
     assert.deepStrictEqual(parsed, {
       ticketId: "T-9",
       prompt: "do it",
@@ -88,28 +195,15 @@ describe("host operator entry", () => {
   });
 
   it("parseHostOperatorArgs falls back to Config env", () => {
-    const prevTicket = process.env["ADW_TICKET_ID"];
-    const prevPrompt = process.env["ADW_PROMPT"];
-    process.env["ADW_TICKET_ID"] = "T-ENV";
-    process.env["ADW_PROMPT"] = "from env";
-    try {
-      const parsed = parseHostOperatorArgs([]);
-      assert.deepStrictEqual(parsed, {
-        ticketId: "T-ENV",
-        prompt: "from env",
-      });
-    } finally {
-      if (prevTicket === undefined) {
-        delete process.env["ADW_TICKET_ID"];
-      } else {
-        process.env["ADW_TICKET_ID"] = prevTicket;
-      }
-      if (prevPrompt === undefined) {
-        delete process.env["ADW_PROMPT"];
-      } else {
-        process.env["ADW_PROMPT"] = prevPrompt;
-      }
-    }
+    const parsed = withClearedAdwEnv(() => {
+      process.env["ADW_TICKET_ID"] = "T-ENV";
+      process.env["ADW_PROMPT"] = "from env";
+      return parseHostOperatorArgs([]);
+    });
+    assert.deepStrictEqual(parsed, {
+      ticketId: "T-ENV",
+      prompt: "from env",
+    });
   });
 
   it("redactSecrets strips token-like substrings from detail", () => {

@@ -132,6 +132,9 @@ const createOptions = (
   ...(modelId ? { model: { id: modelId } } : {}),
   local: {
     cwd: options.sandbox.cwd,
+    // Project ambient: rules + MCP config; workspace scan from cwd also
+    // picks up AGENTS.md + .agents/skills (IDE-like Host mirror).
+    settingSources: ["project"],
     ...(options.customTools
       ? { customTools: options.customTools as Record<string, SDKCustomTool> }
       : {}),

@@ -15,8 +15,8 @@ Hosted multi-org **Organization** Platform is a later packaging of the same core
 - **Agent** (configured): reusable LLM role primitive; owns **Skill pack** + **Role skill binding** (plus transitive skill refs). Distinct from **Agent session**.
 - **Skill pack**: default root `.agents/skills`. Organization custom packs = later hosted overlay on the same Agent primitive.
 - **ADW**: composable graph of Agents, deterministic gates, and/or nested ADWs. Never wrap a single Agent as a one-node ADW.
-- **Minimal ADW**: Build ↔ Test agent → Review → Ship agent (ADR-0007 shape). Test + Ship are **Code agents** (schema in; not LLMs). Canonical colored flow: [ADR-0007](adr/0007-minimal-adw-build-test-review.md).
-- **Feature ADW**: Planner Agent → nested Minimal ADW (one shared **warm sandbox**; Ship agent stays on Minimal after Review pass). Planner emits a **`/to-plan`** artifact into ADW/warm-sandbox state; Minimal consumes it.
+- **Minimal ADW**: Build ↔ Test agent → Review → Ship agent (ADR-0007 shape). Test + Ship are **Code agents** (schema in; not LLMs). Canonical colored flow: [ADR-0007](adr/0007-minimal-adw-build-test-review.md). **TicketIntake** (Host CLI) sits _before_ that graph: ready Issue → `ticketId` + prompt; not a Minimal ADW node.
+- **Feature ADW**: Planner Agent → nested Minimal ADW (one shared **warm sandbox**; Ship agent stays on Minimal after Review pass). Planner emits a **`/to-plan`** artifact into ADW/warm-sandbox state; Minimal consumes it. Feature ticket intake (Planner around a tracer ticket) is separate from Host Minimal **TicketIntake**.
 
 ![ADW diagram legend](diagrams/adw-legend.svg)
 
@@ -106,7 +106,7 @@ Acceptance criteria for **Minimal ADW** v0 green (self-building this repo on **H
   - [ ] Ship miss yields **`ready_for_pr`** without failing the agent loop / burning Build or Review attempts (ADR-0011)
   - [ ] Build↔Test and Review attempt caps behave per ADR-0009
 - [ ] **One documented manual self-build** on this repo: a real `ready-for-agent` Issue runs through Host Minimal ADW and reaches **`shipped`** (live PR)
-- [ ] **Intake:** thin operator/CLI (or app) starts Minimal ADW from one GitHub Issue labelled `ready-for-agent` (Issue id + body → `ticketId` / prompt) — not full triage automation
+- [ ] **Intake:** thin operator/CLI (or app) starts Minimal ADW from one GitHub Issue labelled `ready-for-agent` (Issue id + body → `ticketId` / prompt) — not full triage automation; diagram: TicketIntake → Prompt in [ADR-0007](adr/0007-minimal-adw-build-test-review.md) (outside the Build↔Ship spine)
 - [ ] **Build Role skill binding:** session bootstrap injects root `/implement` (flat skills + work; no role speech, no closure laundry list, no forced `/setup-matt-pocock-skills`); pack root `.agents/skills` present on agent cwd
 - [ ] **Review Role skill binding:** session bootstrap injects root `/adw-review`; pack root `.agents/skills` present on agent cwd
 - [ ] **Extractability note:** short consumer doc on depending on `runtime` / `adw` (+ git-host seam) outside monorepo apps — DX rough OK; npm publish **not** required

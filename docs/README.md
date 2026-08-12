@@ -4,11 +4,11 @@ Design notes and ADRs for the factory live here. Domain language: [`CONTEXT.md`]
 
 ## ADW flow diagrams
 
-| ADW             | Human layout                                                    | Agent graph          | Notes                                                                    |
-| --------------- | --------------------------------------------------------------- | -------------------- | ------------------------------------------------------------------------ |
-| **Minimal ADW** | [ADR-0007](./adr/0007-minimal-adw-build-test-review.md) Mermaid | same Mermaid         | Prompt → Build ↔ Test → Agent Review → Ship (open PR) → Engineer Review  |
-| **Feature ADW** | [SVG](./diagrams/feature-adw.svg) · [VISION §2](./VISION.md)    | Mermaid in VISION §2 | Planner → nested Minimal; Eng fail → Planner. Own ADR when Feature locks |
-| Ship statuses   | [ADR-0011](./adr/0011-git-host-ship-statuses.md)                | —                    | Points at ADR-0007 for the spine; `shipped` = PR opened, not merged      |
+| ADW             | Human layout                                                    | Agent graph          | Notes                                                                                             |
+| --------------- | --------------------------------------------------------------- | -------------------- | ------------------------------------------------------------------------------------------------- |
+| **Minimal ADW** | [ADR-0007](./adr/0007-minimal-adw-build-test-review.md) Mermaid | same Mermaid         | TicketIntake (Host CLI, optional) → Prompt → Build ↔ Test → Agent Review → Ship → Engineer Review |
+| **Feature ADW** | [SVG](./diagrams/feature-adw.svg) · [VISION §2](./VISION.md)    | Mermaid in VISION §2 | Planner → nested Minimal; Eng fail → Planner. Own ADR when Feature locks                          |
+| Ship statuses   | [ADR-0011](./adr/0011-git-host-ship-statuses.md)                | —                    | Points at ADR-0007 for the spine; `shipped` = PR opened, not merged                               |
 
 Do **not** draw Merge/deploy after Ship in these diagrams — merge is HITL (Engineer Review / humans), outside Minimal automation.
 
@@ -39,13 +39,13 @@ Do **not** bake the legend into flow SVGs (no `<image href=…>` inside charts �
 
 Shared palette for ADW flowcharts (Mermaid + SVG). Reuse these role names and hexes — do not invent per-diagram colors. Hex SoT matches [`adw-legend.svg`](./diagrams/adw-legend.svg).
 
-| Role (`classDef`) | Meaning                     | Fill      | Stroke    | Text      | Typical nodes                                    |
-| ----------------- | --------------------------- | --------- | --------- | --------- | ------------------------------------------------ |
-| `human`           | HITL                        | `#3b1a1a` | `#fca5a5` | `#fee2e2` | Initial prompt, Engineer Review (stadium / pill) |
-| `llm`             | LLM agent                   | `#3b2f1a` | `#fbbf24` | `#fef3c7` | Planner, Build                                   |
-| `gate`            | Test (**Code agent**)       | `#1a2e1a` | `#86efac` | `#dcfce7` | Test agent                                       |
-| `agent`           | Agent Review (LLM judgment) | `#2e1a3b` | `#c4b5fd` | `#ede9fe` | Agent Review                                     |
-| `ship`            | Ship (**Code agent**)       | `#1a2e2e` | `#5eead4` | `#ccfbf1` | Ship agent                                       |
+| Role (`classDef`) | Meaning                                    | Fill      | Stroke    | Text      | Typical nodes                                    |
+| ----------------- | ------------------------------------------ | --------- | --------- | --------- | ------------------------------------------------ |
+| `human`           | HITL                                       | `#3b1a1a` | `#fca5a5` | `#fee2e2` | Initial prompt, Engineer Review (stadium / pill) |
+| `llm`             | LLM agent                                  | `#3b2f1a` | `#fbbf24` | `#fef3c7` | Planner, Build                                   |
+| `gate`            | Test (**Code agent**) / deterministic seam | `#1a2e1a` | `#86efac` | `#dcfce7` | Test agent; TicketIntake (Host CLI)              |
+| `agent`           | Agent Review (LLM judgment)                | `#2e1a3b` | `#c4b5fd` | `#ede9fe` | Agent Review                                     |
+| `ship`            | Ship (**Code agent**)                      | `#1a2e2e` | `#5eead4` | `#ccfbf1` | Ship agent                                       |
 
 Test and Ship share **Code agent** kind (schema in; not LLMs) but keep **distinct** step colors so the spine stays scannable. Kind lives in the node label + [`CONTEXT.md`](../CONTEXT.md); color marks role in the flow.
 
@@ -67,7 +67,7 @@ classDef ship fill:#1a2e2e,stroke:#5eead4,color:#ccfbf1
 | [0004](./adr/0004-convex-better-auth-logical-tenancy.md)       | Convex + Better Auth, logical org tenancy (direction)                |
 | [0005](./adr/0005-agents-propose-orchestration-gates.md)       | Agents may run checks; orchestration owns hard gates                 |
 | [0006](./adr/0006-factory-is-self-building.md)                 | Factory is self-building (ADWs develop this repo)                    |
-| [0007](./adr/0007-minimal-adw-build-test-review.md)            | Minimal ADW: Prompt → Build → Test → Review → Ship agent             |
+| [0007](./adr/0007-minimal-adw-build-test-review.md)            | Minimal ADW: TicketIntake → Prompt → Build → Test → Review → Ship    |
 | [0008](./adr/0008-runtime-docker-cursor-sdk.md)                | Effect Runtime: classic Docker + Cursor SDK; Sandcastle out of stack |
 | [0009](./adr/0009-adw-attempt-caps-review-verdict.md)          | Build/Review caps + ReviewOutput; wire miss resumes Review           |
 | [0010](./adr/0010-workspace-provision-before-build.md)         | Workspace provision before Build                                     |
