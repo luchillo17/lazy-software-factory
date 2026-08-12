@@ -17,6 +17,7 @@ import {
 import { emitAdwProgress } from "./adw-progress.ts";
 import { ReviewVerdict } from "./enums.ts";
 import { ReviewOutput, type ReviewPassOutput } from "./review-output.ts";
+import { hostSkillPackRoot } from "./host-skill-pack-root.ts";
 import { AgentRole, bootstrapRoleSkillPrompt } from "./role-skill-binding.ts";
 import {
   createReviewVerdictToolStash,
@@ -111,6 +112,7 @@ export const runReviewAttempt = (
       sandbox,
       env,
       customTools,
+      workspaceDirs: [hostSkillPackRoot],
     });
     const reviewAttempts = input.reviewAttempts + 1;
     const sessionId = reviewSession.sessionId;
@@ -176,6 +178,7 @@ export const runReviewAttempt = (
         sandbox,
         env,
         customTools,
+        workspaceDirs: [hostSkillPackRoot],
       });
       wireMissResumes += 1;
     }

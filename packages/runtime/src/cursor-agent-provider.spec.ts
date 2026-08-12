@@ -106,6 +106,48 @@ describe("Cursor AgentProvider", () => {
       })
   );
 
+  it.effect("run passes workspaceDirs as local.dirs", () =>
+    Effect.gen(function* () {
+      const creates = yield* Ref.make<AgentOptions[]>([]);
+
+      const sdkLayer = Layer.succeed(
+        CursorSdk,
+        CursorSdk.of({
+          create: (options) =>
+            Effect.gen(function* () {
+              yield* Ref.update(creates, (c) => [...c, options]);
+              return fakeAgent({
+                agentId: "local-dirs",
+                onSend: async () => ({
+                  id: "run-dirs",
+                  status: "finished",
+                  result: "ok",
+                }),
+              });
+            }),
+          resume: () => Effect.die("resume unused"),
+        })
+      );
+
+      yield* Effect.gen(function* () {
+        const agent = yield* BuildAgentProvider;
+        return yield* agent.run({
+          prompt: "review",
+          sandbox: fakeSandbox,
+          env: { CURSOR_API_KEY: "k" },
+          workspaceDirs: ["/pack/host-skill-pack"],
+        });
+      }).pipe(Effect.provide(CursorBuildAgent.pipe(Layer.provide(sdkLayer))));
+
+      const createOpts = yield* Ref.get(creates);
+      assert.deepStrictEqual(createOpts[0]?.local, {
+        cwd: "/tmp/repo",
+        settingSources: ["project"],
+        dirs: ["/pack/host-skill-pack"],
+      });
+    })
+  );
+
   it.effect(
     "run resolves model from ADW_MODEL when options.model omitted",
     () =>

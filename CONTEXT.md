@@ -49,8 +49,8 @@ The LLM agent session that implements the ticket in the warm sandbox. Its `Agent
 _Avoid_: Treating Review’s session as the place to keep coding; inventing Build structured wire with no orchestration consumer
 
 **Test agent**:
-A **Code agent** that runs **check-only** gates (lint, format check, typecheck, unit tests, policy) via the Runtime — not an LLM. Independent checks run **in parallel**; any red resumes Build with a **combined** fail report (all failing gates’ output), same session and sandbox. Pass all → Review.
-_Avoid_: Test-writing agent, QA agent (unless we add a separate LLM role later); fail-fast on first red; mutating format/write steps inside the Test agent; reading Build LLM structured output to decide pass/fail
+A **Code agent** that runs **check-only** gates via the Runtime — not an LLM. Host resolves gates from the target repo root `package.json` scripts (`type-check`/`typecheck`, `lint:check`/`lint`, `test:run`/`test:ci`/`test`, …) as `pnpm|npm|yarn|bun run <script>` — not Factory-hardcoded nx package lists. Independent checks run **in parallel**; any red resumes Build with a **combined** fail report (all failing gates’ output), same session and sandbox. Pass all → Review. No matching scripts → ADW `failed` (no silent green).
+_Avoid_: Test-writing agent, QA agent (unless we add a separate LLM role later); fail-fast on first red; mutating format/write steps inside the Test agent; reading Build LLM structured output to decide pass/fail; baking one monorepo’s nx project list into Host Test
 
 **Review agent**:
 The LLM agent that critiques the change after the Test agent passes — same _shape_ as a Bugbot-style review (findings with location/severity), but orchestration does **not** auto-fix. Entering Review from Build/Test always starts a **new** `AgentSession` in the same warm sandbox. Structured **Review verdict** is captured **tool-only** via Runtime `local.customTools` submit tools (ADR-0014); Effect Schema in `execute` is the hard check. On **wire miss** (no accepted tool payload at harvest), orchestration **resumes that Review session** until a valid **Review verdict** or the inner wire-miss resume cap. A valid **fail** verdict’s fail report is the feedback when resuming Build. A valid **pass** includes **`prTitle` + `prBody`** (PR draft for the Ship agent). Review judges the **full pending delta**: committed ticket-branch tip **plus** unstaged/untracked worktree edits — not `merge-base...HEAD` alone. Review does **not** commit, push, or open PRs (Ship agent owns forge). Assistant prose may stream for humans; it is not the routing wire.
@@ -89,8 +89,8 @@ Policy on a configured **Agent** that names the root skill(s) that role must run
 _Avoid_: Encoding each skill as its own ADW graph; dumping the entire pack into every role with no binding; re-declaring bindings on every parent ADW; letting plan suggestions silently override the Agent bind
 
 **Skill pack**:
-A rooted set of Skill files available to a configured **Agent** (default for this Factory: `.agents/skills`). Organization-scoped custom packs are a later hosted overlay on the same Agent primitive.
-_Avoid_: Shipping a different AgentProvider per tenant; baking one repo’s skills into the AgentProvider binary
+A rooted set of Skill files available to a configured **Agent** (default on target cwd: `.agents/skills`). **Host CLI** also ships a bundled pack (`packages/adw/host-skill-pack`) so Review’s `/adw-review` is available via Cursor `local.dirs` even when the target repo lacks that skill. Build still uses the target cwd pack (`/implement`, …). Organization-scoped custom packs are a later hosted overlay on the same Agent primitive.
+_Avoid_: Shipping a different AgentProvider per tenant; requiring every target repo to vendor Factory-only skills like `/adw-review`
 
 **Runtime**:
 Our Effect TypeScript layer (`packages/runtime`) that owns sandbox lifecycle and agent providers (e.g. Cursor SDK). The Factory control plane calls the Runtime; skills do not.

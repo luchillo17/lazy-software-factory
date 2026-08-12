@@ -48,11 +48,9 @@ const buildBootstrapPreamble = (skillPackRoot: string) =>
     "",
   ].join("\n");
 
-const reviewBootstrapPreamble = (skillPackRoot: string) =>
+const reviewBootstrapPreamble = (_skillPackRoot: string) =>
   [
-    `Skill pack root on cwd: \`${skillPackRoot}\` (must be present on disk).`,
-    "",
-    `Use ${skillRef(ReviewSkill.AdwReview)} for this work.`,
+    `Use ${skillRef(ReviewSkill.AdwReview)} for this work (Factory Host skill pack — injected via agent workspace dirs; need not live on target cwd).`,
     "",
     "## Work",
     "",

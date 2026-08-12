@@ -10,7 +10,10 @@ export type AdwTestCommand = {
 export class AdwTestCommands extends Context.Service<
   AdwTestCommands,
   {
-    /** Read-only check gates; orchestration runs them in parallel. */
-    readonly commands: ReadonlyArray<AdwTestCommand>;
+    /**
+     * Resolve gates for the sandbox cwd (Host: target `package.json` scripts).
+     * Empty array → ADW fails before Test (no silent green).
+     */
+    readonly resolve: (cwd: string) => ReadonlyArray<AdwTestCommand>;
   }
 >()("@lazy-software-factory/adw/AdwTestCommands") {}

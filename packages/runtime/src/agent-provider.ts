@@ -39,6 +39,11 @@ export interface AgentRunOptions {
    * Ignored by non-Cursor adapters; Factory ADWs use SDK local agents.
    */
   readonly customTools?: Record<string, AgentCustomTool>;
+  /**
+   * Extra local workspace roots merged with `sandbox.cwd` (Cursor `local.dirs`).
+   * Host Review uses this to expose the bundled `/adw-review` skill pack.
+   */
+  readonly workspaceDirs?: readonly string[];
 }
 
 export interface AgentProviderService {

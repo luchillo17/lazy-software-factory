@@ -43,7 +43,8 @@ describe("Role skill binding bootstrap", () => {
       );
       assert.isTrue(prompt.includes(`Use \`/${ReviewSkill.AdwReview}\``));
       assert.isTrue(prompt.includes("Review changes for ticket T-1"));
-      assert.isTrue(prompt.includes(DEFAULT_SKILL_PACK_ROOT));
+      assert.isTrue(prompt.includes("Factory Host skill pack"));
+      assert.isFalse(prompt.includes(`Skill pack root on cwd`));
       assert.isFalse(prompt.includes("AGENTS.md"));
       assert.isFalse(prompt.includes("Bugbot-shaped"));
       assert.isFalse(prompt.includes("setup-matt-pocock-skills"));

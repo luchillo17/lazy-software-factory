@@ -25,6 +25,10 @@ import { runShipAgent } from "./ship-agent.ts";
 import { ShipInput } from "./ship-input.ts";
 import { AdwTestCommands } from "./test-commands.ts";
 import {
+  hostAdwReviewSkillExists,
+  hostSkillPackRoot,
+} from "./host-skill-pack-root.ts";
+import {
   AgentRole,
   bootstrapRoleSkillPrompt,
   skillPackRootExists,
@@ -123,6 +127,25 @@ export const runMinimalAdw = (
         } satisfies MinimalAdwResult;
       }
 
+      if (!hostAdwReviewSkillExists()) {
+        return {
+          ticketId: input.ticketId,
+          status: AdwStatus.Failed,
+          detail: `Host bundled /adw-review missing under ${hostSkillPackRoot}`,
+          sandboxId: sandbox.id,
+        } satisfies MinimalAdwResult;
+      }
+
+      const testCommandsResolved = testCommands.resolve(sandbox.cwd);
+      if (testCommandsResolved.length === 0) {
+        return {
+          ticketId: input.ticketId,
+          status: AdwStatus.Failed,
+          detail: `No check scripts found in package.json under ${sandbox.cwd} (need type-check/lint/test:run or equivalents)`,
+          sandboxId: sandbox.id,
+        } satisfies MinimalAdwResult;
+      }
+
       yield* emitAdwProgress({
         kind: AdwProgressKind.StepEnter,
         step: AdwStep.Build,
@@ -151,7 +174,7 @@ export const runMinimalAdw = (
           buildAgent,
           sandbox,
           env: input.env,
-          commands: testCommands.commands,
+          commands: testCommandsResolved,
           buildSession,
           buildAttempts,
           reviewAttempts,

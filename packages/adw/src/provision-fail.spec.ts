@@ -84,7 +84,9 @@ describe("runMinimalAdw provision failure", () => {
         ),
         Layer.succeed(
           AdwTestCommands,
-          AdwTestCommands.of({ commands: [{ command: "t" }] })
+          AdwTestCommands.of({
+            resolve: () => [{ command: "t" }],
+          })
         ),
         AdwBuildAttemptCap.Default,
         AdwReviewAttemptCap.Default,

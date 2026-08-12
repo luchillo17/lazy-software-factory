@@ -22,6 +22,7 @@ import {
 import { redactSecrets } from "./redact-secrets.ts";
 import { AdwTestCommands } from "./test-commands.ts";
 import { TicketIntake, type TicketIntakeError } from "./ticket-intake.ts";
+import { resolvePackageJsonTestCommands } from "./package-json-test-commands.ts";
 import { WorkspaceProvision } from "./workspace-provision.ts";
 
 export { redactSecrets } from "./redact-secrets.ts";
@@ -188,34 +189,7 @@ export const hostMinimalAdwLayer = Layer.mergeAll(
   Layer.succeed(
     AdwTestCommands,
     AdwTestCommands.of({
-      commands: [
-        {
-          command: "pnpm",
-          args: [
-            "nx",
-            "run-many",
-            "-t",
-            "typecheck",
-            "-p",
-            "adw,runtime,git-host",
-          ],
-        },
-        {
-          command: "pnpm",
-          args: ["nx", "run-many", "-t", "test", "-p", "adw,runtime,git-host"],
-        },
-        {
-          command: "pnpm",
-          args: [
-            "exec",
-            "prettier",
-            "--check",
-            "packages/adw",
-            "packages/runtime",
-            "packages/git-host",
-          ],
-        },
-      ],
+      resolve: resolvePackageJsonTestCommands,
     })
   ),
   AdwBuildAttemptCap.Default,
