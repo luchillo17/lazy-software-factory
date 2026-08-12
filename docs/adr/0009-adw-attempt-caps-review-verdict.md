@@ -5,9 +5,9 @@ Orchestration owns loop termination and Review routing for the minimal ADW (ADR-
 - **Build attempt** (default cap **5**): each Build agent create/resume in the **Build↔Test** loop only. Test-agent fail → resume Build spends one Build attempt. Exhaust Build attempts → ADW `failed`.
 - **Review attempt** (default cap **3**): each Review agent **create** when entering Review from Build/Test (always a **new** agent session for that entry). A valid Review-fail → resume Build with the fail report does **not** spend a Build attempt; only that Review **create** spent a Review attempt. Exhaust Review attempts → ADW `failed` even if Build attempts remain.
 
-Review must emit a **structured Review verdict** (`ReviewOutput`: **pass** with non-empty **`prTitle` + `prBody`**, or **fail** with a fail report of Bugbot-shaped findings). Orchestration owns the wire contract: the Review **create** prompt includes the expected shape; orchestration parses with schema decode to route.
+Review must produce a **structured Review verdict** (`ReviewOutput`: **pass** with non-empty **`prTitle` + `prBody`**, or **fail** with a fail report of Bugbot-shaped findings). Orchestration owns the wire contract and routing. **How** the verdict is captured from the Review LLM (submit tools) is ADR-0014 — tool-only for structured Agent output.
 
-- **Schema miss** (malformed/unknown output, including pass missing PR draft fields): **resume the same Review session** with decode error + expected shape + redacted/truncated prior output. Schema resumes do **not** spend an extra Review attempt; they use an **inner schema-resume cap** (v0 default **3**) per Review session. Exhaust that cap → ADW `failed`. Do **not** send schema miss to Build.
+- **Wire miss** (no accepted structured verdict at harvest — including missing PR draft fields on pass): **resume the same Review session** with guidance + redacted/truncated prior output. Wire-miss resumes do **not** spend an extra Review attempt; they use an **inner wire-miss resume cap** (v0 default **3**) per Review session. Exhaust that cap → ADW `failed`. Do **not** send wire miss to Build. Progress kind: `wire_miss` / step result `wire_resume`.
 - **Valid fail**: fail report is feedback when resuming the **original Build** session.
 - **Valid pass**: build **`ShipInput`** from pass fields + sandbox/ticket context; advance to the **Ship agent**.
 
@@ -24,6 +24,6 @@ accepted
 - **Unbounded resume until human abort** — rejected; token burn and zombie tickets.
 - **Free-text-only Review / advisory Review that never blocks** — rejected for minimal ADW; we need parseable pass/fail and fail-report feedback for Build resume.
 - **Review auto-fixes findings** — rejected for v0; Fix/dismiss stays human or later; ADW Review reports, Build implements.
-- **Schema miss counts as Review-fail and resumes Build** — rejected; Build must not debug Review JSON. Schema is the agent-to-agent wire contract; format repair stays on the Review session.
-- **New Review session on every schema miss** — rejected; the review already ran — the agent needs output-shape guidance, not a cold restart.
-- **Charge every schema resume as a Review attempt** — rejected; create already charged the judgment entry; unbounded format thrash is bounded by the inner schema-resume cap instead.
+- **Wire miss counts as Review-fail and resumes Build** — rejected; Build must not debug Review wire shape. Format repair stays on the Review session.
+- **New Review session on every wire miss** — rejected; the review already ran — the agent needs output-shape guidance, not a cold restart.
+- **Charge every wire-miss resume as a Review attempt** — rejected; create already charged the judgment entry; unbounded format thrash is bounded by the inner resume cap instead.

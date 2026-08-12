@@ -13,8 +13,8 @@ import {
 } from "./attempt-caps.ts";
 import { AdwStatus } from "./enums.ts";
 import { GitHost } from "./git-host.ts";
-import { reviewPassFixture } from "./review-pass-fixture.ts";
 import { runMinimalAdw } from "./run-minimal-adw.ts";
+import { submitReviewPassViaTools } from "./review-tool-test-helpers.ts";
 import { AdwTestCommands } from "./test-commands.ts";
 import { WorkspaceProvision } from "./workspace-provision.ts";
 import { monorepoRoot } from "./monorepo-root.ts";
@@ -103,14 +103,12 @@ describe("runMinimalAdw happy path", () => {
               yield* record("review");
               assert.isDefined(options.sandbox);
               assert.isTrue(options.prompt.includes("/adw-review"));
-              assert.isTrue(options.prompt.includes("ReviewOutput"));
+              assert.isTrue(options.prompt.includes("submit_review_pass"));
               assert.isTrue(
                 options.prompt.includes("Review changes for ticket TICKET-1")
               );
-              return {
-                sessionId: "review-session-1",
-                output: reviewPassFixture(),
-              };
+              yield* submitReviewPassViaTools(options);
+              return { sessionId: "review-session-1" };
             }),
           resume: () => Effect.die("Review resume must not run on happy path"),
         })

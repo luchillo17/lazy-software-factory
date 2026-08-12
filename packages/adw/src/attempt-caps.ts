@@ -23,8 +23,8 @@ export class AdwReviewAttemptCap extends Context.Service<
 }
 
 /**
- * Inner schema-resume budget per Review session (ADR-0009). Default 3.
- * Does not spend Review attempts; exhaust → ADW failed without Build resume.
+ * Inner wire-miss resume budget per Review session (ADR-0009 / ADR-0014).
+ * Default 3. Does not spend Review attempts; exhaust → ADW failed without Build resume.
  */
 export class AdwSchemaResumeCap extends Context.Service<
   AdwSchemaResumeCap,

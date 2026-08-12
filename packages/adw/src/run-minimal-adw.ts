@@ -81,7 +81,7 @@ export const runMinimalAdw = (
       const provisioner = yield* WorkspaceProvision;
       const { maxAttempts: buildAttemptCap } = yield* AdwBuildAttemptCap;
       const { maxAttempts: reviewAttemptCap } = yield* AdwReviewAttemptCap;
-      const { maxAttempts: schemaResumeCap } = yield* AdwSchemaResumeCap;
+      const { maxAttempts: wireMissCap } = yield* AdwSchemaResumeCap;
 
       const sandbox = yield* sandboxes.create({
         cwd: process.cwd(),
@@ -187,14 +187,16 @@ export const runMinimalAdw = (
           sandbox,
           ticketId: input.ticketId,
           env: input.env,
-          schemaResumeCap,
+          wireMissCap,
           buildAttempts,
           reviewAttempts,
         });
         reviewSessionId = reviewResult.sessionId;
         reviewAttempts = reviewResult.reviewAttempts;
 
-        if (reviewResult.outcome === ReviewAttemptOutcome.SchemaCapExhausted) {
+        if (
+          reviewResult.outcome === ReviewAttemptOutcome.WireMissCapExhausted
+        ) {
           return {
             ticketId: input.ticketId,
             status: AdwStatus.Failed,
