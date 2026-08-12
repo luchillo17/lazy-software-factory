@@ -2,8 +2,8 @@ import { Schema } from "effect";
 
 /**
  * Schema-guaranteed input for the **Ship agent** (Code agent).
- * Orchestration builds this after Review pass (title/body may be placeholders
- * until Review pass owns the PR draft).
+ * Built by orchestration from a decoded Review **pass** (`prTitle`/`prBody`)
+ * plus sandbox/ticket fields.
  */
 export const ShipInput = Schema.Struct({
   ticketId: Schema.NonEmptyString,

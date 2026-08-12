@@ -14,6 +14,7 @@ import {
 } from "./attempt-caps.ts";
 import { AdwStatus, ReviewVerdict } from "./enums.ts";
 import { GitHost } from "./git-host.ts";
+import { reviewPassFixture } from "./review-pass-fixture.ts";
 import { runMinimalAdw } from "./run-minimal-adw.ts";
 import { AdwTestCommands } from "./test-commands.ts";
 import { WorkspaceProvision } from "./workspace-provision.ts";
@@ -111,7 +112,7 @@ describe("runMinimalAdw Review routing + cap", () => {
                 }
                 return {
                   sessionId: id,
-                  output: { verdict: ReviewVerdict.Pass },
+                  output: reviewPassFixture(),
                 };
               }),
             resume: () => Effect.die("Review must not resume"),
@@ -190,7 +191,7 @@ describe("runMinimalAdw Review routing + cap", () => {
               yield* Ref.set(createPrompt, options.prompt);
               return {
                 sessionId: "review-session-1",
-                output: { verdict: ReviewVerdict.Pass },
+                output: reviewPassFixture(),
               };
             }),
           resume: () => Effect.die("Review must not resume"),
@@ -281,7 +282,7 @@ describe("runMinimalAdw Review routing + cap", () => {
                 ]);
                 return {
                   sessionId: session.sessionId,
-                  output: { verdict: ReviewVerdict.Pass },
+                  output: reviewPassFixture(),
                 };
               }),
           })
@@ -322,6 +323,79 @@ describe("runMinimalAdw Review routing + cap", () => {
           resumes[0]!.includes("decode") || resumes[0]!.includes("Schema")
         );
         assert.isTrue(resumes[0]!.includes("notAVerdict"));
+      })
+  );
+
+  it.effect(
+    "pass without prTitle/prBody is schema miss and resumes to valid pass",
+    () =>
+      Effect.gen(function* () {
+        const reviewResumes = yield* Ref.make(0);
+
+        const sandboxLayer = Layer.succeed(
+          SandboxProvider,
+          SandboxProvider.of({
+            create: () =>
+              Effect.succeed({
+                id: "sandbox-1",
+                cwd: monorepoRoot,
+                exec: () =>
+                  Effect.succeed({ exitCode: 0, stdout: "", stderr: "" }),
+                destroy: () => Effect.void,
+              } satisfies Sandbox),
+          })
+        );
+
+        const buildLayer = Layer.succeed(
+          BuildAgentProvider,
+          BuildAgentProvider.of({
+            run: () => Effect.succeed({ sessionId: "build-session-1" }),
+            resume: () => Effect.die("Build must not resume on PR-draft miss"),
+          })
+        );
+
+        const reviewLayer = Layer.succeed(
+          ReviewAgentProvider,
+          ReviewAgentProvider.of({
+            run: () =>
+              Effect.succeed({
+                sessionId: "review-session-1",
+                output: { verdict: ReviewVerdict.Pass },
+              }),
+            resume: (session) =>
+              Effect.gen(function* () {
+                yield* Ref.update(reviewResumes, (n) => n + 1);
+                return {
+                  sessionId: session.sessionId,
+                  output: reviewPassFixture(),
+                };
+              }),
+          })
+        );
+
+        const result = yield* runMinimalAdw({
+          ticketId: "T-PASS-DRAFT",
+          prompt: "work",
+        }).pipe(
+          Effect.provide(
+            Layer.mergeAll(
+              sandboxLayer,
+              buildLayer,
+              reviewLayer,
+              provisionAndShip,
+              Layer.succeed(
+                AdwTestCommands,
+                AdwTestCommands.of({ commands: [{ command: "t" }] })
+              ),
+              AdwBuildAttemptCap.Default,
+              AdwReviewAttemptCap.Default,
+              AdwSchemaResumeCap.Default
+            )
+          )
+        );
+
+        assert.strictEqual(result.status, AdwStatus.Shipped);
+        assert.strictEqual(yield* Ref.get(reviewResumes), 1);
       })
   );
 
@@ -375,7 +449,7 @@ describe("runMinimalAdw Review routing + cap", () => {
                 if (pass) {
                   return {
                     sessionId: "review-session-2",
-                    output: { verdict: ReviewVerdict.Pass },
+                    output: reviewPassFixture(),
                   };
                 }
                 return {

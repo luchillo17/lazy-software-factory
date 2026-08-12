@@ -22,7 +22,7 @@ flowchart TB
 
   Prompt --> Build --> Test
   Test -->|green| AgentReview
-  AgentReview -->|"pass on HEAD + pending"| Ship
+  AgentReview -->|"pass + prTitle/prBody"| Ship
   Ship -->|"shipped = PR opened"| EngineerReview
 
   Test -.->|fail| Build

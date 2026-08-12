@@ -11,8 +11,9 @@ import {
   AdwReviewAttemptCap,
   AdwSchemaResumeCap,
 } from "./attempt-caps.ts";
-import { AdwStatus, ReviewVerdict } from "./enums.ts";
+import { AdwStatus } from "./enums.ts";
 import { GitHost, GitHostError } from "./git-host.ts";
+import { reviewPassFixture } from "./review-pass-fixture.ts";
 import { runMinimalAdw } from "./run-minimal-adw.ts";
 import { AdwTestCommands } from "./test-commands.ts";
 import { WorkspaceProvision } from "./workspace-provision.ts";
@@ -48,7 +49,7 @@ const greenAgents = Layer.mergeAll(
       run: () =>
         Effect.succeed({
           sessionId: "review-session-1",
-          output: { verdict: ReviewVerdict.Pass },
+          output: reviewPassFixture(),
         }),
       resume: () => Effect.die("unused"),
     })
@@ -88,7 +89,7 @@ describe("runMinimalAdw Ship → ready_for_pr", () => {
               yield* Ref.update(reviewRuns, (n) => n + 1);
               return {
                 sessionId: "review-session-1",
-                output: { verdict: ReviewVerdict.Pass },
+                output: reviewPassFixture(),
               };
             }),
           resume: () => Effect.die("unused"),
@@ -152,24 +153,53 @@ describe("runMinimalAdw Ship → ready_for_pr", () => {
 
   it.effect("successful push+PR still yields shipped", () =>
     Effect.gen(function* () {
+      const opened = yield* Ref.make<{ title: string; body?: string } | null>(
+        null
+      );
+      const draft = reviewPassFixture({
+        prTitle: "feat: ship draft from review",
+        prBody: "## Summary\n- from Review pass",
+      });
+
+      const reviewLayer = Layer.succeed(
+        ReviewAgentProvider,
+        ReviewAgentProvider.of({
+          run: () =>
+            Effect.succeed({
+              sessionId: "review-session-1",
+              output: draft,
+            }),
+          resume: () => Effect.die("unused"),
+        })
+      );
+
       const gitLayer = Layer.succeed(
         GitHost,
         GitHost.of({
           commitWorkingTree: () => Effect.void,
           clone: () => Effect.void,
           push: () => Effect.void,
-          openPullRequest: () =>
-            Effect.succeed({ url: "https://example.test/pr/9" }),
+          openPullRequest: (opts) =>
+            Effect.gen(function* () {
+              yield* Ref.set(opened, { title: opts.title, body: opts.body });
+              return { url: "https://example.test/pr/9" };
+            }),
         })
       );
 
       const result = yield* runMinimalAdw({
         ticketId: "T-OK",
         prompt: "work",
-      }).pipe(Effect.provide(Layer.mergeAll(greenAgents, gitLayer)));
+      }).pipe(
+        Effect.provide(Layer.mergeAll(greenAgents, reviewLayer, gitLayer))
+      );
 
       assert.strictEqual(result.status, AdwStatus.Shipped);
       assert.strictEqual(result.prUrl, "https://example.test/pr/9");
+      assert.deepStrictEqual(yield* Ref.get(opened), {
+        title: draft.prTitle,
+        body: draft.prBody,
+      });
     })
   );
 

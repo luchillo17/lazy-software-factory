@@ -12,9 +12,10 @@ import {
   AdwReviewAttemptCap,
   AdwSchemaResumeCap,
 } from "./attempt-caps.ts";
-import { AdwStatus, ReviewVerdict } from "./enums.ts";
+import { AdwStatus } from "./enums.ts";
 import { GitHost } from "./git-host.ts";
 import { monorepoRoot } from "./monorepo-root.ts";
+import { reviewPassFixture } from "./review-pass-fixture.ts";
 import { runMinimalAdw } from "./run-minimal-adw.ts";
 import { AdwTestCommands } from "./test-commands.ts";
 import { WorkspaceProvision } from "./workspace-provision.ts";
@@ -91,7 +92,7 @@ describe("runMinimalAdw progress events", () => {
                 run: () =>
                   Effect.succeed({
                     sessionId: "review-1",
-                    output: { verdict: ReviewVerdict.Pass },
+                    output: reviewPassFixture(),
                   }),
                 resume: () => Effect.die("unused"),
               })

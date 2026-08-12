@@ -24,7 +24,7 @@ import {
   reviewOutputContractPrompt,
   schemaRepairPrompt,
 } from "./review-output-contract.ts";
-import { ReviewOutput } from "./review-output.ts";
+import { ReviewOutput, type ReviewPassOutput } from "./review-output.ts";
 import { runShipAgent } from "./ship-agent.ts";
 import { ShipInput } from "./ship-input.ts";
 import { AdwTestCommands, type AdwTestCommand } from "./test-commands.ts";
@@ -42,7 +42,7 @@ import { WorkspaceProvision } from "./workspace-provision.ts";
  *
  * Build↔Test and Review have separate attempt caps (ADR-0009). Review fail
  * resumes the original Build session without spending a Build attempt.
- * Ship is a Code agent with schema {@link ShipInput}.
+ * Ship is a Code agent with schema `ShipInput` from Review pass.
  */
 export interface MinimalAdwInput {
   readonly ticketId: string;
@@ -185,6 +185,7 @@ export const runMinimalAdw = (
       let buildAttempts = 1;
       let reviewAttempts = 0;
       let reviewSessionId: string | undefined;
+      let passReview: ReviewPassOutput | undefined;
       yield* emitAdwProgress({
         kind: AdwProgressKind.StepResult,
         step: AdwStep.Build,
@@ -387,6 +388,7 @@ export const runMinimalAdw = (
         }
 
         if (decoded.verdict === ReviewVerdict.Pass) {
+          passReview = decoded;
           yield* emitAdwProgress({
             kind: AdwProgressKind.StepResult,
             step: AdwStep.Review,
@@ -434,14 +436,25 @@ export const runMinimalAdw = (
         });
       }
 
+      if (passReview === undefined) {
+        return {
+          ticketId: input.ticketId,
+          status: AdwStatus.Failed,
+          detail: "Review pass missing after loop exit",
+          sandboxId: sandbox.id,
+          buildSessionId: buildSession.sessionId,
+          reviewSessionId,
+        } satisfies MinimalAdwResult;
+      }
+
       const branch = ticketBranch(input.ticketId);
 
       const shipInputResult = yield* Schema.decodeUnknownEffect(ShipInput)({
         ticketId: input.ticketId,
         cwd: sandbox.cwd,
         branch,
-        prTitle: `ADW: ${input.ticketId}`,
-        prBody: `Automated Minimal ADW ship for ticket ${input.ticketId}.`,
+        prTitle: passReview.prTitle,
+        prBody: passReview.prBody,
         env: input.env,
       }).pipe(
         Effect.map((value) => ({ ok: true as const, value })),

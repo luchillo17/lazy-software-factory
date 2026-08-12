@@ -1,16 +1,16 @@
 ---
 name: adw-review
-description: "Minimal ADW Review step — ticket-branch findings + structured pass/fail verdict."
+description: "Minimal ADW Review — pending-delta findings, structured verdict, PR draft on pass."
 disable-model-invocation: true
 ---
 
 # ADW Review
 
-Produce a **verdict** on the current ticket branch: **findings** (location + severity), then machine-readable JSON for the ADW. Do **not** `git commit`, stage, push, or open a PR — Ship agent owns that.
+Produce a **verdict** on the ticket branch for the ADW: **findings**, then one JSON object. Review emits that JSON only — the **Ship agent** commits, pushes, and opens the PR.
 
-## 1. Diff
+## 1. Pending delta
 
-Capture the **full pending delta** — committed tip **and** dirty worktree:
+Gather the **full pending delta** — committed tip **and** dirty worktree:
 
 ```bash
 git merge-base HEAD origin/main 2>/dev/null || git merge-base HEAD main
@@ -20,15 +20,15 @@ git diff --cached
 git status --porcelain
 ```
 
-Include untracked files from `git status --porcelain` (open them as needed). Empty committed diff **and** empty worktree pending → step 3 with `verdict: pass` and a short PR draft.
+Open untracked paths from `git status --porcelain` as needed. Empty committed diff **and** empty worktree → step 3 **pass** (with **PR draft**).
 
-**Done when:** committed three-dot diff plus unstaged/staged/untracked pending are in hand.
+**Done when:** three-dot committed diff plus unstaged/staged/untracked pending are in hand.
 
 ## 2. Findings
 
-Inspect that full pending delta (open files only as needed). List every likely bug, regression, broken edge case, or security mistake the change introduces — including issues only in uncommitted files.
+Inspect that **pending delta** (open files only as needed). List every likely bug, regression, broken edge case, or security mistake the change introduces — including issues only in uncommitted files.
 
-Each **finding** has: `path:line` (or range), severity (`high` / `medium` / `low`), problem, fix hint for Build.
+Each **finding**: `path:line` (or range), severity (`high` / `medium` / `low`), problem, fix hint for Build.
 
 **Done when:** every such issue in the pending delta is listed, or the list is empty.
 
@@ -36,17 +36,23 @@ Each **finding** has: `path:line` (or range), severity (`high` / `medium` / `low
 
 Emit exactly one JSON object as the **last** block.
 
-**Pass** (empty findings / empty pending) — include PR draft for the Ship agent:
+### Pass
+
+Empty **findings** (or empty pending). Write the **PR draft** first — see [pr-draft.md](pr-draft.md) — then emit:
 
 ```json
 {
   "verdict": "pass",
-  "prTitle": "<concise conventional title>",
-  "prBody": "<markdown: summary + test plan>"
+  "prTitle": "<from PR draft>",
+  "prBody": "<from PR draft>"
 }
 ```
 
-**Fail** — do not invent PR fields:
+**Done when:** **PR draft** meets [pr-draft.md](pr-draft.md), and JSON includes non-empty `prTitle` + `prBody`.
+
+### Fail
+
+Non-empty **findings**. Emit **verdict** + `failReport` only:
 
 ```json
 {
@@ -55,4 +61,4 @@ Emit exactly one JSON object as the **last** block.
 }
 ```
 
-**Done when:** `verdict` is `pass` with non-empty `prTitle` + `prBody`, or `fail` with a non-empty `failReport`.
+**Done when:** `failReport` lists every **finding** from step 2.

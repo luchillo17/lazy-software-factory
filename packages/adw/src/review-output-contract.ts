@@ -4,7 +4,7 @@ import { redactSecrets } from "./redact-secrets.ts";
 
 /**
  * Create-time Review wire contract for orchestration (ADR-0009).
- * Not a Skill — composed into the Review agent create prompt.
+ * Shape only — PR draft quality SoT is `/adw-review` (`pr-draft.md`).
  */
 export const reviewOutputContractPrompt = (): string =>
   [
@@ -13,7 +13,7 @@ export const reviewOutputContractPrompt = (): string =>
     "Emit exactly one JSON object as the **last** block. Shape:",
     "",
     "```json",
-    `{ "verdict": "${ReviewVerdict.Pass}" }`,
+    `{ "verdict": "${ReviewVerdict.Pass}", "prTitle": "<PR title>", "prBody": "<PR body markdown>" }`,
     "```",
     "",
     "or",
@@ -26,7 +26,9 @@ export const reviewOutputContractPrompt = (): string =>
       ReviewVerdict.Pass +
       "` or `" +
       ReviewVerdict.Fail +
-      "`. On fail, `failReport` is required non-empty text for Build.",
+      "`. On pass, `prTitle` and `prBody` are required non-empty (Ship agent opens the PR with them). On fail, `failReport` is required non-empty text for Build.",
+    "",
+    "PR draft quality (pass): follow `/adw-review` → `pr-draft.md` (title + lead paragraph name the concrete change).",
   ].join("\n");
 
 /** Resume prompt after ReviewOutput schema miss (same Review session). */
