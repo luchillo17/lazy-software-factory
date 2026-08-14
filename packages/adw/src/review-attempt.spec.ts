@@ -25,11 +25,11 @@ const session = (sessionId = "review-session-1"): AgentSession => ({
   sessionId,
 });
 
-const ticketPrompt =
+const workPrompt =
   "# Extractability note\n\n## Acceptance criteria\n\n- Short note exists";
 
 describe("runReviewAttempt", () => {
-  it.effect("create prompt includes ticket body for AC context", () =>
+  it.effect("create prompt includes work prompt for judgment context", () =>
     Effect.gen(function* () {
       const createPrompt = yield* Ref.make<string | undefined>(undefined);
       const reviewAgent: AgentProviderService = {
@@ -45,17 +45,49 @@ describe("runReviewAttempt", () => {
         reviewAgent,
         sandbox,
         ticketId: "39",
-        ticketPrompt,
+        prompt: workPrompt,
         wireMissCap: 2,
         buildAttempts: 1,
         reviewAttempts: 0,
       });
       const prompt = yield* Ref.get(createPrompt);
       assert.isTrue(prompt !== undefined);
-      assert.isTrue(prompt!.includes("ticket 39"));
-      assert.isTrue(prompt!.includes("## Ticket"));
+      assert.isTrue(prompt!.includes("ADW run `39`"));
+      assert.isTrue(prompt!.includes("## Work"));
       assert.isTrue(prompt!.includes("## Acceptance criteria"));
       assert.isTrue(prompt!.includes("Short note exists"));
+    })
+  );
+
+  it.effect("create prompt accepts plain work text without Issue framing", () =>
+    Effect.gen(function* () {
+      const createPrompt = yield* Ref.make<string | undefined>(undefined);
+      const reviewAgent: AgentProviderService = {
+        run: (options) =>
+          Effect.gen(function* () {
+            yield* Ref.set(createPrompt, options.prompt);
+            yield* submitReviewPassViaTools(options);
+            return session();
+          }),
+        resume: () => Effect.die("unused"),
+      };
+      yield* runReviewAttempt({
+        reviewAgent,
+        sandbox,
+        ticketId: "local-1",
+        prompt: "Add a hello world script.",
+        wireMissCap: 2,
+        buildAttempts: 1,
+        reviewAttempts: 0,
+      });
+      const prompt = yield* Ref.get(createPrompt);
+      assert.isTrue(prompt !== undefined);
+      assert.isTrue(prompt!.includes("## Work"));
+      assert.isTrue(prompt!.includes("Add a hello world script."));
+      assert.isFalse(prompt!.includes("## Ticket"));
+      assert.isTrue(
+        prompt!.includes("acceptance criteria when the prompt includes them")
+      );
     })
   );
 
@@ -73,7 +105,7 @@ describe("runReviewAttempt", () => {
         reviewAgent,
         sandbox,
         ticketId: "T-1",
-        ticketPrompt,
+        prompt: workPrompt,
         wireMissCap: 2,
         buildAttempts: 1,
         reviewAttempts: 0,
@@ -102,7 +134,7 @@ describe("runReviewAttempt", () => {
         reviewAgent,
         sandbox,
         ticketId: "T-1",
-        ticketPrompt,
+        prompt: workPrompt,
         wireMissCap: 2,
         buildAttempts: 1,
         reviewAttempts: 1,
@@ -135,7 +167,7 @@ describe("runReviewAttempt", () => {
         reviewAgent,
         sandbox,
         ticketId: "T-1",
-        ticketPrompt,
+        prompt: workPrompt,
         wireMissCap: 2,
         buildAttempts: 1,
         reviewAttempts: 0,
@@ -161,7 +193,7 @@ describe("runReviewAttempt", () => {
         reviewAgent,
         sandbox,
         ticketId: "T-1",
-        ticketPrompt,
+        prompt: workPrompt,
         wireMissCap: 2,
         buildAttempts: 1,
         reviewAttempts: 0,
@@ -181,7 +213,7 @@ describe("runReviewAttempt", () => {
         reviewAgent,
         sandbox,
         ticketId: "T-1",
-        ticketPrompt,
+        prompt: workPrompt,
         wireMissCap: 1,
         buildAttempts: 1,
         reviewAttempts: 0,
@@ -217,7 +249,7 @@ describe("runReviewAttempt", () => {
         reviewAgent,
         sandbox,
         ticketId: "T-1",
-        ticketPrompt,
+        prompt: workPrompt,
         wireMissCap: 2,
         buildAttempts: 1,
         reviewAttempts: 0,
@@ -244,7 +276,7 @@ describe("runReviewAttempt", () => {
         reviewAgent,
         sandbox,
         ticketId: "T-1",
-        ticketPrompt,
+        prompt: workPrompt,
         wireMissCap: 2,
         buildAttempts: 1,
         reviewAttempts: 0,

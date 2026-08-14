@@ -104,9 +104,9 @@ describe("runMinimalAdw happy path", () => {
               assert.isDefined(options.sandbox);
               assert.isTrue(options.prompt.includes("/adw-review"));
               assert.isTrue(options.prompt.includes("submit_review_pass"));
-              assert.isTrue(
-                options.prompt.includes("Review changes for ticket TICKET-1")
-              );
+              assert.isTrue(options.prompt.includes("ADW run `TICKET-1`"));
+              assert.isTrue(options.prompt.includes("## Work"));
+              assert.isTrue(options.prompt.includes("implement the thing"));
               yield* submitReviewPassViaTools(options);
               return { sessionId: "review-session-1" };
             }),

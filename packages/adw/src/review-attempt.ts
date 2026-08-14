@@ -60,8 +60,11 @@ export interface RunReviewAttemptInput {
   readonly reviewAgent: AgentProviderService;
   readonly sandbox: Sandbox;
   readonly ticketId: string;
-  /** Same ticket body Build got (AC / issue text) for Review judgment context. */
-  readonly ticketPrompt: string;
+  /**
+   * Same work prompt Build got — Issue body via intake, or plain `--prompt`
+   * text. Not always a tracker ticket.
+   */
+  readonly prompt: string;
   readonly env?: Readonly<Record<string, string>>;
   /** Inner wire-miss resume budget (ADR-0009). */
   readonly wireMissCap: number;
@@ -84,21 +87,24 @@ const reviewOutputRaw = (output: unknown): string => {
   }
 };
 
-/** Work section under Role bootstrap: contract + ticket context + submit guidance. */
+/**
+ * Work section under Role bootstrap: contract + work prompt + submit guidance.
+ * `ticketId` is the ADW run / branch id only — prompt may be plain text.
+ */
 export const reviewCreateWorkPrompt = (
   ticketId: string,
-  ticketPrompt: string
+  prompt: string
 ): string =>
   [
     reviewOutputContractPrompt(),
     "",
-    `Review changes for ticket ${ticketId}.`,
-    "Judge the pending delta against the ticket acceptance criteria below.",
+    `Review changes for ADW run \`${ticketId}\` (branch \`adw/${ticketId}\`).`,
+    "Judge the pending delta against the work prompt below (use acceptance criteria when the prompt includes them).",
     "Inspect git status / diff if needed, then submit the verdict via submit_review_pass or submit_review_fail.",
     "",
-    "## Ticket",
+    "## Work",
     "",
-    ticketPrompt.trim(),
+    prompt.trim(),
   ].join("\n");
 
 export const runReviewAttempt = (
@@ -109,7 +115,7 @@ export const runReviewAttempt = (
       reviewAgent,
       sandbox,
       ticketId,
-      ticketPrompt,
+      prompt,
       env,
       wireMissCap,
       buildAttempts,
@@ -128,7 +134,7 @@ export const runReviewAttempt = (
     let reviewSession = yield* reviewAgent.run({
       prompt: bootstrapRoleSkillPrompt(
         AgentRole.Review,
-        reviewCreateWorkPrompt(ticketId, ticketPrompt)
+        reviewCreateWorkPrompt(ticketId, prompt)
       ),
       sandbox,
       env,

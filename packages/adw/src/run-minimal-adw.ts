@@ -209,7 +209,7 @@ export const runMinimalAdw = (
           reviewAgent,
           sandbox,
           ticketId: input.ticketId,
-          ticketPrompt: input.prompt,
+          prompt: input.prompt,
           env: input.env,
           wireMissCap,
           buildAttempts,
