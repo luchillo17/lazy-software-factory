@@ -2,7 +2,7 @@
 
 Clone, **commit pending worktree**, push, and pull/merge requests go through a pluggable **Git host** seam in its own package (`packages/git-host` or equivalent) — not through Runtime agent/sandbox adapters and not via scattered `gh` calls inside ADW control flow. **GitHub via `gh` + `GH_TOKEN` is the first adapter**, not the only forge forever (GitLab/Bitbucket/etc. later behind the same interface).
 
-After Agent Review **pass** (including schema-required **`prTitle` + `prBody`**), orchestration builds **`ShipInput`** and runs the **Ship agent** (a **Code agent**, same class as Test agent): **commit working tree if dirty**, then **push** the ticket branch, then open a PR/MR with those title/body fields. Build **may** commit mid-run; Ship still flushes any remaining pending so nothing ships uncommitted. Test/Review do not push. Results:
+After Agent Review **pass** (including schema-required **`prTitle` + `prBody`**), orchestration builds **`ShipInput`** and runs the **Ship agent** (a **Code agent**, same class as Test agent): **commit working tree if dirty**, then **push** the ticket branch, then open a PR/MR with those title/body fields. When `ticketId` is a numeric GitHub Issue id, Ship appends a closing keyword (`Closes #N`) to the PR body if Review did not already include one — so the PR links the ticket without trusting the Review LLM. Build **may** commit mid-run; Ship still flushes any remaining pending so nothing ships uncommitted. Test/Review do not push. Results:
 
 - **`shipped`** — PR/MR exists (URL recorded)
 - **`ready_for_pr`** — Review passed but commit, push, or PR open skipped/failed (missing CLI/auth/remote, provider error)
