@@ -60,6 +60,11 @@ export interface RunReviewAttemptInput {
   readonly reviewAgent: AgentProviderService;
   readonly sandbox: Sandbox;
   readonly ticketId: string;
+  /**
+   * Same work prompt Build got — Issue body via intake, or plain `--prompt`
+   * text. Not always a tracker ticket.
+   */
+  readonly prompt: string;
   readonly env?: Readonly<Record<string, string>>;
   /** Inner wire-miss resume budget (ADR-0009). */
   readonly wireMissCap: number;
@@ -82,12 +87,39 @@ const reviewOutputRaw = (output: unknown): string => {
   }
 };
 
+/**
+ * Work section under Role bootstrap: contract + work prompt + submit guidance.
+ * `ticketId` is the ADW run / branch id only — prompt may be plain text.
+ */
+export const reviewCreateWorkPrompt = (
+  ticketId: string,
+  prompt: string
+): string =>
+  [
+    reviewOutputContractPrompt(),
+    "",
+    `Review changes for ADW run \`${ticketId}\` (branch \`adw/${ticketId}\`).`,
+    "Judge the pending delta against the work prompt below (use acceptance criteria when the prompt includes them).",
+    "Inspect git status / diff if needed, then submit the verdict via submit_review_pass or submit_review_fail.",
+    "",
+    "## Work",
+    "",
+    prompt.trim(),
+  ].join("\n");
+
 export const runReviewAttempt = (
   input: RunReviewAttemptInput
 ): Effect.Effect<ReviewAttemptResult, AgentError> =>
   Effect.gen(function* () {
-    const { reviewAgent, sandbox, ticketId, env, wireMissCap, buildAttempts } =
-      input;
+    const {
+      reviewAgent,
+      sandbox,
+      ticketId,
+      prompt,
+      env,
+      wireMissCap,
+      buildAttempts,
+    } = input;
 
     yield* emitAdwProgress({
       kind: AdwProgressKind.StepEnter,
@@ -102,12 +134,7 @@ export const runReviewAttempt = (
     let reviewSession = yield* reviewAgent.run({
       prompt: bootstrapRoleSkillPrompt(
         AgentRole.Review,
-        [
-          reviewOutputContractPrompt(),
-          "",
-          `Review changes for ticket ${ticketId}.`,
-          "Inspect git status / diff if needed, then submit the verdict via submit_review_pass or submit_review_fail.",
-        ].join("\n")
+        reviewCreateWorkPrompt(ticketId, prompt)
       ),
       sandbox,
       env,

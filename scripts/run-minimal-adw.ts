@@ -49,18 +49,18 @@ const env = Object.fromEntries(
 const intakeResult = await Effect.runPromise(
   resolveHostOperatorAdwInput(parsed).pipe(
     Effect.provide(hostTicketIntakeLayer),
-    Effect.either
+    Effect.result
   )
 );
-if (intakeResult._tag === "Left") {
-  console.error(intakeResult.left.message);
+if (intakeResult._tag === "Failure") {
+  console.error(intakeResult.failure.message);
   process.exit(1);
 }
 
 const result = await runHostMinimalAdwPromise({
-  ticketId: intakeResult.right.ticketId,
-  prompt: intakeResult.right.prompt,
-  repoUrl: intakeResult.right.repoUrl,
+  ticketId: intakeResult.success.ticketId,
+  prompt: intakeResult.success.prompt,
+  repoUrl: intakeResult.success.repoUrl,
   env,
 });
 

@@ -21,6 +21,30 @@ export type ShipAgentResult =
 export const shipCommitMessage = (ticketId: string): string =>
   `chore(adw): ship pending changes for ${ticketId}`;
 
+/** GitHub Issue closing keywords (v0 forge). */
+const GITHUB_ISSUE_CLOSING_KEYWORD =
+  /(?:close|closes|closed|fix|fixes|fixed|resolve|resolves|resolved)\s+#(\d+)\b/gi;
+
+/**
+ * PR body for Ship open: when `ticketId` is a numeric GitHub Issue id, ensure
+ * a closing keyword so the PR links (and later closes) that Issue. Idempotent
+ * if Review already included one. Non-numeric manual tickets stay unchanged.
+ */
+export const shipPrBody = (ticketId: string, prBody: string): string => {
+  if (!/^\d+$/.test(ticketId)) {
+    return prBody;
+  }
+
+  for (const match of prBody.matchAll(GITHUB_ISSUE_CLOSING_KEYWORD)) {
+    if (match[1] === ticketId) {
+      return prBody;
+    }
+  }
+
+  const trimmed = prBody.replace(/\s+$/u, "");
+  return `${trimmed}\n\nCloses #${ticketId}`;
+};
+
 /**
  * **Ship agent** — Code agent (same class as Test agent): deterministic
  * commit-if-dirty → push → open PR from schema-decoded {@link ShipInput}.
@@ -62,7 +86,7 @@ export const runShipAgent = (
         cwd: input.cwd,
         branch: input.branch,
         title: input.prTitle,
-        body: input.prBody,
+        body: shipPrBody(input.ticketId, input.prBody),
         env: input.env,
       })
       .pipe(Effect.exit);

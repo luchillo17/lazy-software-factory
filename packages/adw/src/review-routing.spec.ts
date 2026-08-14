@@ -226,6 +226,8 @@ describe("runMinimalAdw Review routing + cap", () => {
       assert.isTrue(prompt!.includes("submit_review_pass"));
       assert.isTrue(prompt!.includes("submit_review_fail"));
       assert.isTrue(prompt!.includes("/adw-review"));
+      assert.isTrue(prompt!.includes("## Work"));
+      assert.isTrue(prompt!.includes("work"));
     })
   );
 

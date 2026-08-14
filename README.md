@@ -15,7 +15,7 @@ The goal is a factory you can run locally (WSL + Docker recommended), with orche
 
 Early bootstrap. Public so people can contribute while the shape settles.
 
-**Decided (see [docs/adr](./docs/adr/) and [CONTEXT.md](./CONTEXT.md)):** Nx; extractable `adw` + `runtime`; self-building; classic Docker + Cursor SDK; Convex + Better Auth direction; logical org tenancy. Sandcastle not in stack.
+**Decided (see [docs/adr](./docs/adr/) and [CONTEXT.md](./CONTEXT.md)):** Nx; extractable `adw` + `runtime` (+ git-host seam); self-building; classic Docker + Cursor SDK; Convex + Better Auth direction; logical org tenancy. Sandcastle not in stack. Outside-monorepo consume path (v0, no npm publish): [docs/extractability.md](./docs/extractability.md).
 
 **Still open:** fuller Runtime/ADW implementation; hosted cloud SaaS timing.
 
@@ -26,7 +26,8 @@ apps/              future CLIs / services
 packages/
   adw/             ADW graph + gates
   runtime/         Effect sandbox + agent providers
-docs/              ADRs + agent config
+  git-host/        forge seam (clone/push/PR)
+docs/              ADRs + agent config (+ extractability note)
 .agents/skills/    agent skills (mattpocock + luchillo17/gh-stack-compact)
 ```
 

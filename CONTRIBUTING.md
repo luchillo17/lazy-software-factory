@@ -35,7 +35,7 @@ pnpm nx show projects
 pnpm ensure:gh-stack
 ```
 
-Language and ADRs: [CONTEXT.md](./CONTEXT.md), [docs/adr](./docs/adr/). Compact `gh stack` agent skill: [`luchillo17/gh-stack-compact`](https://github.com/luchillo17/gh-stack-compact) (`npx skills add luchillo17/gh-stack-compact`).
+Language and ADRs: [CONTEXT.md](./CONTEXT.md), [docs/adr](./docs/adr/). Depending on extractable packages from outside this monorepo’s apps: [docs/extractability.md](./docs/extractability.md). Compact `gh stack` agent skill: [`luchillo17/gh-stack-compact`](https://github.com/luchillo17/gh-stack-compact) (`npx skills add luchillo17/gh-stack-compact`).
 
 ## Code of conduct
 

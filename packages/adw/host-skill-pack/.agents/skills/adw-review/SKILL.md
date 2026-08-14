@@ -26,7 +26,7 @@ Open untracked paths from status as needed. Empty committed diff **and** empty w
 
 ## 2. Findings
 
-From that **pending delta** only, list every likely bug, regression, broken edge case, or security mistake the change introduces (including uncommitted files).
+From that **pending delta**, and against the **Work** section in the session prompt (Issue body, acceptance criteria, or plain work text), list every likely bug, regression, broken edge case, missing requirement, or security mistake the change introduces (including uncommitted files).
 
 Each **finding**: `path:line` (or range), severity (`high` / `medium` / `low`), problem, fix hint for Build.
 
