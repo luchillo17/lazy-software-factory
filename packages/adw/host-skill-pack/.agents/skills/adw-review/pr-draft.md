@@ -1,6 +1,6 @@
 # PR draft
 
-Pass-only reference for `/adw-review`. Write from the **pending delta** and ticket context in the prompt.
+Pass-only reference for `/adw-review`. Write from the **pending delta** and the **Ticket** section in the session prompt.
 
 **Bar:** a human opening the PR knows what landed from the **title** and the **lead paragraph** alone.
 

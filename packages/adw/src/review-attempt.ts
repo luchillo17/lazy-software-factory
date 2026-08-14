@@ -60,6 +60,8 @@ export interface RunReviewAttemptInput {
   readonly reviewAgent: AgentProviderService;
   readonly sandbox: Sandbox;
   readonly ticketId: string;
+  /** Same ticket body Build got (AC / issue text) for Review judgment context. */
+  readonly ticketPrompt: string;
   readonly env?: Readonly<Record<string, string>>;
   /** Inner wire-miss resume budget (ADR-0009). */
   readonly wireMissCap: number;
@@ -82,12 +84,36 @@ const reviewOutputRaw = (output: unknown): string => {
   }
 };
 
+/** Work section under Role bootstrap: contract + ticket context + submit guidance. */
+export const reviewCreateWorkPrompt = (
+  ticketId: string,
+  ticketPrompt: string
+): string =>
+  [
+    reviewOutputContractPrompt(),
+    "",
+    `Review changes for ticket ${ticketId}.`,
+    "Judge the pending delta against the ticket acceptance criteria below.",
+    "Inspect git status / diff if needed, then submit the verdict via submit_review_pass or submit_review_fail.",
+    "",
+    "## Ticket",
+    "",
+    ticketPrompt.trim(),
+  ].join("\n");
+
 export const runReviewAttempt = (
   input: RunReviewAttemptInput
 ): Effect.Effect<ReviewAttemptResult, AgentError> =>
   Effect.gen(function* () {
-    const { reviewAgent, sandbox, ticketId, env, wireMissCap, buildAttempts } =
-      input;
+    const {
+      reviewAgent,
+      sandbox,
+      ticketId,
+      ticketPrompt,
+      env,
+      wireMissCap,
+      buildAttempts,
+    } = input;
 
     yield* emitAdwProgress({
       kind: AdwProgressKind.StepEnter,
@@ -102,12 +128,7 @@ export const runReviewAttempt = (
     let reviewSession = yield* reviewAgent.run({
       prompt: bootstrapRoleSkillPrompt(
         AgentRole.Review,
-        [
-          reviewOutputContractPrompt(),
-          "",
-          `Review changes for ticket ${ticketId}.`,
-          "Inspect git status / diff if needed, then submit the verdict via submit_review_pass or submit_review_fail.",
-        ].join("\n")
+        reviewCreateWorkPrompt(ticketId, ticketPrompt)
       ),
       sandbox,
       env,
