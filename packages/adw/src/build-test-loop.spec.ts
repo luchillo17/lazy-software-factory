@@ -8,11 +8,13 @@ import {
 import { Effect, Logger, Ref } from "effect";
 import { captureAdwProgressLogger } from "./adw-progress.ts";
 import { BuildTestOutcome, runBuildTestLoop } from "./build-test-loop.ts";
+import { withEmptyPendingDeltaGit } from "./empty-pending-delta-git-test-helpers.ts";
+import { seamConfirmResumePrompt } from "./seam-confirm-agent.ts";
 
 const sandboxWith = (exec: Sandbox["exec"]): Sandbox => ({
   id: "sandbox-1",
   cwd: "/tmp",
-  exec,
+  exec: withEmptyPendingDeltaGit(exec),
   destroy: () => Effect.void,
 });
 
@@ -35,6 +37,7 @@ describe("runBuildTestLoop", () => {
         buildAttempts: 1,
         reviewAttempts: 0,
         buildAttemptCap: 3,
+        seamConfirmCount: 0,
       });
       assert.strictEqual(result.outcome, BuildTestOutcome.Green);
       if (result.outcome === BuildTestOutcome.Green) {
@@ -77,6 +80,7 @@ describe("runBuildTestLoop", () => {
         buildAttempts: 1,
         reviewAttempts: 0,
         buildAttemptCap: 3,
+        seamConfirmCount: 0,
       });
       assert.strictEqual(result.outcome, BuildTestOutcome.Green);
       assert.strictEqual(yield* Ref.get(resumes), 1);
@@ -127,6 +131,7 @@ describe("runBuildTestLoop", () => {
         buildAttempts: 1,
         reviewAttempts: 0,
         buildAttemptCap: 3,
+        seamConfirmCount: 0,
       });
       assert.strictEqual(result.outcome, BuildTestOutcome.ExecFail);
       if (result.outcome === BuildTestOutcome.ExecFail) {
@@ -159,9 +164,47 @@ describe("runBuildTestLoop", () => {
         buildAttempts: 1,
         reviewAttempts: 0,
         buildAttemptCap: 3,
+        seamConfirmCount: 0,
       }).pipe(Effect.provide(Logger.layer([captureAdwProgressLogger(lines)])));
 
       assert.isTrue(lines.some((l) => l.includes("build_resume")));
+    })
+  );
+
+  it.effect("SeamConfirm resume does not spend a Build attempt", () =>
+    Effect.gen(function* () {
+      const resumes = yield* Ref.make<string[]>([]);
+      const buildAgent: AgentProviderService = {
+        run: () => Effect.die("unused"),
+        resume: (prev, options) =>
+          Effect.gen(function* () {
+            yield* Ref.update(resumes, (rs) => [...rs, options.prompt]);
+            return { sessionId: prev.sessionId };
+          }),
+      };
+      const result = yield* runBuildTestLoop({
+        buildAgent,
+        sandbox: sandboxWith(() =>
+          Effect.succeed({ exitCode: 0, stdout: "", stderr: "" })
+        ),
+        commands: [{ command: "test" }],
+        buildSession: {
+          sessionId: "build-1",
+          output: "seams need your OK before any test",
+        },
+        buildAttempts: 1,
+        reviewAttempts: 0,
+        buildAttemptCap: 3,
+        seamConfirmCount: 0,
+      });
+      assert.strictEqual(result.outcome, BuildTestOutcome.Green);
+      if (result.outcome === BuildTestOutcome.Green) {
+        assert.strictEqual(result.buildAttempts, 1);
+        assert.strictEqual(result.seamConfirmCount, 1);
+      }
+      const seen = yield* Ref.get(resumes);
+      assert.strictEqual(seen.length, 1);
+      assert.strictEqual(seen[0], seamConfirmResumePrompt);
     })
   );
 });

@@ -1,6 +1,6 @@
 # Minimal ADW: Build → Test agent → Review → Ship agent
 
-The first ADW is a coded graph: **Initial prompt** → **Build** (LLM) → **Test agent** (Code agent / check gates) → **Agent Review** (LLM, HEAD + pending worktree) → **Ship agent** (Code agent: schema `ShipInput` → commit-if-dirty + push + **open PR/MR**) → **Engineer Review** (HITL on the PR, outside automation). One **warm sandbox** per ticket holds Build through Ship. Test fail or Agent Review fail resumes **Build**. This matches ADR-0005 (orchestration owns pass/fail) and keeps LLM judgment off the hard Test gate and forge ops.
+The first ADW is a coded graph: **Initial prompt** → **Build** (LLM) → **SeamConfirm agent** (Code agent: AFK `/tdd` seam stub) → **Test agent** (Code agent / check gates) → **Agent Review** (LLM, HEAD + pending worktree) → **Ship agent** (Code agent: schema `ShipInput` → commit-if-dirty + push + **open PR/MR**) → **Engineer Review** (HITL on the PR, outside automation). One **warm sandbox** per ticket holds Build through Ship. Test fail, Agent Review fail, or SeamConfirm **Confirm** resumes **Build**. SeamConfirm Confirm does not spend a Build attempt (cap 1). This matches ADR-0005 (orchestration owns pass/fail) and keeps LLM judgment off the hard Test gate, SeamConfirm predicate, and forge ops.
 
 **TicketIntake** sits on the **Host operator / CLI**, not inside `runMinimalAdw`: a ready tracker ref (v0: GitHub Issue + `ready-for-agent`) maps to `ticketId` + prompt that feed the Initial prompt. Manual `--ticket` / `--prompt` bypasses intake. **Workspace provision** (ADR-0010) still runs as the first step _inside_ the ADW after that input exists — omitted from the colored spine below for scanability.
 
@@ -8,7 +8,7 @@ The first ADW is a coded graph: **Initial prompt** → **Build** (LLM) → **Tes
 
 Canonical diagram for **Minimal ADW** (Mermaid = human + agent). Feature ADW: human layout [`docs/diagrams/feature-adw.svg`](../diagrams/feature-adw.svg); **agents read Mermaid in** [`docs/VISION.md`](../VISION.md) §2. Format rules: [`docs/README.md`](../README.md#format-mermaid-vs-svg).
 
-Dashed **fail** edges land on **Build** (resume same session). **GitHub** + ELK (`defaultRenderer: elk`) is the SoT for layout. Cursor Mermaid preview often ignores ELK and may yank Prompt off-top — ignore Cursor if GH looks right. Colors: [`docs/README.md` — ADW diagram colors](../README.md#adw-diagram-colors).
+Dashed **fail** / **confirm** edges land on **Build** (resume same session). **GitHub** + ELK (`defaultRenderer: elk`) is the SoT for layout. Cursor Mermaid preview often ignores ELK and may yank Prompt off-top — ignore Cursor if GH looks right. Colors: [`docs/README.md` — ADW diagram colors](../README.md#adw-diagram-colors).
 
 ![ADW diagram legend](../diagrams/adw-legend.svg)
 
@@ -18,17 +18,20 @@ flowchart TB
   TicketIntake["TicketIntake\nHost CLI / optional"]
   Prompt(["Initial prompt"])
   Build["Build agent"]
+  SeamConfirm["SeamConfirm agent"]
   Test["Test agent"]
   AgentReview["Agent Review"]
   Ship["Ship agent\ncommit + push + open PR"]
   EngineerReview(["Engineer Review"])
 
   TicketIntake -->|"ready ticket → ticketId + prompt"| Prompt
-  Prompt --> Build --> Test
+  Prompt --> Build --> SeamConfirm
+  SeamConfirm -->|skip| Test
   Test -->|green| AgentReview
   AgentReview -->|"pass + prTitle/prBody"| Ship
   Ship -->|"shipped = PR opened"| EngineerReview
 
+  SeamConfirm -.->|confirm| Build
   Test -.->|fail| Build
   AgentReview -.->|fail| Build
 
@@ -41,7 +44,7 @@ flowchart TB
   class Prompt,EngineerReview human
   class TicketIntake gate
   class Build llm
-  class Test gate
+  class Test,SeamConfirm gate
   class AgentReview agent
   class Ship ship
 ```
@@ -53,6 +56,7 @@ accepted
 ## Considered Options
 
 - **Separate LLM “test agent” that writes or diagnoses tests** — rejected for v0; the Test agent is a Code agent that runs checks.
+- **LLM judges `/tdd` seam proposals** — rejected for v0; **SeamConfirm** is a Code agent (empty pending delta + seam-wait markers). HITL confirmer later replaces the same resume slot.
 - **Ship as LLM agent (draft + forge + conflicts)** — rejected; forge stays credential-scoped and deterministic as a Code agent.
 - **Ship as merge/deploy** — rejected; `shipped` means PR/MR opened (ADR-0011), not merged or released. Engineer Review / humans own merge.
 - **New sandbox or fresh agent session on every Test failure** — rejected; burns tokens re-exploring; warm sandbox + resume is the product path.

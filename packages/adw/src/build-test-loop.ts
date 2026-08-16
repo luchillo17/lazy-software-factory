@@ -11,6 +11,11 @@ import {
   AdwStepResult,
 } from "./adw-progress-event.ts";
 import { emitAdwProgress } from "./adw-progress.ts";
+import {
+  SeamConfirmOutcome,
+  runSeamConfirmAgent,
+  seamConfirmResumePrompt,
+} from "./seam-confirm-agent.ts";
 import type { AdwTestCommand } from "./test-commands.ts";
 import { TestAgentOutcome, runTestAgent } from "./test-agent.ts";
 
@@ -29,18 +34,21 @@ export type BuildTestResult =
       readonly outcome: typeof BuildTestOutcome.Green;
       readonly buildSession: AgentSession;
       readonly buildAttempts: number;
+      readonly seamConfirmCount: number;
     }
   | {
       readonly outcome: typeof BuildTestOutcome.CapExhausted;
       readonly detail: string;
       readonly buildSession: AgentSession;
       readonly buildAttempts: number;
+      readonly seamConfirmCount: number;
     }
   | {
       readonly outcome: typeof BuildTestOutcome.ExecFail;
       readonly detail: string;
       readonly buildSession: AgentSession;
       readonly buildAttempts: number;
+      readonly seamConfirmCount: number;
     };
 
 export interface RunBuildTestLoopInput {
@@ -52,12 +60,14 @@ export interface RunBuildTestLoopInput {
   readonly buildAttempts: number;
   readonly reviewAttempts: number;
   readonly buildAttemptCap: number;
+  readonly seamConfirmCount: number;
 }
 
 /**
- * Build↔Test loop: Test until green, or Build-attempt cap / exec fail.
- * Owns BuildResume progress after red Test. Caller owns Review→Build resume
- * (no Build attempt spend — ADR-0009).
+ * Build↔SeamConfirm↔Test loop: SeamConfirm (AFK `/tdd` seam stub) then Test
+ * until green, or Build-attempt cap / exec fail. Owns BuildResume after red
+ * Test. SeamConfirm resume does not spend a Build attempt. Caller owns
+ * Review→Build resume (no Build attempt spend — ADR-0009).
  */
 export const runBuildTestLoop = (
   input: RunBuildTestLoopInput
@@ -65,6 +75,7 @@ export const runBuildTestLoop = (
   Effect.gen(function* () {
     let buildSession = input.buildSession;
     let buildAttempts = input.buildAttempts;
+    let seamConfirmCount = input.seamConfirmCount;
     const {
       buildAgent,
       sandbox,
@@ -75,6 +86,23 @@ export const runBuildTestLoop = (
     } = input;
 
     while (true) {
+      const seam = yield* runSeamConfirmAgent({
+        sandbox,
+        output: buildSession.output,
+        seamConfirmCount,
+        buildAttempts,
+        reviewAttempts,
+      });
+      if (seam.outcome === SeamConfirmOutcome.Confirm) {
+        seamConfirmCount += 1;
+        buildSession = yield* buildAgent.resume(buildSession, {
+          prompt: seamConfirmResumePrompt,
+          sandbox,
+          env,
+        });
+        continue;
+      }
+
       const testResult = yield* runTestAgent({
         sandbox,
         commands,
@@ -88,6 +116,7 @@ export const runBuildTestLoop = (
           detail: testResult.detail,
           buildSession,
           buildAttempts,
+          seamConfirmCount,
         } satisfies BuildTestResult;
       }
 
@@ -96,6 +125,7 @@ export const runBuildTestLoop = (
           outcome: BuildTestOutcome.Green,
           buildSession,
           buildAttempts,
+          seamConfirmCount,
         } satisfies BuildTestResult;
       }
 
@@ -105,6 +135,7 @@ export const runBuildTestLoop = (
           detail: testResult.detail,
           buildSession,
           buildAttempts,
+          seamConfirmCount,
         } satisfies BuildTestResult;
       }
 

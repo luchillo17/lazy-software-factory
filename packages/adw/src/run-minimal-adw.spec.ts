@@ -16,6 +16,7 @@ import { GitHost } from "./git-host.ts";
 import { runMinimalAdw } from "./run-minimal-adw.ts";
 import { submitReviewPassViaTools } from "./review-tool-test-helpers.ts";
 import { AdwTestCommands } from "./test-commands.ts";
+import { withEmptyPendingDeltaGit } from "./empty-pending-delta-git-test-helpers.ts";
 import { WorkspaceProvision } from "./workspace-provision.ts";
 import { monorepoRoot } from "./monorepo-root.ts";
 
@@ -35,7 +36,7 @@ describe("runMinimalAdw happy path", () => {
               const box: Sandbox = {
                 id: "sandbox-1",
                 cwd: monorepoRoot,
-                exec: (command, args = []) =>
+                exec: withEmptyPendingDeltaGit((command, args = []) =>
                   Effect.gen(function* () {
                     if (command === "git" && args[0] === "rev-parse") {
                       yield* record("provision-git");
@@ -72,7 +73,8 @@ describe("runMinimalAdw happy path", () => {
                       ["-e", "process.exit(0)"]
                     );
                     return { exitCode: 0, stdout: "", stderr: "" };
-                  }),
+                  })
+                ),
                 destroy: () => Effect.void,
               };
               return box;

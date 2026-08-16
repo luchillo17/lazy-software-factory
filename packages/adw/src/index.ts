@@ -14,6 +14,7 @@ export * from "./review-output-contract.ts";
 export * from "./review-output.ts";
 export * from "./role-skill-binding.ts";
 export * from "./run-minimal-adw.ts";
+export * from "./seam-confirm-agent.ts";
 export * from "./ship-agent.ts";
 export * from "./ship-input.ts";
 export * from "./test-agent.ts";

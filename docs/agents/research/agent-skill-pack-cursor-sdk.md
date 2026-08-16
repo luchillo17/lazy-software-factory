@@ -13,7 +13,7 @@ Primary sources only: Cursor docs, `@cursor/sdk` types/README, this repo’s Run
 
 1. **Skill pack root:** Cursor discovers skills from on-disk roots (project default `.agents/skills/`, also `.cursor/skills/`, user `~` trees, and Claude/Codex compat dirs). The SDK has **no** `skills` / `skillPack` / `loadSkills` field on `AgentOptions`. Local agents pick skills up as part of **workspace resolution** from `local.cwd` / `local.dirs`; optional `prewarmLocalWorkspace` pays that cost early.
 2. **Role skill binding:** **Not an SDK API.** Domain intent (orchestration injects mandatory skills per role at bootstrap) must be invented in ADW/prompt policy. Closest SDK-adjacent levers: put `/skill-name` (or equivalent instructions) in `agent.send` text, and/or rely on model auto-application from skill descriptions — neither is a hard bind in public SDK types.
-3. **This repo today:** `packages/runtime` Cursor adapter passes only `apiKey`, `model`, and `local: { cwd: sandbox.cwd }` into `Agent.create` / `Agent.resume`. ADW passes a free-form `prompt`. No skill-pack or role-binding seam yet.
+3. **This repo today:** `packages/runtime` Cursor adapter passes `apiKey`, `model`, optional **`agents`** (subagent defs), and `local: { cwd, settingSources: ["project"], dirs?, customTools? }` into `Agent.create` / `Agent.resume`. Role skill binding remains ADW prompt policy (not an SDK skills field). Empty/omitted `agents` + no `.cursor/agents` ⇒ parent may work inline — not an ADW hard spawn guarantee.
 
 ---
 
@@ -99,17 +99,19 @@ Documented clearly:
 
 Files: [`packages/runtime/src/agent-provider.ts`](../../../packages/runtime/src/agent-provider.ts), [`cursor-sdk.ts`](../../../packages/runtime/src/cursor-sdk.ts), [`cursor-agent-provider.ts`](../../../packages/runtime/src/cursor-agent-provider.ts).
 
-| Seam               | Behavior                                                                                                                     |
-| ------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
-| `AgentRunOptions`  | `prompt`, required `sandbox`, optional `model`, optional `env` — **no** skill pack / role fields.                            |
-| `AgentSession`     | Opaque `sessionId` (+ optional `output`) — Cursor adapter maps to SDK agent id.                                              |
-| `CursorSdkService` | `Agent.create` / `Agent.resume` only.                                                                                        |
-| `createOptions`    | `{ apiKey?, model?, local: { cwd: sandbox.cwd } }` — **does not** set `dirs`, `settingSources`, or any skill-related option. |
-| Live Layers        | `CursorBuildAgentLive` / `CursorReviewAgentLive` / `CursorAgentLive` wire the above.                                         |
+| Seam               | Behavior                                                                                                                                                                                                                                                                 |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `AgentRunOptions`  | `prompt`, required `sandbox`, optional `model`, `env`, `customTools`, `workspaceDirs`, optional **`agents`** (subagent `AgentDefinition` catalog). No skill-pack / role-binding fields (those stay ADW prompt policy).                                                   |
+| `AgentSession`     | Opaque `sessionId` (+ optional `output`) — Cursor adapter maps to SDK agent id.                                                                                                                                                                                          |
+| `CursorSdkService` | `Agent.create` / `Agent.resume` only.                                                                                                                                                                                                                                    |
+| `createOptions`    | `{ apiKey?, model?, agents?, local: { cwd, settingSources: ["project"], dirs?, customTools? } }`. Inline `agents` override same-named `.cursor/agents/*.md`; omitting `agents` leaves file-based defs usable. No `disallowedTools` on task/agent (spawn stays possible). |
+| Live Layers        | `CursorBuildAgentLive` / `CursorReviewAgentLive` / `CursorAgentLive` wire the above.                                                                                                                                                                                     |
 
-ADW ([`packages/adw/src/run-minimal-adw.ts`](../../../packages/adw/src/run-minimal-adw.ts)) calls `buildAgent.run({ prompt: input.prompt, sandbox, env })` and Review with a free-form review prompt — **no** `/implement` (or other) role bind injection yet, despite glossary intent.
+**Empty catalog:** if callers pass no `agents` and the workspace has no `.cursor/agents`, the parent agent may keep multi-axis work **inline**. That is expected — Factory enables spawn capability; it does not hard-guarantee dual parallel subagent orchestration from the ADW graph.
 
-Tests assert create options are exactly `{ apiKey, local: { cwd }, model }` (`cursor-agent-provider.spec.ts`).
+ADW ([`packages/adw/src/run-minimal-adw.ts`](../../../packages/adw/src/run-minimal-adw.ts)) calls `buildAgent.run` / Review with role-skill prompt injection where wired — catalog supply from ADW is optional later dogfood.
+
+Tests assert create/resume options include passed `agents` via a fake SDK (`cursor-agent-provider.spec.ts`).
 
 ---
 
@@ -148,7 +150,7 @@ Aligned with ADR-0001 and `CONTEXT.md` (binding in orchestration, not only Runti
 - No public SDK API to attach a closed skill allowlist to a session.
 - Local vs cloud: cloud always loads project/team/plugins settings and ignores `settingSources`; project skills still depend on files present in the cloned workspace.
 - Resume: no skill config to re-pass; **re-apply binding via prompt** on each turn if required. (MCP inline servers _do_ need re-pass on resume — different concern.)
-- Current adapter + ADW: **gap** vs glossary — pack may load ambiently from cwd, but Role skill binding is unimplemented.
+- Current adapter + ADW: pack loads ambiently from cwd; Role skill binding is ADW prompt injection (`role-skill-binding.ts`); optional Runtime `agents` pass-through enables subagent spawn without guaranteeing dual-axis orchestration.
 - Skills CLI / `.claude` symlinks ([`skills-install.md`](../skills-install.md)) matter for multi-agent authoring; Cursor SDK local agent cares about whatever roots Cursor discovers under the workspace (`.agents/skills` is the canonical project root).
 
 ---

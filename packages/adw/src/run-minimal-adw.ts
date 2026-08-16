@@ -38,8 +38,10 @@ import { ticketBranch } from "./ticket-branch.ts";
 import { WorkspaceProvision } from "./workspace-provision.ts";
 
 /**
- * Minimal ADW (ADR-0007): provision → Build ↔ Test → Review → Ship agent.
+ * Minimal ADW (ADR-0007): provision → Build ↔ SeamConfirm ↔ Test → Review → Ship.
  *
+ * SeamConfirm is a Code agent: AFK `/tdd` seam stub (empty pending delta +
+ * seam-wait markers). Confirm resumes Build without spending a Build attempt.
  * Build↔Test and Review have separate attempt caps (ADR-0009). Review fail
  * resumes the original Build session without spending a Build attempt.
  * Ship is a Code agent with schema `ShipInput` from Review pass.
@@ -158,6 +160,7 @@ export const runMinimalAdw = (
         env: input.env,
       });
       let buildAttempts = 1;
+      let seamConfirmCount = 0;
       let reviewAttempts = 0;
       let reviewSessionId: string | undefined;
       let passReview: ReviewPassOutput | undefined;
@@ -179,9 +182,11 @@ export const runMinimalAdw = (
           buildAttempts,
           reviewAttempts,
           buildAttemptCap,
+          seamConfirmCount,
         });
         buildSession = buildTest.buildSession;
         buildAttempts = buildTest.buildAttempts;
+        seamConfirmCount = buildTest.seamConfirmCount;
 
         if (buildTest.outcome === BuildTestOutcome.ExecFail) {
           return {

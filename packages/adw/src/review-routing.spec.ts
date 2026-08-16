@@ -19,6 +19,7 @@ import {
   submitReviewFailViaTools,
   submitReviewPassViaTools,
 } from "./review-tool-test-helpers.ts";
+import { withEmptyPendingDeltaGit } from "./empty-pending-delta-git-test-helpers.ts";
 import { AdwTestCommands } from "./test-commands.ts";
 import { WorkspaceProvision } from "./workspace-provision.ts";
 import { monorepoRoot } from "./monorepo-root.ts";
@@ -57,7 +58,7 @@ describe("runMinimalAdw Review routing + cap", () => {
               Effect.succeed({
                 id: "sandbox-1",
                 cwd: monorepoRoot,
-                exec: () =>
+                exec: withEmptyPendingDeltaGit(() =>
                   Effect.gen(function* () {
                     const phase = yield* Ref.get(testPhase);
                     if (phase === 1) {
@@ -69,7 +70,8 @@ describe("runMinimalAdw Review routing + cap", () => {
                       };
                     }
                     return { exitCode: 0, stdout: "ok", stderr: "" };
-                  }),
+                  })
+                ),
                 destroy: () => Effect.void,
               } satisfies Sandbox),
           })
@@ -169,8 +171,9 @@ describe("runMinimalAdw Review routing + cap", () => {
             Effect.succeed({
               id: "sandbox-1",
               cwd: monorepoRoot,
-              exec: () =>
-                Effect.succeed({ exitCode: 0, stdout: "", stderr: "" }),
+              exec: withEmptyPendingDeltaGit(() =>
+                Effect.succeed({ exitCode: 0, stdout: "", stderr: "" })
+              ),
               destroy: () => Effect.void,
             } satisfies Sandbox),
         })
@@ -246,8 +249,9 @@ describe("runMinimalAdw Review routing + cap", () => {
               Effect.succeed({
                 id: "sandbox-1",
                 cwd: monorepoRoot,
-                exec: () =>
-                  Effect.succeed({ exitCode: 0, stdout: "", stderr: "" }),
+                exec: withEmptyPendingDeltaGit(() =>
+                  Effect.succeed({ exitCode: 0, stdout: "", stderr: "" })
+                ),
                 destroy: () => Effect.void,
               } satisfies Sandbox),
           })
@@ -338,8 +342,9 @@ describe("runMinimalAdw Review routing + cap", () => {
             Effect.succeed({
               id: "sandbox-1",
               cwd: monorepoRoot,
-              exec: () =>
-                Effect.succeed({ exitCode: 0, stdout: "", stderr: "" }),
+              exec: withEmptyPendingDeltaGit(() =>
+                Effect.succeed({ exitCode: 0, stdout: "", stderr: "" })
+              ),
               destroy: () => Effect.void,
             } satisfies Sandbox),
         })
@@ -412,8 +417,9 @@ describe("runMinimalAdw Review routing + cap", () => {
               Effect.succeed({
                 id: "sandbox-1",
                 cwd: monorepoRoot,
-                exec: () =>
-                  Effect.succeed({ exitCode: 0, stdout: "", stderr: "" }),
+                exec: withEmptyPendingDeltaGit(() =>
+                  Effect.succeed({ exitCode: 0, stdout: "", stderr: "" })
+                ),
                 destroy: () => Effect.void,
               } satisfies Sandbox),
           })
@@ -507,8 +513,9 @@ describe("runMinimalAdw Review routing + cap", () => {
               Effect.succeed({
                 id: "sandbox-1",
                 cwd: monorepoRoot,
-                exec: () =>
-                  Effect.succeed({ exitCode: 0, stdout: "", stderr: "" }),
+                exec: withEmptyPendingDeltaGit(() =>
+                  Effect.succeed({ exitCode: 0, stdout: "", stderr: "" })
+                ),
                 destroy: () => Effect.void,
               } satisfies Sandbox),
           })
@@ -599,8 +606,9 @@ describe("runMinimalAdw Review routing + cap", () => {
             Effect.succeed({
               id: "sandbox-1",
               cwd: monorepoRoot,
-              exec: () =>
-                Effect.succeed({ exitCode: 0, stdout: "", stderr: "" }),
+              exec: withEmptyPendingDeltaGit(() =>
+                Effect.succeed({ exitCode: 0, stdout: "", stderr: "" })
+              ),
               destroy: () => Effect.void,
             } satisfies Sandbox),
         })

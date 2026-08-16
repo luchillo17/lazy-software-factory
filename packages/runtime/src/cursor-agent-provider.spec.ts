@@ -304,6 +304,188 @@ describe("Cursor AgentProvider", () => {
       })
   );
 
+  it.effect("run passes agents into Agent.create options", () =>
+    Effect.gen(function* () {
+      const creates = yield* Ref.make<AgentOptions[]>([]);
+      const agents = {
+        "standards-reviewer": {
+          description: "Reviews diff against coding standards",
+          prompt: "Review Standards axis only.",
+          model: "inherit" as const,
+        },
+        "spec-reviewer": {
+          description: "Reviews diff against the originating spec",
+          prompt: "Review Spec axis only.",
+        },
+      };
+
+      const sdkLayer = Layer.succeed(
+        CursorSdk,
+        CursorSdk.of({
+          create: (options) =>
+            Effect.gen(function* () {
+              yield* Ref.update(creates, (c) => [...c, options]);
+              return fakeAgent({
+                agentId: "local-agents",
+                onSend: async () => ({
+                  id: "run-agents",
+                  status: "finished",
+                  result: "ok",
+                }),
+              });
+            }),
+          resume: () => Effect.die("resume unused"),
+        })
+      );
+
+      yield* Effect.gen(function* () {
+        const agent = yield* BuildAgentProvider;
+        return yield* agent.run({
+          prompt: "build it",
+          sandbox: fakeSandbox,
+          env: { CURSOR_API_KEY: "k" },
+          agents,
+        });
+      }).pipe(Effect.provide(CursorBuildAgent.pipe(Layer.provide(sdkLayer))));
+
+      const createOpts = yield* Ref.get(creates);
+      assert.deepStrictEqual(createOpts[0]?.agents, agents);
+      // Spawn stays possible: adapter must not deny the task/agent tool.
+      assert.strictEqual(createOpts[0]?.disallowedTools, undefined);
+    })
+  );
+
+  it.effect("resume re-passes agents into Agent.resume options", () =>
+    Effect.gen(function* () {
+      const resumes = yield* Ref.make<AgentOptions[]>([]);
+      const agents = {
+        "spec-reviewer": {
+          description: "Reviews diff against the originating spec",
+          prompt: "Review Spec axis only.",
+        },
+      };
+
+      const sdkLayer = Layer.succeed(
+        CursorSdk,
+        CursorSdk.of({
+          create: () => Effect.die("create unused"),
+          resume: (_agentId, options) =>
+            Effect.gen(function* () {
+              yield* Ref.update(resumes, (r) => [
+                ...r,
+                options ?? ({} as AgentOptions),
+              ]);
+              return fakeAgent({
+                agentId: "local-prior",
+                onSend: async () => ({
+                  id: "run-resume-agents",
+                  status: "finished",
+                  result: "ok",
+                }),
+              });
+            }),
+        })
+      );
+
+      yield* Effect.gen(function* () {
+        const agent = yield* BuildAgentProvider;
+        return yield* agent.resume(
+          { sessionId: "local-prior" },
+          {
+            prompt: "continue",
+            sandbox: fakeSandbox,
+            env: { CURSOR_API_KEY: "k" },
+            agents,
+          }
+        );
+      }).pipe(Effect.provide(CursorBuildAgent.pipe(Layer.provide(sdkLayer))));
+
+      const resumeOpts = yield* Ref.get(resumes);
+      assert.deepStrictEqual(resumeOpts[0]?.agents, agents);
+      assert.strictEqual(resumeOpts[0]?.disallowedTools, undefined);
+    })
+  );
+
+  it.effect("omitting agents leaves create options without agents field", () =>
+    Effect.gen(function* () {
+      const creates = yield* Ref.make<AgentOptions[]>([]);
+
+      const sdkLayer = Layer.succeed(
+        CursorSdk,
+        CursorSdk.of({
+          create: (options) =>
+            Effect.gen(function* () {
+              yield* Ref.update(creates, (c) => [...c, options]);
+              return fakeAgent({
+                agentId: "local-no-agents",
+                onSend: async () => ({
+                  id: "run-no-agents",
+                  status: "finished",
+                  result: "ok",
+                }),
+              });
+            }),
+          resume: () => Effect.die("resume unused"),
+        })
+      );
+
+      yield* Effect.gen(function* () {
+        const agent = yield* BuildAgentProvider;
+        return yield* agent.run({
+          prompt: "build it",
+          sandbox: fakeSandbox,
+          env: { CURSOR_API_KEY: "k" },
+        });
+      }).pipe(Effect.provide(CursorBuildAgent.pipe(Layer.provide(sdkLayer))));
+
+      const createOpts = yield* Ref.get(creates);
+      // Empty catalog: file-based `.cursor/agents` can still load via
+      // settingSources; inline agents are not forced.
+      assert.strictEqual(createOpts[0]?.agents, undefined);
+      assert.deepStrictEqual(createOpts[0]?.local?.settingSources, ["project"]);
+    })
+  );
+
+  it.effect(
+    "empty agents catalog is omitted so file-based defs stay usable",
+    () =>
+      Effect.gen(function* () {
+        const creates = yield* Ref.make<AgentOptions[]>([]);
+
+        const sdkLayer = Layer.succeed(
+          CursorSdk,
+          CursorSdk.of({
+            create: (options) =>
+              Effect.gen(function* () {
+                yield* Ref.update(creates, (c) => [...c, options]);
+                return fakeAgent({
+                  agentId: "local-empty-agents",
+                  onSend: async () => ({
+                    id: "run-empty-agents",
+                    status: "finished",
+                    result: "ok",
+                  }),
+                });
+              }),
+            resume: () => Effect.die("resume unused"),
+          })
+        );
+
+        yield* Effect.gen(function* () {
+          const agent = yield* BuildAgentProvider;
+          return yield* agent.run({
+            prompt: "build it",
+            sandbox: fakeSandbox,
+            env: { CURSOR_API_KEY: "k" },
+            agents: {},
+          });
+        }).pipe(Effect.provide(CursorBuildAgent.pipe(Layer.provide(sdkLayer))));
+
+        const createOpts = yield* Ref.get(creates);
+        assert.strictEqual(createOpts[0]?.agents, undefined);
+      })
+  );
+
   it.effect("run status error yields AgentError", () =>
     Effect.gen(function* () {
       const service = makeCursorAgentService({

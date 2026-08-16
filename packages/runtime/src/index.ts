@@ -1,5 +1,6 @@
 export type {
   AgentCustomTool,
+  AgentDefinition,
   AgentProviderService,
   AgentRunOptions,
   AgentSession,

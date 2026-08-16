@@ -146,6 +146,9 @@ describe("runMinimalAdw progress events", () => {
       );
       assert.isTrue(lines.some((l) => l.includes("kind=step_enter step=test")));
       assert.isTrue(
+        lines.some((l) => l.includes("kind=step_enter step=seam_confirm"))
+      );
+      assert.isTrue(
         lines.some((l) => l.includes("kind=step_enter step=review"))
       );
       assert.isTrue(lines.some((l) => l.includes("kind=step_enter step=ship")));

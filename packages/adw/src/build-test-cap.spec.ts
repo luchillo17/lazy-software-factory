@@ -16,6 +16,7 @@ import { AdwStatus } from "./enums.ts";
 import { GitHost } from "./git-host.ts";
 import { runMinimalAdw } from "./run-minimal-adw.ts";
 import { submitReviewPassViaTools } from "./review-tool-test-helpers.ts";
+import { withEmptyPendingDeltaGit } from "./empty-pending-delta-git-test-helpers.ts";
 import { AdwTestCommands } from "./test-commands.ts";
 import { WorkspaceProvision } from "./workspace-provision.ts";
 import { monorepoRoot } from "./monorepo-root.ts";
@@ -97,7 +98,7 @@ describe("runMinimalAdw Build↔Test resume + cap", () => {
             Effect.succeed({
               id: "sandbox-1",
               cwd: monorepoRoot,
-              exec: () =>
+              exec: withEmptyPendingDeltaGit(() =>
                 Effect.gen(function* () {
                   const pass = yield* Ref.get(testPass);
                   if (!pass) {
@@ -109,7 +110,8 @@ describe("runMinimalAdw Build↔Test resume + cap", () => {
                     };
                   }
                   return { exitCode: 0, stdout: "ok", stderr: "" };
-                }),
+                })
+              ),
               destroy: () => Effect.void,
             } satisfies Sandbox),
         })
@@ -171,12 +173,13 @@ describe("runMinimalAdw Build↔Test resume + cap", () => {
               Effect.succeed({
                 id: "sandbox-1",
                 cwd: monorepoRoot,
-                exec: () =>
+                exec: withEmptyPendingDeltaGit(() =>
                   Effect.succeed({
                     exitCode: 1,
                     stdout: "",
                     stderr: "still red",
-                  }),
+                  })
+                ),
                 destroy: () => Effect.void,
               } satisfies Sandbox),
           })
@@ -243,7 +246,7 @@ describe("runMinimalAdw Build↔Test resume + cap", () => {
               Effect.succeed({
                 id: "sandbox-1",
                 cwd: monorepoRoot,
-                exec: (command) =>
+                exec: withEmptyPendingDeltaGit((command) =>
                   Effect.gen(function* () {
                     const n = yield* Ref.get(round);
                     if (n === 0) {
@@ -264,7 +267,8 @@ describe("runMinimalAdw Build↔Test resume + cap", () => {
                       return { exitCode: 0, stdout: "ok", stderr: "" };
                     }
                     return { exitCode: 0, stdout: "ok", stderr: "" };
-                  }),
+                  })
+                ),
                 destroy: () => Effect.void,
               } satisfies Sandbox),
           })
