@@ -4,6 +4,7 @@ Design notes and ADRs for the factory live here. Domain language: [`CONTEXT.md`]
 
 ## Consumer notes
 
+- **[Host Minimal self-build (v0)](./host-self-build.md)** — `ready-for-agent` Issue → `pnpm adw:host -- --issue` → live `shipped` PR
 - **[Extractability (v0)](./extractability.md)** — depend on `runtime` / `adw` / `git-host` from outside monorepo apps (rough DX OK; npm publish not required)
 
 ## ADW flow diagrams

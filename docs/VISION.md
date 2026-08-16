@@ -108,7 +108,7 @@ Acceptance criteria for **Minimal ADW** v0 green (self-building this repo on **H
   - [ ] Happy path can yield **`shipped`** (PR URL recorded)
   - [ ] Ship miss yields **`ready_for_pr`** without failing the agent loop / burning Build or Review attempts (ADR-0011)
   - [ ] Build↔Test and Review attempt caps behave per ADR-0009
-- [ ] **One documented manual self-build** on this repo: a real `ready-for-agent` Issue runs through Host Minimal ADW and reaches **`shipped`** (live PR)
+- [x] **One documented manual self-build** on this repo: a real `ready-for-agent` Issue runs through Host Minimal ADW and reaches **`shipped`** (live PR) — [`docs/host-self-build.md`](host-self-build.md) (proven: [#42](https://github.com/luchillo17/lazy-software-factory/issues/42) → [PR #63](https://github.com/luchillo17/lazy-software-factory/pull/63))
 - [ ] **Intake:** thin operator/CLI (or app) starts Minimal ADW from one GitHub Issue labelled `ready-for-agent` (Issue id + body → `ticketId` / prompt) — not full triage automation; diagram: TicketIntake → Prompt in [ADR-0007](adr/0007-minimal-adw-build-test-review.md) (outside the Build↔Ship spine)
 - [ ] **Build Role skill binding:** session bootstrap injects root `/implement` (flat skills + work; no role speech, no closure laundry list, no forced `/setup-matt-pocock-skills`); pack root `.agents/skills` present on agent cwd
 - [ ] **Review Role skill binding:** session bootstrap injects root `/adw-review`; Host bundles that skill (`packages/adw/host-skill-pack`) onto agent `local.dirs` (target cwd need not vendor it); Build still requires `.agents/skills` on cwd for `/implement`
