@@ -104,14 +104,14 @@ Acceptance criteria for **Minimal ADW** v0 green (self-building this repo on **H
 
 ### Must pass
 
-- [ ] **Automated Minimal ADW tests** cover provision → Build ↔ Test → Review → Ship on Host (adapters/fakes OK), including:
-  - [ ] Happy path can yield **`shipped`** (PR URL recorded)
-  - [ ] Ship miss yields **`ready_for_pr`** without failing the agent loop / burning Build or Review attempts (ADR-0011)
-  - [ ] Build↔Test and Review attempt caps behave per ADR-0009
+- [x] **Automated Minimal ADW tests** cover provision → Build ↔ Test → Review → Ship on Host (adapters/fakes OK), including:
+  - [x] Happy path can yield **`shipped`** (PR URL recorded) — `packages/adw` `run-minimal-adw.spec.ts`
+  - [x] Ship miss yields **`ready_for_pr`** without failing the agent loop / burning Build or Review attempts (ADR-0011) — `ship-ready-for-pr.spec.ts`
+  - [x] Build↔Test and Review attempt caps behave per ADR-0009 — `build-test-cap.spec.ts`, `review-routing.spec.ts`
 - [x] **One documented manual self-build** on this repo: a real `ready-for-agent` Issue runs through Host Minimal ADW and reaches **`shipped`** (live PR) — [`docs/host-self-build.md`](host-self-build.md) (proven: [#42](https://github.com/luchillo17/lazy-software-factory/issues/42) → [PR #63](https://github.com/luchillo17/lazy-software-factory/pull/63))
-- [ ] **Intake:** thin operator/CLI (or app) starts Minimal ADW from one GitHub Issue labelled `ready-for-agent` (Issue id + body → `ticketId` / prompt) — not full triage automation; diagram: TicketIntake → Prompt in [ADR-0007](adr/0007-minimal-adw-build-test-review.md) (outside the Build↔Ship spine)
-- [ ] **Build Role skill binding:** session bootstrap injects root `/implement` (flat skills + work; no role speech, no closure laundry list, no forced `/setup-matt-pocock-skills`); pack root `.agents/skills` present on agent cwd
-- [ ] **Review Role skill binding:** session bootstrap injects root `/adw-review`; Host bundles that skill (`packages/adw/host-skill-pack`) onto agent `local.dirs` (target cwd need not vendor it); Build still requires `.agents/skills` on cwd for `/implement`
+- [x] **Intake:** thin operator/CLI (or app) starts Minimal ADW from one GitHub Issue labelled `ready-for-agent` (Issue id + body → `ticketId` / prompt) — not full triage automation; diagram: TicketIntake → Prompt in [ADR-0007](adr/0007-minimal-adw-build-test-review.md) (outside the Build↔Ship spine) — [#37](https://github.com/luchillo17/lazy-software-factory/issues/37), `pnpm adw:host -- --issue`
+- [x] **Build Role skill binding:** session bootstrap injects root `/implement` (flat skills + work; no role speech, no closure laundry list, no forced `/setup-matt-pocock-skills`); pack root `.agents/skills` present on agent cwd — [#38](https://github.com/luchillo17/lazy-software-factory/issues/38), `role-skill-binding.ts`
+- [x] **Review Role skill binding:** session bootstrap injects root `/adw-review`; Host bundles that skill (`packages/adw/host-skill-pack`) onto agent `local.dirs` (target cwd need not vendor it); Build still requires `.agents/skills` on cwd for `/implement` — [#38](https://github.com/luchillo17/lazy-software-factory/issues/38)
 - [x] **Extractability note:** short consumer doc on depending on `runtime` / `adw` (+ git-host seam) outside monorepo apps — DX rough OK; npm publish **not** required — [`docs/extractability.md`](extractability.md)
 
 ### Explicitly not required for v0
