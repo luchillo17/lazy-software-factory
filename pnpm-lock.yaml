@@ -37,6 +37,9 @@ importers:
       dotenv:
         specifier: ^17.4.2
         version: 17.4.2
+      effect:
+        specifier: 4.0.0-beta.106
+        version: 4.0.0-beta.106
       husky:
         specifier: ^9.1.7
         version: 9.1.7
