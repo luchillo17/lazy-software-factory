@@ -28,6 +28,19 @@ export interface AgentCustomTool {
   ) => unknown | Promise<unknown>;
 }
 
+/**
+ * Structural subagent definition (Cursor `AgentDefinition` compatible).
+ * Inline catalog on create/resume; when omitted, file-based `.cursor/agents`
+ * can still load via project `settingSources`. Empty/missing catalog is fine —
+ * parent may keep work inline (soft skill guidance, not an ADW hard guarantee).
+ */
+export interface AgentDefinition {
+  readonly description: string;
+  readonly prompt: string;
+  /** Subagent model id, `{ id }`, or `"inherit"` from the parent agent. */
+  readonly model?: string | "inherit" | { readonly id: string };
+}
+
 export interface AgentRunOptions {
   readonly prompt: string;
   /** Every agent call requires a sandbox pointer — never “no sandbox.” */
@@ -44,6 +57,13 @@ export interface AgentRunOptions {
    * Host Review uses this to expose the bundled `/adw-review` skill pack.
    */
   readonly workspaceDirs?: readonly string[];
+  /**
+   * Cursor SDK subagent catalog (`AgentOptions.agents`). Inline entries override
+   * same-named `.cursor/agents/*.md` defs. Empty/`{}` is treated as omitted so
+   * file-based defs stay usable. Re-pass on resume; do not disallow the
+   * task/agent tool if spawn should remain possible.
+   */
+  readonly agents?: Record<string, AgentDefinition>;
 }
 
 export interface AgentProviderService {

@@ -1,4 +1,5 @@
 import type {
+  AgentDefinition as SdkAgentDefinition,
   AgentOptions,
   RunResult,
   SDKAgent,
@@ -6,6 +7,7 @@ import type {
 } from "@cursor/sdk";
 import { Config, ConfigProvider, Effect, Layer, Option } from "effect";
 import type {
+  AgentDefinition,
   AgentProviderService,
   AgentRunOptions,
   AgentSession,
@@ -123,27 +125,54 @@ const resolveModelId = (
     );
 };
 
+const toSdkAgentDefinition = (
+  definition: AgentDefinition
+): SdkAgentDefinition => {
+  const { description, prompt, model } = definition;
+  if (model === undefined) {
+    return { description, prompt };
+  }
+  if (model === "inherit" || typeof model === "object") {
+    return { description, prompt, model };
+  }
+  return { description, prompt, model: { id: model } };
+};
+
 const createOptions = (
   options: AgentRunOptions,
   apiKey: string | undefined,
   modelId: string | undefined
-): AgentOptions => ({
-  ...(apiKey ? { apiKey } : {}),
-  ...(modelId ? { model: { id: modelId } } : {}),
-  local: {
-    cwd: options.sandbox.cwd,
-    // Project ambient: rules + MCP config; workspace scan from cwd also
-    // picks up AGENTS.md + .agents/skills (IDE-like Host mirror).
-    // Extra dirs (e.g. Host-bundled `/adw-review`) merge into that scan.
-    settingSources: ["project"],
-    ...(options.workspaceDirs && options.workspaceDirs.length > 0
-      ? { dirs: [...options.workspaceDirs] }
-      : {}),
-    ...(options.customTools
-      ? { customTools: options.customTools as Record<string, SDKCustomTool> }
-      : {}),
-  },
-});
+): AgentOptions => {
+  const agents =
+    options.agents && Object.keys(options.agents).length > 0
+      ? Object.fromEntries(
+          Object.entries(options.agents).map(([name, definition]) => [
+            name,
+            toSdkAgentDefinition(definition),
+          ])
+        )
+      : undefined;
+
+  return {
+    ...(apiKey ? { apiKey } : {}),
+    ...(modelId ? { model: { id: modelId } } : {}),
+    ...(agents ? { agents } : {}),
+    local: {
+      cwd: options.sandbox.cwd,
+      // Project ambient: rules + MCP config + file-based `.cursor/agents`;
+      // workspace scan from cwd also picks up AGENTS.md + .agents/skills
+      // (IDE-like Host mirror). Extra dirs (e.g. Host-bundled `/adw-review`)
+      // merge into that scan. Inline `agents` above override same-named files.
+      settingSources: ["project"],
+      ...(options.workspaceDirs && options.workspaceDirs.length > 0
+        ? { dirs: [...options.workspaceDirs] }
+        : {}),
+      ...(options.customTools
+        ? { customTools: options.customTools as Record<string, SDKCustomTool> }
+        : {}),
+    },
+  };
+};
 
 /** Build AgentProviderService against an injectable CursorSdk. */
 export const makeCursorAgentService = (
