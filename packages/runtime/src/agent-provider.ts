@@ -28,6 +28,22 @@ export interface AgentCustomTool {
   ) => unknown | Promise<unknown>;
 }
 
+/**
+ * Structural subagent definition (Cursor `AgentDefinition` compatible).
+ * Keeps `@cursor/sdk` out of ADW; adapter maps `model` string ids to SDK
+ * `ModelSelection` (or passes `"inherit"` through).
+ *
+ * Empty catalog (no inline `agents` and no `.cursor/agents/*.md` on disk) means
+ * the parent may keep work inline — soft skill guidance only, not an ADW hard
+ * guarantee of dual/parallel spawn.
+ */
+export interface AgentSubagentDefinition {
+  readonly description: string;
+  readonly prompt: string;
+  /** Model id, or `"inherit"` to use the parent agent's model. */
+  readonly model?: string | "inherit";
+}
+
 export interface AgentRunOptions {
   readonly prompt: string;
   /** Every agent call requires a sandbox pointer — never “no sandbox.” */
@@ -44,6 +60,14 @@ export interface AgentRunOptions {
    * Host Review uses this to expose the bundled `/adw-review` skill pack.
    */
   readonly workspaceDirs?: readonly string[];
+  /**
+   * Inline Cursor SDK subagents (`Agent.create` / `resume` `agents` map).
+   * When omitted, file-based `.cursor/agents/*.md` remain usable per SDK
+   * precedence (inline overrides files when both exist). Runtime does not
+   * disallow the Agent/task tool — spawn stays possible when definitions exist.
+   * Empty catalog ⇒ parent inline fallback is expected (not dual-spawn guarantee).
+   */
+  readonly agents?: Record<string, AgentSubagentDefinition>;
 }
 
 export interface AgentProviderService {

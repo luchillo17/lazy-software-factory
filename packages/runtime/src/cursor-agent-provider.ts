@@ -1,4 +1,5 @@
 import type {
+  AgentDefinition,
   AgentOptions,
   RunResult,
   SDKAgent,
@@ -9,6 +10,7 @@ import type {
   AgentProviderService,
   AgentRunOptions,
   AgentSession,
+  AgentSubagentDefinition,
 } from "./agent-provider.ts";
 import {
   AgentProvider,
@@ -123,6 +125,32 @@ const resolveModelId = (
     );
 };
 
+const toSdkAgentDefinition = (
+  def: AgentSubagentDefinition
+): AgentDefinition => {
+  const mapped: AgentDefinition = {
+    description: def.description,
+    prompt: def.prompt,
+  };
+  if (def.model === undefined) {
+    return mapped;
+  }
+  if (def.model === "inherit") {
+    return { ...mapped, model: "inherit" };
+  }
+  return { ...mapped, model: { id: def.model } };
+};
+
+const toSdkAgents = (
+  agents: Record<string, AgentSubagentDefinition>
+): Record<string, AgentDefinition> => {
+  const out: Record<string, AgentDefinition> = {};
+  for (const [name, def] of Object.entries(agents)) {
+    out[name] = toSdkAgentDefinition(def);
+  }
+  return out;
+};
+
 const createOptions = (
   options: AgentRunOptions,
   apiKey: string | undefined,
@@ -130,11 +158,16 @@ const createOptions = (
 ): AgentOptions => ({
   ...(apiKey ? { apiKey } : {}),
   ...(modelId ? { model: { id: modelId } } : {}),
+  // Do not set `tools` / `disallowedTools` — leaving the default toolset
+  // (including task/subagent spawn) available when agents are defined.
+  ...(options.agents ? { agents: toSdkAgents(options.agents) } : {}),
   local: {
     cwd: options.sandbox.cwd,
     // Project ambient: rules + MCP config; workspace scan from cwd also
     // picks up AGENTS.md + .agents/skills (IDE-like Host mirror).
     // Extra dirs (e.g. Host-bundled `/adw-review`) merge into that scan.
+    // File-based `.cursor/agents/*.md` remain usable via workspace scan;
+    // when both inline `agents` and files exist, SDK precedence: inline overrides files.
     settingSources: ["project"],
     ...(options.workspaceDirs && options.workspaceDirs.length > 0
       ? { dirs: [...options.workspaceDirs] }

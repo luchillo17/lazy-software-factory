@@ -3,6 +3,7 @@ export type {
   AgentProviderService,
   AgentRunOptions,
   AgentSession,
+  AgentSubagentDefinition,
 } from "./agent-provider.ts";
 export {
   AgentProvider,
