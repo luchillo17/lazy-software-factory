@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="520" height="640" viewBox="0 0 520 640">
-  <rect width="520" height="640" fill="#0b1220"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="520" height="708" viewBox="0 0 520 708">
+  <rect width="520" height="708" fill="#0b1220"/>
   <defs>
     <marker id="arrow" markerWidth="7" markerHeight="7" refX="8" refY="5" orient="auto">
       <path d="M0,0 L10,5 L0,10 z" fill="#94a3b8"/>
@@ -17,7 +17,7 @@
   <text x="270" y="113" text-anchor="middle" fill="#fef3c7" font-family="sans-serif" font-size="13">Planner Agent</text>
   <line x1="270" y1="128" x2="270" y2="156" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrow)"/>
 
-  <rect x="80" y="156" width="400" height="340" rx="10" fill="#111827" stroke="#475569" stroke-width="1.5"/>
+  <rect x="80" y="156" width="400" height="408" rx="10" fill="#111827" stroke="#475569" stroke-width="1.5"/>
   <text x="100" y="180" fill="#cbd5e1" font-family="sans-serif" font-size="12" font-weight="bold">Minimal ADW (ADR-0007)</text>
 
   <rect x="160" y="200" width="220" height="40" rx="6" fill="#3b2f1a" stroke="#fbbf24" stroke-width="1.5"/>
@@ -25,32 +25,40 @@
   <line x1="270" y1="240" x2="270" y2="268" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrow)"/>
 
   <rect x="160" y="268" width="220" height="40" rx="6" fill="#1a2e1a" stroke="#86efac" stroke-width="1.5"/>
-  <text x="270" y="293" text-anchor="middle" fill="#dcfce7" font-family="sans-serif" font-size="13">Test agent</text>
+  <text x="270" y="293" text-anchor="middle" fill="#dcfce7" font-family="sans-serif" font-size="13">SeamConfirm agent</text>
   <path d="M160,288 C110,288 110,220 160,220" fill="none" stroke="#64748b" stroke-width="1.5" stroke-dasharray="5,4" marker-end="url(#arrowFail)"/>
-  <text x="100" y="258" fill="#94a3b8" font-family="sans-serif" font-size="11">fail</text>
+  <text x="88" y="258" fill="#94a3b8" font-family="sans-serif" font-size="11">confirm</text>
   <line x1="270" y1="308" x2="270" y2="336" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrow)"/>
   <rect x="248" y="314" width="44" height="16" rx="3" fill="#111827"/>
-  <text x="270" y="326" text-anchor="middle" fill="#94a3b8" font-family="sans-serif" font-size="11">green</text>
+  <text x="270" y="326" text-anchor="middle" fill="#94a3b8" font-family="sans-serif" font-size="11">skip</text>
 
-  <rect x="160" y="336" width="220" height="40" rx="6" fill="#2e1a3b" stroke="#c4b5fd" stroke-width="1.5"/>
-  <text x="270" y="361" text-anchor="middle" fill="#ede9fe" font-family="sans-serif" font-size="13">Agent Review</text>
-  <path d="M380,356 C450,356 450,220 380,220" fill="none" stroke="#64748b" stroke-width="1.5" stroke-dasharray="5,4" marker-end="url(#arrowFail)"/>
-  <text x="430" y="290" fill="#94a3b8" font-family="sans-serif" font-size="11">fail</text>
+  <rect x="160" y="336" width="220" height="40" rx="6" fill="#1a2e1a" stroke="#86efac" stroke-width="1.5"/>
+  <text x="270" y="361" text-anchor="middle" fill="#dcfce7" font-family="sans-serif" font-size="13">Test agent</text>
+  <path d="M160,356 C70,356 70,220 160,220" fill="none" stroke="#64748b" stroke-width="1.5" stroke-dasharray="5,4" marker-end="url(#arrowFail)"/>
+  <text x="78" y="330" fill="#94a3b8" font-family="sans-serif" font-size="11">fail</text>
   <line x1="270" y1="376" x2="270" y2="404" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrow)"/>
-  <rect x="198" y="382" width="144" height="16" rx="3" fill="#111827"/>
-  <text x="270" y="394" text-anchor="middle" fill="#94a3b8" font-family="sans-serif" font-size="11">pass + prTitle/prBody</text>
+  <rect x="248" y="382" width="44" height="16" rx="3" fill="#111827"/>
+  <text x="270" y="394" text-anchor="middle" fill="#94a3b8" font-family="sans-serif" font-size="11">green</text>
 
-  <rect x="160" y="404" width="220" height="52" rx="6" fill="#1a2e2e" stroke="#5eead4" stroke-width="1.5"/>
-  <text x="270" y="425" text-anchor="middle" fill="#ccfbf1" font-family="sans-serif" font-size="13">Ship agent</text>
-  <text x="270" y="443" text-anchor="middle" fill="#99f6e4" font-family="sans-serif" font-size="11">open PR</text>
+  <rect x="160" y="404" width="220" height="40" rx="6" fill="#2e1a3b" stroke="#c4b5fd" stroke-width="1.5"/>
+  <text x="270" y="429" text-anchor="middle" fill="#ede9fe" font-family="sans-serif" font-size="13">Agent Review</text>
+  <path d="M380,424 C450,424 450,220 380,220" fill="none" stroke="#64748b" stroke-width="1.5" stroke-dasharray="5,4" marker-end="url(#arrowFail)"/>
+  <text x="430" y="330" fill="#94a3b8" font-family="sans-serif" font-size="11">fail</text>
+  <line x1="270" y1="444" x2="270" y2="472" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <rect x="198" y="450" width="144" height="16" rx="3" fill="#111827"/>
+  <text x="270" y="462" text-anchor="middle" fill="#94a3b8" font-family="sans-serif" font-size="11">pass + prTitle/prBody</text>
 
-  <line x1="270" y1="496" x2="270" y2="560" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrow)"/>
-  <rect x="205" y="520" width="130" height="16" rx="3" fill="#0b1220"/>
-  <text x="270" y="532" text-anchor="middle" fill="#94a3b8" font-family="sans-serif" font-size="11">shipped = PR opened</text>
+  <rect x="160" y="472" width="220" height="52" rx="6" fill="#1a2e2e" stroke="#5eead4" stroke-width="1.5"/>
+  <text x="270" y="493" text-anchor="middle" fill="#ccfbf1" font-family="sans-serif" font-size="13">Ship agent</text>
+  <text x="270" y="511" text-anchor="middle" fill="#99f6e4" font-family="sans-serif" font-size="11">open PR</text>
 
-  <rect x="160" y="560" width="220" height="40" rx="20" fill="#3b1a1a" stroke="#fca5a5" stroke-width="1.5"/>
-  <text x="270" y="585" text-anchor="middle" fill="#fee2e2" font-family="sans-serif" font-size="13">Engineer Review</text>
+  <line x1="270" y1="564" x2="270" y2="628" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <rect x="205" y="588" width="130" height="16" rx="3" fill="#0b1220"/>
+  <text x="270" y="600" text-anchor="middle" fill="#94a3b8" font-family="sans-serif" font-size="11">shipped = PR opened</text>
 
-  <path d="M160,580 C40,580 40,108 160,108" fill="none" stroke="#64748b" stroke-width="1.5" stroke-dasharray="5,4" marker-end="url(#arrowFail)"/>
-  <text x="54" y="360" fill="#94a3b8" font-family="sans-serif" font-size="11" transform="rotate(-90 54 360)">fail to Planner (HITL)</text>
+  <rect x="160" y="628" width="220" height="40" rx="20" fill="#3b1a1a" stroke="#fca5a5" stroke-width="1.5"/>
+  <text x="270" y="653" text-anchor="middle" fill="#fee2e2" font-family="sans-serif" font-size="13">Engineer Review</text>
+
+  <path d="M160,648 C40,648 40,108 160,108" fill="none" stroke="#64748b" stroke-width="1.5" stroke-dasharray="5,4" marker-end="url(#arrowFail)"/>
+  <text x="54" y="394" fill="#94a3b8" font-family="sans-serif" font-size="11" transform="rotate(-90 54 394)">fail to Planner (HITL)</text>
 </svg>
