@@ -17,11 +17,11 @@ An AI developer workflow — a composable coded graph of agent steps, determinis
 _Avoid_: Pipeline, agent loop (a single agent chat iteration is not the whole ADW); treating ADWs as non-nestable flat scripts only; one-node ADW wrappers around a single Agent
 
 **Minimal ADW**:
-The leaf ADW: **Build agent** ↔ **Test agent** (Code agent) → **Review agent** → **Ship agent** (Code agent) (ADR-0007 shape). Own Build/Review attempt caps and warm-sandbox loop.
-_Avoid_: Calling this Feature; dropping Review from Minimal
+The leaf ADW: **Build agent** ↔ **SeamConfirm agent** (Code agent) ↔ **Test agent** (Code agent) → **Review agent** → **Ship agent** (Code agent) (ADR-0007 shape). Own Build/Review attempt caps and warm-sandbox loop.
+_Avoid_: Calling this Feature; dropping Review from Minimal; treating SeamConfirm as an LLM agent
 
 **Code agent**:
-A deterministic, composable ADW graph node — **not** an LLM. Schema-guaranteed inputs (and coded outputs/statuses). Examples: **Test agent**, **Ship agent**. Distinct from configured LLM **Agent** (Build, Review, Planner).
+A deterministic, composable ADW graph node — **not** an LLM. Schema-guaranteed inputs (and coded outputs/statuses). Examples: **Test agent**, **SeamConfirm agent**, **Ship agent**. Distinct from configured LLM **Agent** (Build, Review, Planner).
 _Avoid_: Calling Code agents “LLM agents”; giving Ship forge credentials to an LLM session; free-text-only inputs to Code agents
 
 **Feature ADW**:
@@ -37,16 +37,20 @@ A deterministic pass/fail check owned by orchestration (lint, typecheck, test, p
 _Avoid_: Validation (too vague), agent self-check
 
 **Build attempt**:
-One Build agent run (create or resume) in the **Build↔Test** loop only. Own counter (v0 default cap **5**), **separate from Review attempts**. Test-fail → resume Build spends one Build attempt. Review-fail → resume Build does **not** spend a Build attempt — that path is charged only as a Review attempt when Review ran.
-_Avoid_: One shared budget with Review; counting Review→Build resumes as Build attempts; counting Test agent execs as attempts; unbounded Test→Build resume
+One Build agent run (create or resume) in the **Build↔Test** loop only. Own counter (v0 default cap **5**), **separate from Review attempts**. Test-fail → resume Build spends one Build attempt. Review-fail → resume Build does **not** spend a Build attempt — that path is charged only as a Review attempt when Review ran. **SeamConfirm** Confirm → resume Build does **not** spend a Build attempt (cap **1** Confirm per ADW run).
+_Avoid_: One shared budget with Review; counting Review→Build or SeamConfirm→Build resumes as Build attempts; counting Test agent execs as attempts; unbounded Test→Build resume
 
 **Review attempt**:
 One Review agent **create** when entering Review from the Build/Test path (new session). Own counter (v0 default cap **3**), **separate from Build attempts**. Wire-miss **resumes** of that session do **not** spend an extra Review attempt; they use an inner wire-miss resume cap (v0 default **3**) per Review session. Caps Review↔Build thrash; exhaust Review attempts or wire-miss resume cap → ADW `failed` even if Build attempts remain. After a valid Review fail, resuming Build with the fail report does not decrement the Build counter.
 _Avoid_: Sharing one counter with Build↔Test; charging Review→Build or wire-miss resumes to the Build cap; charging every wire-miss resume as a new Review attempt; unlimited Review or wire-repair retries
 
 **Build agent**:
-The LLM agent session that implements the ticket in the warm sandbox. Its `AgentSession` is the durable resume target when the Test agent fails or Review fails. v0 orchestration does **not** consume structured Build output (Test agent gates); no Build submit tools required.
-_Avoid_: Treating Review’s session as the place to keep coding; inventing Build structured wire with no orchestration consumer
+The LLM agent session that implements the ticket in the warm sandbox. Its `AgentSession` is the durable resume target when the Test agent fails, Review fails, or **SeamConfirm** Confirms. No Build submit tools. The **SeamConfirm agent** may read `session.output` as a text haystack (not a Schema verdict) together with git pending-delta probes.
+_Avoid_: Treating Review’s session as the place to keep coding; inventing Build structured wire / submit tools; treating SeamConfirm’s haystack scan as a Review-style verdict schema
+
+**SeamConfirm agent**:
+A **Code agent** that is the AFK stub for `/tdd` “confirm seams with the user” until HITL ADWs exist. After each Build session, **Confirm** only when pending delta is empty **and** Build output contains seam-wait markers **and** the per-run Confirm cap (v0: **1**) is unused; then resume the same Build session with a fixed confirm prompt. Otherwise **Skip** and advance to the Test agent. Git probe failure is Skip (never Confirm when delta is unknown).
+_Avoid_: AutoYes; a generic Confirm agent; an LLM that judges seam quality; auto-confirming every empty stop (creds, design forks); spending a Build attempt on Confirm resume
 
 **Test agent**:
 A **Code agent** that runs **check-only** gates via the Runtime — not an LLM. Host resolves gates from the target repo root `package.json` scripts (`type-check`/`typecheck`, `lint:check`/`lint`, `test:run`/`test:ci`/`test`, …) as `pnpm|npm|yarn|bun run <script>` — not Factory-hardcoded nx package lists. Independent checks run **in parallel**; any red resumes Build with a **combined** fail report (all failing gates’ output), same session and sandbox. Pass all → Review. No matching scripts → ADW `failed` (no silent green).

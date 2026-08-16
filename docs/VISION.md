@@ -15,7 +15,7 @@ Hosted multi-org **Organization** Platform is a later packaging of the same core
 - **Agent** (configured): reusable LLM role primitive; owns **Skill pack** + **Role skill binding** (plus transitive skill refs). Distinct from **Agent session**.
 - **Skill pack**: default root `.agents/skills`. Organization custom packs = later hosted overlay on the same Agent primitive.
 - **ADW**: composable graph of Agents, deterministic gates, and/or nested ADWs. Never wrap a single Agent as a one-node ADW.
-- **Minimal ADW**: Build ↔ Test agent → Review → Ship agent (ADR-0007 shape). Test + Ship are **Code agents** (schema in; not LLMs). Canonical colored flow: [ADR-0007](adr/0007-minimal-adw-build-test-review.md). **TicketIntake** (Host CLI) sits _before_ that graph: ready Issue → `ticketId` + prompt; not a Minimal ADW node.
+- **Minimal ADW**: Build ↔ SeamConfirm ↔ Test agent → Review → Ship agent (ADR-0007 shape). Test, SeamConfirm, and Ship are **Code agents** (schema in; not LLMs). Canonical colored flow: [ADR-0007](adr/0007-minimal-adw-build-test-review.md). **TicketIntake** (Host CLI) sits _before_ that graph: ready Issue → `ticketId` + prompt; not a Minimal ADW node.
 - **Feature ADW**: Planner Agent → nested Minimal ADW (one shared **warm sandbox**; Ship agent stays on Minimal after Review pass). Planner emits a **`/to-plan`** artifact into ADW/warm-sandbox state; Minimal consumes it. Feature ticket intake (Planner around a tracer ticket) is separate from Host Minimal **TicketIntake**.
 
 ![ADW diagram legend](diagrams/adw-legend.svg)
@@ -32,12 +32,15 @@ flowchart TB
   subgraph Minimal["Minimal ADW (ADR-0007)"]
     direction TB
     Build["Build agent"]
+    SeamConfirm["SeamConfirm agent"]
     Test["Test agent"]
     Review["Agent Review"]
     Ship["Ship agent\nopen PR"]
-    Build --> Test
+    Build --> SeamConfirm
+    SeamConfirm -->|skip| Test
     Test -->|green| Review
     Review -->|"pass + prTitle/prBody"| Ship
+    SeamConfirm -.->|confirm| Build
     Test -.->|fail| Build
     Review -.->|fail| Build
   end
@@ -55,12 +58,12 @@ flowchart TB
 
   class Prompt,Eng human
   class Planner,Build llm
-  class Test gate
+  class Test,SeamConfirm gate
   class Review agent
   class Ship ship
 ```
 
-Ship **opens the PR** inside Minimal; it does **not** merge or deploy. Dashed fail inside Minimal → Build (local resume). Engineer Review fail → Planner (HITL) is in Mermaid + SVG.
+Ship **opens the PR** inside Minimal; it does **not** merge or deploy. Dashed fail inside Minimal → Build (local resume). SeamConfirm confirm → Build (no Build attempt). Engineer Review fail → Planner (HITL) is in Mermaid + SVG.
 
 - **Role skill binding**: soft guidance loaded into the session (Cursor SDK has no skills API — binding invented in ADW prompts; pack discovery is workspace filesystem). Hard pass/fail stays ADW gates (ADR-0001). Optional **suggested skills** inside a plan are hints only — the configured Agent’s Role skill binding remains authoritative (matters more when cloud tenants customize Agents).
 

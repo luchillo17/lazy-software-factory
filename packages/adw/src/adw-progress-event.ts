@@ -5,6 +5,7 @@ import { redactSecrets } from "./redact-secrets.ts";
 export const AdwStep = {
   Provision: "provision",
   Build: "build",
+  SeamConfirm: "seam_confirm",
   Test: "test",
   Review: "review",
   Ship: "ship",
