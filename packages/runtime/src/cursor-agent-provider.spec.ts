@@ -352,6 +352,7 @@ describe("Cursor AgentProvider", () => {
       assert.deepStrictEqual(createOpts[0]?.agents, agents);
       // Spawn stays possible: adapter must not deny the task/agent tool.
       assert.strictEqual(createOpts[0]?.disallowedTools, undefined);
+      assert.strictEqual(createOpts[0]?.tools, undefined);
     })
   );
 
@@ -359,9 +360,10 @@ describe("Cursor AgentProvider", () => {
     Effect.gen(function* () {
       const resumes = yield* Ref.make<AgentOptions[]>([]);
       const agents = {
-        "spec-reviewer": {
-          description: "Reviews diff against the originating spec",
-          prompt: "Review Spec axis only.",
+        investigator: {
+          description: "Locate code",
+          prompt: "Find the relevant files.",
+          model: "composer-2.5",
         },
       };
 
@@ -401,8 +403,15 @@ describe("Cursor AgentProvider", () => {
       }).pipe(Effect.provide(CursorBuildAgent.pipe(Layer.provide(sdkLayer))));
 
       const resumeOpts = yield* Ref.get(resumes);
-      assert.deepStrictEqual(resumeOpts[0]?.agents, agents);
+      assert.deepStrictEqual(resumeOpts[0]?.agents, {
+        investigator: {
+          description: "Locate code",
+          prompt: "Find the relevant files.",
+          model: { id: "composer-2.5" },
+        },
+      });
       assert.strictEqual(resumeOpts[0]?.disallowedTools, undefined);
+      assert.strictEqual(resumeOpts[0]?.tools, undefined);
     })
   );
 
