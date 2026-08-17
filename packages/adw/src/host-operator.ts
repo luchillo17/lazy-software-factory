@@ -210,6 +210,37 @@ export const mergeHostOperatorEnv = (
   return merged;
 };
 
+const argvHasCwdFlag = (argv: readonly string[]): boolean => {
+  const args = argv[0] === "--" ? argv.slice(1) : argv;
+  for (const arg of args) {
+    if (arg === "--cwd" || arg.startsWith("--cwd=")) {
+      return true;
+    }
+  }
+  return false;
+};
+
+/**
+ * `adw-host` bin: when the caller omitted `--cwd` and `ADW_CWD`, inject the
+ * invoker directory as `--cwd` so Host aims at the foreign tree even though the
+ * bin loads Factory `tsx` / packages from this checkout.
+ * Explicit `--cwd` / non-empty `ADW_CWD` win over the injected invoker path.
+ */
+export const prepareAdwHostArgv = (
+  argv: readonly string[],
+  invokerCwd: string,
+  env: { readonly ADW_CWD?: string } = {}
+): string[] => {
+  const adwCwd = env.ADW_CWD;
+  if (argvHasCwdFlag(argv) || (adwCwd !== undefined && adwCwd !== "")) {
+    return [...argv];
+  }
+  if (argv[0] === "--") {
+    return ["--", "--cwd", invokerCwd, ...argv.slice(1)];
+  }
+  return ["--cwd", invokerCwd, ...argv];
+};
+
 /** Parse argv flags: --ticket/--prompt or --issue, plus --repo-url / --cwd. */
 export const parseHostOperatorArgs = (
   argv: readonly string[],

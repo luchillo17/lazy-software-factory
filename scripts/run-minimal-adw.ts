@@ -5,6 +5,7 @@
  * Does not print secret values. Host sandbox allows only one ADW at a time.
  *
  * Usage:
+ *   adw-host --issue <n|url> [--cwd <dir>] [--repo-url <url>]
  *   pnpm adw:host -- --issue <n|url> [--cwd <dir>] [--repo-url <url>]
  *   pnpm adw:host -- --ticket <id> --prompt <text> [--cwd <dir>] [--repo-url <url>]
  */
@@ -29,7 +30,10 @@ const argv = process.argv.slice(2);
 const parsed = parseHostOperatorArgs(argv);
 if ("help" in parsed) {
   console.log(
-    "Usage: pnpm adw:host -- --issue <n|#N|url> [--cwd <dir>] [--repo-url <url>]"
+    "Usage: adw-host --issue <n|#N|url> [--cwd <dir>] [--repo-url <url>]"
+  );
+  console.log(
+    "   or: pnpm adw:host -- --issue <n|#N|url> [--cwd <dir>] [--repo-url <url>]"
   );
   console.log(
     "   or: pnpm adw:host -- --ticket <id> --prompt <text> [--cwd <dir>] [--repo-url <url>]"

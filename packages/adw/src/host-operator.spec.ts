@@ -1,8 +1,9 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Layer } from "effect";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { AdwStatus } from "./enums.ts";
 import {
   exitCodeForStatus,
@@ -12,6 +13,7 @@ import {
   loadHostDotEnv,
   mergeHostOperatorEnv,
   parseHostOperatorArgs,
+  prepareAdwHostArgv,
   redactSecrets,
   resolveHostOperatorAdwInput,
   resolveHostOperatorCwd,
@@ -355,6 +357,62 @@ describe("host operator entry", () => {
     );
     assert.strictEqual(merged["GH_TOKEN"], "from-shell");
     assert.strictEqual(merged["ADW_ISSUE"], "1");
+  });
+
+  it("prepareAdwHostArgv injects invoker cwd when --cwd and ADW_CWD are absent", () => {
+    assert.deepStrictEqual(
+      prepareAdwHostArgv(["--issue", "68"], "/tmp/sibling-repo", {}),
+      ["--cwd", "/tmp/sibling-repo", "--issue", "68"]
+    );
+  });
+
+  it("prepareAdwHostArgv leaves argv alone when --cwd is present", () => {
+    assert.deepStrictEqual(
+      prepareAdwHostArgv(
+        ["--issue", "68", "--cwd", "/tmp/explicit"],
+        "/tmp/sibling-repo",
+        {}
+      ),
+      ["--issue", "68", "--cwd", "/tmp/explicit"]
+    );
+  });
+
+  it("prepareAdwHostArgv leaves argv alone when ADW_CWD is set", () => {
+    assert.deepStrictEqual(
+      prepareAdwHostArgv(["--issue", "68"], "/tmp/sibling-repo", {
+        ADW_CWD: "/tmp/from-env",
+      }),
+      ["--issue", "68"]
+    );
+  });
+
+  it("prepareAdwHostArgv preserves leading pnpm --", () => {
+    assert.deepStrictEqual(
+      prepareAdwHostArgv(
+        ["--", "--ticket", "T-1", "--prompt", "x"],
+        "/inv",
+        {}
+      ),
+      ["--", "--cwd", "/inv", "--ticket", "T-1", "--prompt", "x"]
+    );
+  });
+
+  it("root package.json exposes adw-host bin and keeps pnpm adw:host on run-minimal-adw", () => {
+    const repoRoot = join(
+      fileURLToPath(new URL(".", import.meta.url)),
+      "../../.."
+    );
+    const pkg = JSON.parse(
+      readFileSync(join(repoRoot, "package.json"), "utf8")
+    ) as {
+      readonly bin?: Readonly<Record<string, string>>;
+      readonly scripts?: Readonly<Record<string, string>>;
+    };
+    assert.strictEqual(pkg.bin?.["adw-host"], "./bin/adw-host.mjs");
+    assert.strictEqual(
+      pkg.scripts?.["adw:host"],
+      "node --import tsx ./scripts/run-minimal-adw.ts"
+    );
   });
 
   it("redactSecrets strips token-like substrings from detail", () => {
