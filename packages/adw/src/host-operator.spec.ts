@@ -7,6 +7,10 @@ import { AdwStatus } from "./enums.ts";
 import {
   exitCodeForStatus,
   formatOperatorResult,
+  HostCwdError,
+  hostOperatorFsLayer,
+  loadHostDotEnv,
+  mergeHostOperatorEnv,
   parseHostOperatorArgs,
   redactSecrets,
   resolveHostOperatorAdwInput,
@@ -257,38 +261,100 @@ describe("host operator entry", () => {
     assert.isTrue("error" in parsed);
   });
 
-  it("resolveHostOperatorCwd defaults to process.cwd when omitted", () => {
-    const resolved = resolveHostOperatorCwd(undefined);
-    assert.strictEqual(resolved, process.cwd());
-  });
+  it.effect("resolveHostOperatorCwd defaults to process.cwd when omitted", () =>
+    resolveHostOperatorCwd(undefined).pipe(
+      Effect.provide(hostOperatorFsLayer),
+      Effect.map((resolved) => {
+        assert.strictEqual(resolved, process.cwd());
+      })
+    )
+  );
 
-  it("resolveHostOperatorCwd resolves an existing directory", () => {
-    const dir = mkdtempSync(join(tmpdir(), "adw-cwd-"));
-    try {
-      const resolved = resolveHostOperatorCwd(dir);
-      assert.strictEqual(resolved, dir);
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
-  });
+  it.effect("resolveHostOperatorCwd resolves an existing directory", () =>
+    Effect.gen(function* () {
+      const dir = mkdtempSync(join(tmpdir(), "adw-cwd-"));
+      try {
+        const resolved = yield* resolveHostOperatorCwd(dir).pipe(
+          Effect.provide(hostOperatorFsLayer)
+        );
+        assert.strictEqual(resolved, dir);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    })
+  );
 
-  it("resolveHostOperatorCwd fails closed for missing path", () => {
-    const resolved = resolveHostOperatorCwd(
-      join(tmpdir(), "adw-cwd-missing-nope")
+  it.effect("resolveHostOperatorCwd fails closed for missing path", () =>
+    Effect.gen(function* () {
+      const result = yield* resolveHostOperatorCwd(
+        join(tmpdir(), "adw-cwd-missing-nope")
+      ).pipe(Effect.provide(hostOperatorFsLayer), Effect.result);
+      assert.strictEqual(result._tag, "Failure");
+      if (result._tag === "Failure") {
+        assert.isTrue(result.failure instanceof HostCwdError);
+        assert.isTrue(result.failure.message.includes("does not exist"));
+      }
+    })
+  );
+
+  it.effect("resolveHostOperatorCwd fails closed when path is a file", () =>
+    Effect.gen(function* () {
+      const dir = mkdtempSync(join(tmpdir(), "adw-cwd-"));
+      const file = join(dir, "not-a-dir");
+      writeFileSync(file, "x");
+      try {
+        const result = yield* resolveHostOperatorCwd(file).pipe(
+          Effect.provide(hostOperatorFsLayer),
+          Effect.result
+        );
+        assert.strictEqual(result._tag, "Failure");
+        if (result._tag === "Failure") {
+          assert.isTrue(result.failure instanceof HostCwdError);
+          assert.isTrue(result.failure.message.includes("not a directory"));
+        }
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    })
+  );
+
+  it.effect("loadHostDotEnv reads keys from <cwd>/.env", () =>
+    Effect.gen(function* () {
+      const dir = mkdtempSync(join(tmpdir(), "adw-env-"));
+      writeFileSync(join(dir, ".env"), "ADW_ISSUE=99\nGH_TOKEN=from-file\n");
+      try {
+        const fileEnv = yield* loadHostDotEnv(dir).pipe(
+          Effect.provide(hostOperatorFsLayer)
+        );
+        assert.strictEqual(fileEnv["ADW_ISSUE"], "99");
+        assert.strictEqual(fileEnv["GH_TOKEN"], "from-file");
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    })
+  );
+
+  it.effect("loadHostDotEnv is empty when .env is missing", () =>
+    Effect.gen(function* () {
+      const dir = mkdtempSync(join(tmpdir(), "adw-env-missing-"));
+      try {
+        const fileEnv = yield* loadHostDotEnv(dir).pipe(
+          Effect.provide(hostOperatorFsLayer)
+        );
+        assert.deepStrictEqual(fileEnv, {});
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    })
+  );
+
+  it("mergeHostOperatorEnv lets shell env win over file keys", () => {
+    const merged = mergeHostOperatorEnv(
+      { GH_TOKEN: "from-file", ADW_ISSUE: "1" },
+      { GH_TOKEN: "from-shell" }
     );
-    assert.isTrue("error" in resolved);
-  });
-
-  it("resolveHostOperatorCwd fails closed when path is a file", () => {
-    const dir = mkdtempSync(join(tmpdir(), "adw-cwd-"));
-    const file = join(dir, "not-a-dir");
-    writeFileSync(file, "x");
-    try {
-      const resolved = resolveHostOperatorCwd(file);
-      assert.isTrue("error" in resolved);
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
+    assert.strictEqual(merged["GH_TOKEN"], "from-shell");
+    assert.strictEqual(merged["ADW_ISSUE"], "1");
   });
 
   it("redactSecrets strips token-like substrings from detail", () => {

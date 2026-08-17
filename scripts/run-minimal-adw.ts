@@ -8,13 +8,15 @@
  *   pnpm adw:host -- --issue <n|url> [--cwd <dir>] [--repo-url <url>]
  *   pnpm adw:host -- --ticket <id> --prompt <text> [--cwd <dir>] [--repo-url <url>]
  */
-import { resolve } from "node:path";
-import { config as loadDotEnv } from "dotenv";
 import { Effect } from "effect";
 import {
   exitCodeForStatus,
   formatOperatorResult,
+  HostCwdError,
+  hostOperatorFsLayer,
   hostTicketIntakeLayer,
+  loadHostDotEnv,
+  mergeHostOperatorEnv,
   parseHostOperatorArgs,
   readHostOperatorCwdInput,
   resolveHostOperatorAdwInput,
@@ -45,21 +47,30 @@ if ("help" in parsed) {
   process.exit(0);
 }
 
-// Resolve Host cwd before dotenv so `<cwd>/.env` can supply ADW_* / credentials.
-// When parse already failed for other reasons, still validate cwd so typos fail closed.
-const cwdResolved = resolveHostOperatorCwd(
-  "error" in parsed ? readHostOperatorCwdInput(argv) : parsed.cwd
+const prepared = await Effect.runPromise(
+  Effect.gen(function* () {
+    const cwd = yield* resolveHostOperatorCwd(
+      "error" in parsed ? readHostOperatorCwdInput(argv) : parsed.cwd
+    );
+    const fileEnv = yield* loadHostDotEnv(cwd);
+    return {
+      cwd,
+      env: mergeHostOperatorEnv(fileEnv, process.env),
+    };
+  }).pipe(Effect.provide(hostOperatorFsLayer), Effect.result)
 );
-if (typeof cwdResolved !== "string") {
-  console.error(cwdResolved.error);
+if (prepared._tag === "Failure") {
+  const failure = prepared.failure;
+  console.error(
+    failure instanceof HostCwdError ? failure.message : String(failure)
+  );
   process.exit(1);
 }
 
-// Optional `.env`; never override vars already set in the shell.
-loadDotEnv({ path: resolve(cwdResolved, ".env"), quiet: true });
+const { cwd: cwdResolved, env } = prepared.success;
 
-// Re-parse after dotenv so ADW_ISSUE / credentials from `<cwd>/.env` apply.
-const parsedAfterEnv = parseHostOperatorArgs(argv);
+// Re-parse after `<cwd>/.env` so ADW_ISSUE / credentials from the file apply.
+const parsedAfterEnv = parseHostOperatorArgs(argv, env);
 if ("help" in parsedAfterEnv) {
   process.exit(0);
 }
@@ -67,12 +78,6 @@ if ("error" in parsedAfterEnv) {
   console.error(parsedAfterEnv.error);
   process.exit(1);
 }
-
-const env = Object.fromEntries(
-  Object.entries(process.env).filter(
-    (entry): entry is [string, string] => entry[1] !== undefined
-  )
-);
 
 const withCwd = { ...parsedAfterEnv, cwd: cwdResolved };
 
