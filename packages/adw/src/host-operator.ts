@@ -5,6 +5,8 @@ import {
   SandboxProvider,
 } from "@lazy-software-factory/runtime";
 import { Config, ConfigProvider, Effect, Layer, Option } from "effect";
+import { statSync } from "node:fs";
+import { resolve as resolvePath } from "node:path";
 import { parseArgs } from "node:util";
 import {
   AdwBuildAttemptCap,
@@ -32,12 +34,16 @@ export interface HostOperatorManualArgs {
   readonly ticketId: string;
   readonly prompt: string;
   readonly repoUrl?: string;
+  /** Warm sandbox cwd (absolute after {@link resolveHostOperatorCwd}). */
+  readonly cwd?: string;
 }
 
 /** Issue-ref intake (GitHub TicketIntake adapter). */
 export interface HostOperatorIssueArgs {
   readonly issueRef: string;
   readonly repoUrl?: string;
+  /** Warm sandbox cwd (absolute after {@link resolveHostOperatorCwd}). */
+  readonly cwd?: string;
 }
 
 export type HostOperatorArgs = HostOperatorManualArgs | HostOperatorIssueArgs;
@@ -51,7 +57,49 @@ const optionalEnv = (name: string): string | undefined =>
     )
   );
 
-/** Parse argv flags: --ticket/--prompt or --issue, plus --repo-url. */
+/** Raw `--cwd` / `ADW_CWD` before full Host parse (dotenv path). */
+export const readHostOperatorCwdInput = (
+  argv: readonly string[]
+): string | undefined => {
+  const args = argv[0] === "--" ? argv.slice(1) : [...argv];
+  try {
+    const { values } = parseArgs({
+      args,
+      options: {
+        cwd: { type: "string" },
+      },
+      strict: false,
+      allowPositionals: true,
+    });
+    const cwd = values.cwd;
+    return typeof cwd === "string" ? cwd : optionalEnv("ADW_CWD");
+  } catch {
+    return optionalEnv("ADW_CWD");
+  }
+};
+
+/**
+ * Resolve Host sandbox cwd to an absolute existing directory.
+ * Omitting `cwd` uses `process.cwd()`. Relative paths resolve from the invoker cwd.
+ */
+export const resolveHostOperatorCwd = (
+  cwd: string | undefined
+): string | { readonly error: string } => {
+  const target =
+    cwd === undefined || cwd === ""
+      ? process.cwd()
+      : resolvePath(process.cwd(), cwd);
+  try {
+    if (!statSync(target).isDirectory()) {
+      return { error: `Host --cwd is not a directory: ${target}` };
+    }
+  } catch {
+    return { error: `Host --cwd does not exist: ${target}` };
+  }
+  return target;
+};
+
+/** Parse argv flags: --ticket/--prompt or --issue, plus --repo-url / --cwd. */
 export const parseHostOperatorArgs = (
   argv: readonly string[]
 ): HostOperatorArgs | { readonly error: string } | { readonly help: true } => {
@@ -63,6 +111,7 @@ export const parseHostOperatorArgs = (
     prompt?: string;
     issue?: string;
     "repo-url"?: string;
+    cwd?: string;
     help?: boolean;
   };
   try {
@@ -73,6 +122,7 @@ export const parseHostOperatorArgs = (
         prompt: { type: "string" },
         issue: { type: "string" },
         "repo-url": { type: "string" },
+        cwd: { type: "string" },
         help: { type: "boolean", short: "h" },
       },
       strict: true,
@@ -92,6 +142,7 @@ export const parseHostOperatorArgs = (
   const prompt = values.prompt ?? optionalEnv("ADW_PROMPT");
   const issueRef = values.issue ?? optionalEnv("ADW_ISSUE");
   const repoUrl = values["repo-url"] ?? optionalEnv("ADW_REPO_URL");
+  const cwd = values.cwd ?? optionalEnv("ADW_CWD");
 
   if (issueRef && (ticketId || prompt)) {
     return {
@@ -104,6 +155,7 @@ export const parseHostOperatorArgs = (
     return {
       issueRef,
       ...(repoUrl ? { repoUrl } : {}),
+      ...(cwd ? { cwd } : {}),
     };
   }
 
@@ -118,6 +170,7 @@ export const parseHostOperatorArgs = (
     ticketId,
     prompt,
     ...(repoUrl ? { repoUrl } : {}),
+    ...(cwd ? { cwd } : {}),
   };
 };
 
@@ -126,11 +179,11 @@ const isIssueArgs = (args: HostOperatorArgs): args is HostOperatorIssueArgs =>
 
 type HostOperatorAdwFields = Pick<
   MinimalAdwInput,
-  "ticketId" | "prompt" | "repoUrl"
+  "ticketId" | "prompt" | "repoUrl" | "cwd"
 >;
 
 /**
- * Resolve Host CLI args to `runMinimalAdw` ticketId/prompt/repoUrl.
+ * Resolve Host CLI args to `runMinimalAdw` ticketId/prompt/repoUrl/cwd.
  * Issue refs load through {@link TicketIntake}.
  */
 export function resolveHostOperatorAdwInput(
@@ -145,11 +198,14 @@ export function resolveHostOperatorAdwInput(
   if (isIssueArgs(args)) {
     return Effect.gen(function* () {
       const intake = yield* TicketIntake;
-      const ready = yield* intake.loadReadyTicket(args.issueRef);
+      const ready = yield* intake.loadReadyTicket(args.issueRef, {
+        cwd: args.cwd,
+      });
       return {
         ticketId: ready.ticketId,
         prompt: ready.prompt,
         ...(args.repoUrl ? { repoUrl: args.repoUrl } : {}),
+        ...(args.cwd ? { cwd: args.cwd } : {}),
       };
     });
   }
@@ -158,6 +214,7 @@ export function resolveHostOperatorAdwInput(
     ticketId: args.ticketId,
     prompt: args.prompt,
     ...(args.repoUrl ? { repoUrl: args.repoUrl } : {}),
+    ...(args.cwd ? { cwd: args.cwd } : {}),
   });
 }
 

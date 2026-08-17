@@ -1,5 +1,8 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Layer } from "effect";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { AdwStatus } from "./enums.ts";
 import {
   exitCodeForStatus,
@@ -7,6 +10,7 @@ import {
   parseHostOperatorArgs,
   redactSecrets,
   resolveHostOperatorAdwInput,
+  resolveHostOperatorCwd,
 } from "./host-operator.ts";
 import { TicketIntake } from "./ticket-intake.ts";
 
@@ -15,6 +19,7 @@ const ADW_ENV_KEYS = [
   "ADW_PROMPT",
   "ADW_ISSUE",
   "ADW_REPO_URL",
+  "ADW_CWD",
 ] as const;
 
 /** Clear Host CLI env fallbacks for isolated parse tests. */
@@ -204,6 +209,86 @@ describe("host operator entry", () => {
       ticketId: "T-ENV",
       prompt: "from env",
     });
+  });
+
+  it("parseHostOperatorArgs accepts --cwd", () => {
+    const parsed = withClearedAdwEnv(() =>
+      parseHostOperatorArgs([
+        "--ticket",
+        "T-1",
+        "--prompt",
+        "do the thing",
+        "--cwd",
+        "/tmp/target-tree",
+      ])
+    );
+    assert.deepStrictEqual(parsed, {
+      ticketId: "T-1",
+      prompt: "do the thing",
+      cwd: "/tmp/target-tree",
+    });
+  });
+
+  it("parseHostOperatorArgs falls back to ADW_CWD", () => {
+    const parsed = withClearedAdwEnv(() => {
+      process.env["ADW_CWD"] = "/tmp/from-env";
+      process.env["ADW_TICKET_ID"] = "T-ENV";
+      process.env["ADW_PROMPT"] = "from env";
+      return parseHostOperatorArgs([]);
+    });
+    assert.deepStrictEqual(parsed, {
+      ticketId: "T-ENV",
+      prompt: "from env",
+      cwd: "/tmp/from-env",
+    });
+  });
+
+  it("parseHostOperatorArgs keeps --issue vs --ticket/--prompt exclusivity with --cwd", () => {
+    const parsed = parseHostOperatorArgs([
+      "--issue",
+      "37",
+      "--ticket",
+      "T-1",
+      "--prompt",
+      "x",
+      "--cwd",
+      "/tmp/tree",
+    ]);
+    assert.isTrue("error" in parsed);
+  });
+
+  it("resolveHostOperatorCwd defaults to process.cwd when omitted", () => {
+    const resolved = resolveHostOperatorCwd(undefined);
+    assert.strictEqual(resolved, process.cwd());
+  });
+
+  it("resolveHostOperatorCwd resolves an existing directory", () => {
+    const dir = mkdtempSync(join(tmpdir(), "adw-cwd-"));
+    try {
+      const resolved = resolveHostOperatorCwd(dir);
+      assert.strictEqual(resolved, dir);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("resolveHostOperatorCwd fails closed for missing path", () => {
+    const resolved = resolveHostOperatorCwd(
+      join(tmpdir(), "adw-cwd-missing-nope")
+    );
+    assert.isTrue("error" in resolved);
+  });
+
+  it("resolveHostOperatorCwd fails closed when path is a file", () => {
+    const dir = mkdtempSync(join(tmpdir(), "adw-cwd-"));
+    const file = join(dir, "not-a-dir");
+    writeFileSync(file, "x");
+    try {
+      const resolved = resolveHostOperatorCwd(file);
+      assert.isTrue("error" in resolved);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it("redactSecrets strips token-like substrings from detail", () => {

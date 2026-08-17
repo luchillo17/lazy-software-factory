@@ -17,7 +17,7 @@ import { runMinimalAdw } from "./run-minimal-adw.ts";
 import { submitReviewPassViaTools } from "./review-tool-test-helpers.ts";
 import { AdwTestCommands } from "./test-commands.ts";
 import { withEmptyPendingDeltaGit } from "./empty-pending-delta-git-test-helpers.ts";
-import { WorkspaceProvision } from "./workspace-provision.ts";
+import { ProvisionError, WorkspaceProvision } from "./workspace-provision.ts";
 import { monorepoRoot } from "./monorepo-root.ts";
 
 describe("runMinimalAdw happy path", () => {
@@ -183,6 +183,165 @@ describe("runMinimalAdw happy path", () => {
 
       const shipOrder = yield* Ref.get(pushThenPr);
       assert.deepStrictEqual(shipOrder, ["push", "pr"]);
+    })
+  );
+
+  it.effect("sandbox create uses input.cwd when provided", () =>
+    Effect.gen(function* () {
+      const createCwds = yield* Ref.make<string[]>([]);
+
+      const layers = Layer.mergeAll(
+        Layer.succeed(
+          SandboxProvider,
+          SandboxProvider.of({
+            create: (options) =>
+              Effect.gen(function* () {
+                yield* Ref.update(createCwds, (cs) => [
+                  ...cs,
+                  options?.cwd ?? "(missing)",
+                ]);
+                return {
+                  id: "sandbox-cwd",
+                  cwd: options?.cwd ?? monorepoRoot,
+                  exec: () =>
+                    Effect.succeed({ exitCode: 0, stdout: "", stderr: "" }),
+                  destroy: () => Effect.void,
+                } satisfies Sandbox;
+              }),
+          })
+        ),
+        Layer.succeed(
+          WorkspaceProvision,
+          WorkspaceProvision.of({
+            provision: () =>
+              Effect.fail(new ProvisionError({ message: "stop after create" })),
+          })
+        ),
+        Layer.succeed(
+          BuildAgentProvider,
+          BuildAgentProvider.of({
+            run: () => Effect.die("unused"),
+            resume: () => Effect.die("unused"),
+          })
+        ),
+        Layer.succeed(
+          ReviewAgentProvider,
+          ReviewAgentProvider.of({
+            run: () => Effect.die("unused"),
+            resume: () => Effect.die("unused"),
+          })
+        ),
+        Layer.succeed(
+          GitHost,
+          GitHost.of({
+            commitWorkingTree: () => Effect.void,
+            clone: () => Effect.void,
+            push: () => Effect.void,
+            openPullRequest: () =>
+              Effect.succeed({ url: "https://example.test/pr/1" }),
+          })
+        ),
+        Layer.succeed(
+          AdwTestCommands,
+          AdwTestCommands.of({
+            resolve: () => [
+              { command: "node", args: ["-e", "process.exit(0)"] },
+            ],
+          })
+        ),
+        AdwBuildAttemptCap.Default,
+        AdwReviewAttemptCap.Default,
+        AdwSchemaResumeCap.Default
+      );
+
+      const result = yield* runMinimalAdw({
+        ticketId: "TICKET-CWD",
+        prompt: "aim the tree",
+        cwd: "/tmp/named-git-tree",
+      }).pipe(Effect.provide(layers));
+
+      assert.strictEqual(result.status, AdwStatus.Failed);
+      const seen = yield* Ref.get(createCwds);
+      assert.deepStrictEqual(seen, ["/tmp/named-git-tree"]);
+    })
+  );
+
+  it.effect("sandbox create defaults to process.cwd when cwd omitted", () =>
+    Effect.gen(function* () {
+      const createCwds = yield* Ref.make<string[]>([]);
+
+      const layers = Layer.mergeAll(
+        Layer.succeed(
+          SandboxProvider,
+          SandboxProvider.of({
+            create: (options) =>
+              Effect.gen(function* () {
+                yield* Ref.update(createCwds, (cs) => [
+                  ...cs,
+                  options?.cwd ?? "(missing)",
+                ]);
+                return {
+                  id: "sandbox-default-cwd",
+                  cwd: options?.cwd ?? monorepoRoot,
+                  exec: () =>
+                    Effect.succeed({ exitCode: 0, stdout: "", stderr: "" }),
+                  destroy: () => Effect.void,
+                } satisfies Sandbox;
+              }),
+          })
+        ),
+        Layer.succeed(
+          WorkspaceProvision,
+          WorkspaceProvision.of({
+            provision: () =>
+              Effect.fail(new ProvisionError({ message: "stop after create" })),
+          })
+        ),
+        Layer.succeed(
+          BuildAgentProvider,
+          BuildAgentProvider.of({
+            run: () => Effect.die("unused"),
+            resume: () => Effect.die("unused"),
+          })
+        ),
+        Layer.succeed(
+          ReviewAgentProvider,
+          ReviewAgentProvider.of({
+            run: () => Effect.die("unused"),
+            resume: () => Effect.die("unused"),
+          })
+        ),
+        Layer.succeed(
+          GitHost,
+          GitHost.of({
+            commitWorkingTree: () => Effect.void,
+            clone: () => Effect.void,
+            push: () => Effect.void,
+            openPullRequest: () =>
+              Effect.succeed({ url: "https://example.test/pr/1" }),
+          })
+        ),
+        Layer.succeed(
+          AdwTestCommands,
+          AdwTestCommands.of({
+            resolve: () => [
+              { command: "node", args: ["-e", "process.exit(0)"] },
+            ],
+          })
+        ),
+        AdwBuildAttemptCap.Default,
+        AdwReviewAttemptCap.Default,
+        AdwSchemaResumeCap.Default
+      );
+
+      const result = yield* runMinimalAdw({
+        ticketId: "TICKET-DEFAULT-CWD",
+        prompt: "self-build cwd",
+      }).pipe(Effect.provide(layers));
+
+      assert.strictEqual(result.status, AdwStatus.Failed);
+      const seen = yield* Ref.get(createCwds);
+      assert.deepStrictEqual(seen, [process.cwd()]);
     })
   );
 });

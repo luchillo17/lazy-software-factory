@@ -80,7 +80,7 @@ export const GitHubTicketIntake = Layer.effect(
     const cli = yield* GhRunner;
 
     return TicketIntake.of({
-      loadReadyTicket: (ref) =>
+      loadReadyTicket: (ref, options) =>
         Effect.gen(function* () {
           const parsed = parseGitHubIssueRef(ref);
           if ("error" in parsed) {
@@ -98,15 +98,21 @@ export const GitHubTicketIntake = Layer.effect(
             args.push("-R", parsed.repo);
           }
 
-          const viewed = yield* cli.run({ command: "gh", args }).pipe(
-            Effect.mapError(
-              (err) =>
-                new TicketIntakeError({
-                  message: `gh issue view failed: ${err.message}`,
-                  cause: err,
-                })
-            )
-          );
+          const viewed = yield* cli
+            .run({
+              command: "gh",
+              args,
+              ...(options?.cwd ? { cwd: options.cwd } : {}),
+            })
+            .pipe(
+              Effect.mapError(
+                (err) =>
+                  new TicketIntakeError({
+                    message: `gh issue view failed: ${err.message}`,
+                    cause: err,
+                  })
+              )
+            );
           yield* requireZero(viewed, `gh issue view ${parsed.number}`);
 
           const raw = yield* Effect.try({
