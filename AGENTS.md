@@ -12,6 +12,10 @@ Defaults: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `w
 
 Single-context: root `CONTEXT.md` + `docs/adr/`. See `docs/agents/domain.md`.
 
+### Host isolation
+
+Isolate via **SandboxProvider** when that backend isolates (classic Docker / later cloud). Host sandbox **is** the named cwd: run Host ADW in that tree; provision checks out `adw/<ticketId>` there (`docs/host-self-build.md`). `--cwd` aims; it does not isolate. Linked git worktree (#60) is untested — not a Host isolation path.
+
 ### Skills install (Claude + Cursor)
 
 Canonical skills live in `.agents/skills/`. Claude Code uses `.claude/skills/` as **symlinks** to that tree — not copies. When adding or re-linking project skills, run `npx skills add <owner/repo> --agent claude-code cursor -y` (never Claude alone: the CLI copies). Full recipe and verify steps: `docs/agents/skills-install.md`.
