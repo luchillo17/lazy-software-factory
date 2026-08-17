@@ -70,15 +70,18 @@ describe("GitHub TicketIntake adapter", () => {
   it.effect("accepts #N ref without -R", () =>
     Effect.gen(function* () {
       const calls = yield* Ref.make<
-        Array<{ command: string; args: readonly string[] }>
+        Array<{ command: string; args: readonly string[]; cwd?: string }>
       >([]);
 
       const fakeCli = Layer.succeed(
         GhRunner,
         GhRunner.of({
-          run: ({ command, args }) =>
+          run: ({ command, args, cwd }) =>
             Effect.gen(function* () {
-              yield* Ref.update(calls, (cs) => [...cs, { command, args }]);
+              yield* Ref.update(calls, (cs) => [
+                ...cs,
+                { command, args, ...(cwd ? { cwd } : {}) },
+              ]);
               return {
                 exitCode: 0,
                 stdout: issueJson({
@@ -105,6 +108,162 @@ describe("GitHub TicketIntake adapter", () => {
         {
           command: "gh",
           args: ["issue", "view", "42", "--json", "number,title,body,labels"],
+        },
+      ]);
+    })
+  );
+
+  it.effect("bare Issue number passes Host cwd to gh", () =>
+    Effect.gen(function* () {
+      const calls = yield* Ref.make<
+        Array<{ command: string; args: readonly string[]; cwd?: string }>
+      >([]);
+
+      const fakeCli = Layer.succeed(
+        GhRunner,
+        GhRunner.of({
+          run: ({ command, args, cwd }) =>
+            Effect.gen(function* () {
+              yield* Ref.update(calls, (cs) => [
+                ...cs,
+                { command, args, ...(cwd ? { cwd } : {}) },
+              ]);
+              return {
+                exitCode: 0,
+                stdout: issueJson({
+                  number: 67,
+                  title: "Cwd intake",
+                  body: "from named tree",
+                  labels: [ReadyTicketLabel.ReadyForAgent],
+                }),
+                stderr: "",
+              };
+            }),
+        })
+      );
+
+      const intake = yield* TicketIntake.pipe(
+        Effect.provide(GitHubTicketIntake.pipe(Layer.provide(fakeCli)))
+      );
+
+      const ready = yield* intake.loadReadyTicket("67", {
+        cwd: "/tmp/target-tree",
+      });
+      assert.strictEqual(ready.ticketId, "67");
+
+      const seen = yield* Ref.get(calls);
+      assert.deepStrictEqual(seen, [
+        {
+          command: "gh",
+          args: ["issue", "view", "67", "--json", "number,title,body,labels"],
+          cwd: "/tmp/target-tree",
+        },
+      ]);
+    })
+  );
+
+  it.effect("#N ref also passes Host cwd to gh", () =>
+    Effect.gen(function* () {
+      const calls = yield* Ref.make<
+        Array<{ command: string; args: readonly string[]; cwd?: string }>
+      >([]);
+
+      const fakeCli = Layer.succeed(
+        GhRunner,
+        GhRunner.of({
+          run: ({ command, args, cwd }) =>
+            Effect.gen(function* () {
+              yield* Ref.update(calls, (cs) => [
+                ...cs,
+                { command, args, ...(cwd ? { cwd } : {}) },
+              ]);
+              return {
+                exitCode: 0,
+                stdout: issueJson({
+                  number: 68,
+                  title: "Hash cwd intake",
+                  body: "from hash with cwd",
+                  labels: [ReadyTicketLabel.ReadyForAgent],
+                }),
+                stderr: "",
+              };
+            }),
+        })
+      );
+
+      const intake = yield* TicketIntake.pipe(
+        Effect.provide(GitHubTicketIntake.pipe(Layer.provide(fakeCli)))
+      );
+
+      const ready = yield* intake.loadReadyTicket("#68", {
+        cwd: "/tmp/target-tree",
+      });
+      assert.strictEqual(ready.ticketId, "68");
+
+      const seen = yield* Ref.get(calls);
+      assert.deepStrictEqual(seen, [
+        {
+          command: "gh",
+          args: ["issue", "view", "68", "--json", "number,title,body,labels"],
+          cwd: "/tmp/target-tree",
+        },
+      ]);
+    })
+  );
+
+  it.effect("Issue URL keeps -R and still accepts Host cwd", () =>
+    Effect.gen(function* () {
+      const calls = yield* Ref.make<
+        Array<{ command: string; args: readonly string[]; cwd?: string }>
+      >([]);
+
+      const fakeCli = Layer.succeed(
+        GhRunner,
+        GhRunner.of({
+          run: ({ command, args, cwd }) =>
+            Effect.gen(function* () {
+              yield* Ref.update(calls, (cs) => [
+                ...cs,
+                { command, args, ...(cwd ? { cwd } : {}) },
+              ]);
+              return {
+                exitCode: 0,
+                stdout: issueJson({
+                  number: 42,
+                  title: "URL intake",
+                  body: "from url",
+                  labels: [ReadyTicketLabel.ReadyForAgent],
+                }),
+                stderr: "",
+              };
+            }),
+        })
+      );
+
+      const intake = yield* TicketIntake.pipe(
+        Effect.provide(GitHubTicketIntake.pipe(Layer.provide(fakeCli)))
+      );
+
+      const ready = yield* intake.loadReadyTicket(
+        "https://github.com/example/repo/issues/42",
+        { cwd: "/tmp/target-tree" }
+      );
+      assert.strictEqual(ready.ticketId, "42");
+
+      const seen = yield* Ref.get(calls);
+      assert.deepStrictEqual(seen, [
+        {
+          command: "gh",
+          args: [
+            "issue",
+            "view",
+            "42",
+            "--json",
+            "number,title,body,labels",
+            "-R",
+            "example/repo",
+          ],
+          cwd: "/tmp/target-tree",
         },
       ]);
     })

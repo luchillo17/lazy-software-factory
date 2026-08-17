@@ -1,12 +1,21 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Layer } from "effect";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { AdwStatus } from "./enums.ts";
 import {
   exitCodeForStatus,
   formatOperatorResult,
+  HostCwdError,
+  hostOperatorFsLayer,
+  loadHostDotEnv,
+  mergeHostOperatorEnv,
   parseHostOperatorArgs,
+  prepareAdwHostArgv,
   redactSecrets,
   resolveHostOperatorAdwInput,
+  resolveHostOperatorCwd,
 } from "./host-operator.ts";
 import { TicketIntake } from "./ticket-intake.ts";
 
@@ -15,6 +24,7 @@ const ADW_ENV_KEYS = [
   "ADW_PROMPT",
   "ADW_ISSUE",
   "ADW_REPO_URL",
+  "ADW_CWD",
 ] as const;
 
 /** Clear Host CLI env fallbacks for isolated parse tests. */
@@ -204,6 +214,186 @@ describe("host operator entry", () => {
       ticketId: "T-ENV",
       prompt: "from env",
     });
+  });
+
+  it("parseHostOperatorArgs accepts --cwd", () => {
+    const parsed = withClearedAdwEnv(() =>
+      parseHostOperatorArgs([
+        "--ticket",
+        "T-1",
+        "--prompt",
+        "do the thing",
+        "--cwd",
+        "/tmp/target-tree",
+      ])
+    );
+    assert.deepStrictEqual(parsed, {
+      ticketId: "T-1",
+      prompt: "do the thing",
+      cwd: "/tmp/target-tree",
+    });
+  });
+
+  it("parseHostOperatorArgs falls back to ADW_CWD", () => {
+    const parsed = withClearedAdwEnv(() => {
+      process.env["ADW_CWD"] = "/tmp/from-env";
+      process.env["ADW_TICKET_ID"] = "T-ENV";
+      process.env["ADW_PROMPT"] = "from env";
+      return parseHostOperatorArgs([]);
+    });
+    assert.deepStrictEqual(parsed, {
+      ticketId: "T-ENV",
+      prompt: "from env",
+      cwd: "/tmp/from-env",
+    });
+  });
+
+  it("parseHostOperatorArgs keeps --issue vs --ticket/--prompt exclusivity with --cwd", () => {
+    const parsed = parseHostOperatorArgs([
+      "--issue",
+      "37",
+      "--ticket",
+      "T-1",
+      "--prompt",
+      "x",
+      "--cwd",
+      "/tmp/tree",
+    ]);
+    assert.isTrue("error" in parsed);
+  });
+
+  it.effect("resolveHostOperatorCwd defaults to process.cwd when omitted", () =>
+    resolveHostOperatorCwd(undefined).pipe(
+      Effect.provide(hostOperatorFsLayer),
+      Effect.map((resolved) => {
+        assert.strictEqual(resolved, process.cwd());
+      })
+    )
+  );
+
+  it.effect("resolveHostOperatorCwd resolves an existing directory", () =>
+    Effect.gen(function* () {
+      const dir = mkdtempSync(join(tmpdir(), "adw-cwd-"));
+      try {
+        const resolved = yield* resolveHostOperatorCwd(dir).pipe(
+          Effect.provide(hostOperatorFsLayer)
+        );
+        assert.strictEqual(resolved, dir);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    })
+  );
+
+  it.effect("resolveHostOperatorCwd fails closed for missing path", () =>
+    Effect.gen(function* () {
+      const result = yield* resolveHostOperatorCwd(
+        join(tmpdir(), "adw-cwd-missing-nope")
+      ).pipe(Effect.provide(hostOperatorFsLayer), Effect.result);
+      assert.strictEqual(result._tag, "Failure");
+      if (result._tag === "Failure") {
+        assert.isTrue(result.failure instanceof HostCwdError);
+        assert.isTrue(result.failure.message.includes("does not exist"));
+      }
+    })
+  );
+
+  it.effect("resolveHostOperatorCwd fails closed when path is a file", () =>
+    Effect.gen(function* () {
+      const dir = mkdtempSync(join(tmpdir(), "adw-cwd-"));
+      const file = join(dir, "not-a-dir");
+      writeFileSync(file, "x");
+      try {
+        const result = yield* resolveHostOperatorCwd(file).pipe(
+          Effect.provide(hostOperatorFsLayer),
+          Effect.result
+        );
+        assert.strictEqual(result._tag, "Failure");
+        if (result._tag === "Failure") {
+          assert.isTrue(result.failure instanceof HostCwdError);
+          assert.isTrue(result.failure.message.includes("not a directory"));
+        }
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    })
+  );
+
+  it.effect("loadHostDotEnv reads keys from <cwd>/.env", () =>
+    Effect.gen(function* () {
+      const dir = mkdtempSync(join(tmpdir(), "adw-env-"));
+      writeFileSync(join(dir, ".env"), "ADW_ISSUE=99\nGH_TOKEN=from-file\n");
+      try {
+        const fileEnv = yield* loadHostDotEnv(dir).pipe(
+          Effect.provide(hostOperatorFsLayer)
+        );
+        assert.strictEqual(fileEnv["ADW_ISSUE"], "99");
+        assert.strictEqual(fileEnv["GH_TOKEN"], "from-file");
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    })
+  );
+
+  it.effect("loadHostDotEnv is empty when .env is missing", () =>
+    Effect.gen(function* () {
+      const dir = mkdtempSync(join(tmpdir(), "adw-env-missing-"));
+      try {
+        const fileEnv = yield* loadHostDotEnv(dir).pipe(
+          Effect.provide(hostOperatorFsLayer)
+        );
+        assert.deepStrictEqual(fileEnv, {});
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    })
+  );
+
+  it("mergeHostOperatorEnv lets shell env win over file keys", () => {
+    const merged = mergeHostOperatorEnv(
+      { GH_TOKEN: "from-file", ADW_ISSUE: "1" },
+      { GH_TOKEN: "from-shell" }
+    );
+    assert.strictEqual(merged["GH_TOKEN"], "from-shell");
+    assert.strictEqual(merged["ADW_ISSUE"], "1");
+  });
+
+  it("prepareAdwHostArgv injects invoker cwd when --cwd and ADW_CWD are absent", () => {
+    assert.deepStrictEqual(
+      prepareAdwHostArgv(["--issue", "68"], "/tmp/sibling-repo", {}),
+      ["--cwd", "/tmp/sibling-repo", "--issue", "68"]
+    );
+  });
+
+  it("prepareAdwHostArgv leaves argv alone when --cwd is present", () => {
+    assert.deepStrictEqual(
+      prepareAdwHostArgv(
+        ["--issue", "68", "--cwd", "/tmp/explicit"],
+        "/tmp/sibling-repo",
+        {}
+      ),
+      ["--issue", "68", "--cwd", "/tmp/explicit"]
+    );
+  });
+
+  it("prepareAdwHostArgv leaves argv alone when ADW_CWD is set", () => {
+    assert.deepStrictEqual(
+      prepareAdwHostArgv(["--issue", "68"], "/tmp/sibling-repo", {
+        ADW_CWD: "/tmp/from-env",
+      }),
+      ["--issue", "68"]
+    );
+  });
+
+  it("prepareAdwHostArgv preserves leading pnpm --", () => {
+    assert.deepStrictEqual(
+      prepareAdwHostArgv(
+        ["--", "--ticket", "T-1", "--prompt", "x"],
+        "/inv",
+        {}
+      ),
+      ["--", "--cwd", "/inv", "--ticket", "T-1", "--prompt", "x"]
+    );
   });
 
   it("redactSecrets strips token-like substrings from detail", () => {

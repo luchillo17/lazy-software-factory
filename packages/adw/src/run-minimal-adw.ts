@@ -51,6 +51,8 @@ export interface MinimalAdwInput {
   readonly prompt: string;
   /** Required when sandbox has no `.git` (clone-when-empty). */
   readonly repoUrl?: string;
+  /** Warm sandbox root; omit to use `process.cwd()`. */
+  readonly cwd?: string;
   readonly env?: Readonly<Record<string, string>>;
 }
 
@@ -90,7 +92,7 @@ export const runMinimalAdw = (
       const { maxAttempts: wireMissCap } = yield* AdwSchemaResumeCap;
 
       const sandbox = yield* sandboxes.create({
-        cwd: process.cwd(),
+        cwd: input.cwd ?? process.cwd(),
         env: input.env,
       });
 

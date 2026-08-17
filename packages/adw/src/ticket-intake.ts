@@ -18,9 +18,11 @@ export interface TicketIntakeService {
   /**
    * Load a ready ticket by tracker reference → `ticketId` + prompt.
    * Missing or not-ready tickets fail with {@link TicketIntakeError}.
+   * Optional `cwd` aims bare Issue number/`#N` `gh` at that tree’s remote.
    */
   readonly loadReadyTicket: (
-    ref: string
+    ref: string,
+    options?: { readonly cwd?: string }
   ) => Effect.Effect<ReadyTicket, TicketIntakeError>;
 }
 

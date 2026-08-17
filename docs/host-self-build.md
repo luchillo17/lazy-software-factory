@@ -2,25 +2,24 @@
 
 Manual path: one GitHub Issue labelled `ready-for-agent` through **Host** **Minimal ADW** to live **`shipped`** (PR URL on this repo).
 
-Glossary: [`CONTEXT.md`](../CONTEXT.md). Cut: [`VISION.md`](./VISION.md) §3. Spine: [ADR-0007](./adr/0007-minimal-adw-build-test-review.md). Credentials: [ADR-0003](./adr/0003-runtime-credentials-per-run.md). Self-building: [ADR-0006](./adr/0006-factory-is-self-building.md).
+Glossary: [`CONTEXT.md`](../CONTEXT.md). Cut: [`VISION.md`](./VISION.md) §3 (self-build) · §4 (foreign cwd). Spine: [ADR-0007](./adr/0007-minimal-adw-build-test-review.md). Credentials: [ADR-0003](./adr/0003-runtime-credentials-per-run.md). Self-building: [ADR-0006](./adr/0006-factory-is-self-building.md). Provision reuse: [ADR-0010](./adr/0010-workspace-provision-before-build.md). Sequencing vs Docker: [ADR-0015](./adr/0015-host-foreign-cwd-before-docker.md).
 
 This runbook uses **TicketIntake** (GitHub Issue ref). **Role skill binding** is already in Host (`/implement` on Build, `/adw-review` on Review) — do not re-paste skill lists into the Issue.
 
 ## Prerequisites
 
 - Node `>=22.18` and pnpm (see root `package.json` `engines` / `packageManager`)
-- Install at repo root: `pnpm install`
-- Copy [`.env.example`](../.env.example) to gitignored `.env` and fill **`CURSOR_API_KEY`** + **`GH_TOKEN`** (Issues, Contents, Pull requests — comments on the example)
+- Install at the **Factory** repo root: `pnpm install` (needed even when the sandbox is a sibling tree — Host loads packages from this checkout)
+- Copy [`.env.example`](../.env.example) to gitignored `.env` on the **sandbox cwd** (Factory clone for self-build; target tree for foreign cwd) and fill **`CURSOR_API_KEY`** + **`GH_TOKEN`** (Issues, Contents, Pull requests — comments on the example). Shell env already set wins over dotenv.
 - `gh` on `PATH` (TicketIntake and Ship call it; `GH_TOKEN` is the forge credential)
-- An **open** Issue on this repo with label **`ready-for-agent`**
-- Run from the clone that should be the **Host sandbox** cwd (provision checks out `adw/<ticketId>` **in this tree**)
+- An **open** Issue on the **target** repo with label **`ready-for-agent`**
 - No other Host ADW running (one sandbox at a time)
 
-Flags and extra env (`ADW_MODEL`, `ADW_REPO_URL`, …): `pnpm adw:host -- --help` and `.env.example`. Prefer CLI `--issue`; do not set both `--issue` and `--ticket`/`--prompt`.
+Flags and extra env (`ADW_MODEL`, `ADW_REPO_URL`, `ADW_CWD`, …): `pnpm adw:host -- --help`, `adw-host --help`, and `.env.example`. Prefer CLI `--issue`; do not set both `--issue` and `--ticket`/`--prompt`.
 
-## Run
+## Run (Factory self-build)
 
-From the repo root:
+From this repo root (sandbox = process cwd; omit `--cwd`):
 
 ```bash
 pnpm adw:host -- --issue <n|#N|Issues-URL>
@@ -30,17 +29,42 @@ TicketIntake maps Issue number → `ticketId` and title+body → Build/Review wo
 
 **SeamConfirm** is a Code agent (not an LLM): if Build stops with an empty pending delta and seam-wait text, Host confirms `/tdd` seams once and resumes Build (no Build-attempt spend). Otherwise it skips to Test.
 
+## Run (foreign git tree)
+
+Aim Host at another checkout **without** treating `--repo-url` as a tree switch (see footgun below).
+
+**From the target repo** (bin injects invoker cwd when `--cwd` is omitted). Root `package.json` maps `adw-host` → `./bin/adw-host.mjs`:
+
+```bash
+/path/to/lazy-software-factory/bin/adw-host.mjs --issue <n|#N|Issues-URL>
+```
+
+**From the Factory clone**, name the tree:
+
+```bash
+pnpm adw:host -- --issue <n|#N|Issues-URL> --cwd /path/to/sibling-repo
+# or relative to the invoker directory:
+pnpm adw:host -- --issue <n|#N|Issues-URL> --cwd ../sibling-repo
+```
+
+`ADW_CWD` is the env fallback for `--cwd`. Sandbox create, TicketIntake `gh` (bare Issue numbers), and `<cwd>/.env` all follow that Host cwd. Issue URLs with owner/repo still use `-R` as today.
+
+Synthetic work (no GitHub Issue): `--ticket <id> --prompt <text>` with the same `--cwd` / `adw-host` rules.
+
+Long runs: prefer a **detached** process. Chat-backgrounded shells often abort; that abort is not an ADW `failed` status.
+
 ## Done
 
-The operator line must include **`status=shipped`** and **`pr=<https URL>`** for this repository. Process exit **0**.
+The operator line must include **`status=shipped`** and **`pr=<https URL>`** for the **target** repository. Process exit **0**.
 
 `status=ready_for_pr` (exit 2) means Review passed but commit, push, or open-PR did not — not this runbook’s success. Merge/Engineer Review stays HITL after Ship (ADR-0011).
 
 ## Host gotchas
 
-- **Branch yank.** Provision runs `git checkout -B adw/<ticketId>` on the current clone. Uncommitted work on another branch is not protected. Start from a clean `main` (or a base you intend to reset).
-- **Forge identity.** `GH_TOKEN` must belong to an account that can push and open PRs on this repo. Browser merge uses whatever GitHub session is logged in — a different account will hide merge actions even when Ship succeeded.
-- **Skill pack.** Build needs `.agents/skills` on cwd (`/implement` closure). Review’s `/adw-review` comes from the Host-bundled pack (`packages/adw/host-skill-pack`); the target tree need not vendor it.
+- **`--repo-url` does not switch trees.** If the sandbox cwd already has `.git`, Workspace provision **reuses** that worktree (ADR-0010). Passing `--repo-url` from a Factory checkout does **not** aim Host at another product — use `--cwd` or run `adw-host` from that product.
+- **Branch yank.** Provision runs `git checkout -B adw/<ticketId>` **in the sandbox cwd**. Uncommitted work on another branch in that tree is not protected. Start from a clean `main` (or a base you intend to reset). Aiming `--cwd` at a sibling leaves the Factory clone alone; aiming at the Factory clone still yanks it.
+- **Forge identity.** `GH_TOKEN` must belong to an account that can push and open PRs on the **target** repo. Browser merge uses whatever GitHub session is logged in — a different account will hide merge actions even when Ship succeeded.
+- **Skill pack.** Build needs `.agents/skills` on the sandbox cwd (`/implement` closure). Review’s `/adw-review` comes from the Host-bundled pack (`packages/adw/host-skill-pack`); the target tree need not vendor it.
 
 ## Proven live
 

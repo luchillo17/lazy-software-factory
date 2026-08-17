@@ -34,9 +34,6 @@ importers:
       "@vitest/coverage-v8":
         specifier: ~4.1.0
         version: 4.1.10(vitest@4.1.10)
-      dotenv:
-        specifier: ^17.4.2
-        version: 17.4.2
       effect:
         specifier: 4.0.0-beta.106
         version: 4.0.0-beta.106
@@ -70,6 +67,9 @@ importers:
 
   packages/adw:
     dependencies:
+      "@effect/platform-node":
+        specifier: 4.0.0-beta.106
+        version: 4.0.0-beta.106(effect@4.0.0-beta.106)(ioredis@5.11.1)
       "@lazy-software-factory/git-host":
         specifier: workspace:*
         version: link:../git-host
@@ -2505,13 +2505,6 @@ packages:
     resolution:
       {
         integrity: sha512-47qPchRCykZC03FhkYAhrvwU4xDBFIj1QPqaarj6mdM/hgUzfPHcpkHJOn3mJAufFeeAxAzeGsr5X0M4k6fLZQ==,
-      }
-    engines: { node: ">=12" }
-
-  dotenv@17.4.2:
-    resolution:
-      {
-        integrity: sha512-nI4U3TottKAcAD9LLud4Cb7b2QztQMUEfHbvhTH09bqXTxnSie8WnjPALV/WMCrJZ6UV/qHJ6L03OqO3LcdYZw==,
       }
     engines: { node: ">=12" }
 
@@ -5696,8 +5689,6 @@ snapshots:
       dotenv: 16.4.7
 
   dotenv@16.4.7: {}
-
-  dotenv@17.4.2: {}
 
   dunder-proto@1.0.1:
     dependencies:

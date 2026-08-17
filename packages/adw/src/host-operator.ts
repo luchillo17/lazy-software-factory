@@ -1,10 +1,20 @@
+import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { GitHubGhLive } from "@lazy-software-factory/git-host";
 import {
   CursorBuildAgentLive,
   CursorReviewAgentLive,
   SandboxProvider,
 } from "@lazy-software-factory/runtime";
-import { Config, ConfigProvider, Effect, Layer, Option } from "effect";
+import {
+  Config,
+  ConfigProvider,
+  Effect,
+  FileSystem,
+  Layer,
+  Option,
+  Path,
+  Schema,
+} from "effect";
 import { parseArgs } from "node:util";
 import {
   AdwBuildAttemptCap,
@@ -32,28 +42,209 @@ export interface HostOperatorManualArgs {
   readonly ticketId: string;
   readonly prompt: string;
   readonly repoUrl?: string;
+  /** Warm sandbox cwd (absolute after {@link resolveHostOperatorCwd}). */
+  readonly cwd?: string;
 }
 
 /** Issue-ref intake (GitHub TicketIntake adapter). */
 export interface HostOperatorIssueArgs {
   readonly issueRef: string;
   readonly repoUrl?: string;
+  /** Warm sandbox cwd (absolute after {@link resolveHostOperatorCwd}). */
+  readonly cwd?: string;
 }
 
 export type HostOperatorArgs = HostOperatorManualArgs | HostOperatorIssueArgs;
 
-const optionalEnv = (name: string): string | undefined =>
+export const HostOperatorErrorTag = {
+  HostCwdError: "HostCwdError",
+} as const;
+
+export const HostOperatorErrorTagSchema = Schema.Enum(HostOperatorErrorTag);
+
+export class HostCwdError extends Schema.TaggedError<HostCwdError>()(
+  HostOperatorErrorTag.HostCwdError,
+  { message: Schema.String }
+) {}
+
+/** Node FileSystem + Path for Host cwd / `<cwd>/.env` (ADR-0003). */
+export const hostOperatorFsLayer = Layer.mergeAll(
+  NodeFileSystem.layer,
+  NodePath.layer
+);
+
+type HostEnvRecord = Readonly<Record<string, string | undefined>>;
+
+const optionalEnv = (
+  name: string,
+  env: HostEnvRecord = process.env
+): string | undefined =>
   Option.getOrUndefined(
     Effect.runSync(
       Config.option(Config.string(name))
-        .parse(ConfigProvider.fromEnvRecord(process.env))
+        .parse(ConfigProvider.fromEnvRecord(env))
         .pipe(Effect.orElseSucceed(() => Option.none()))
     )
   );
 
-/** Parse argv flags: --ticket/--prompt or --issue, plus --repo-url. */
-export const parseHostOperatorArgs = (
+/** Raw `--cwd` / `ADW_CWD` before full Host parse (dotenv path). */
+export const readHostOperatorCwdInput = (
   argv: readonly string[]
+): string | undefined => {
+  const args = argv[0] === "--" ? argv.slice(1) : [...argv];
+  try {
+    const { values } = parseArgs({
+      args,
+      options: {
+        cwd: { type: "string" },
+      },
+      strict: false,
+      allowPositionals: true,
+    });
+    const cwd = values.cwd;
+    return typeof cwd === "string" ? cwd : optionalEnv("ADW_CWD");
+  } catch {
+    return optionalEnv("ADW_CWD");
+  }
+};
+
+/**
+ * Resolve Host sandbox cwd to an absolute existing directory.
+ * Omitting `cwd` uses `process.cwd()`. Relative paths resolve from the invoker cwd.
+ */
+export const resolveHostOperatorCwd = (
+  cwd: string | undefined
+): Effect.Effect<string, HostCwdError, FileSystem.FileSystem | Path.Path> =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const target =
+      cwd === undefined || cwd === ""
+        ? process.cwd()
+        : path.resolve(process.cwd(), cwd);
+    const info = yield* fs.stat(target).pipe(
+      Effect.mapError(
+        () =>
+          new HostCwdError({
+            message: `Host --cwd does not exist: ${target}`,
+          })
+      )
+    );
+    if (info.type !== "Directory") {
+      return yield* new HostCwdError({
+        message: `Host --cwd is not a directory: ${target}`,
+      });
+    }
+    return target;
+  });
+
+const flattenDotEnvProvider = (
+  provider: ConfigProvider.ConfigProvider,
+  prefix: ReadonlyArray<string> = []
+): Effect.Effect<Readonly<Record<string, string>>> =>
+  Effect.gen(function* () {
+    const node = yield* provider
+      .load([...prefix])
+      .pipe(Effect.orElseSucceed(() => undefined));
+    if (node === undefined) {
+      return {};
+    }
+    if (node._tag === "Value") {
+      return prefix.length === 0 ? {} : { [prefix.join("_")]: node.value };
+    }
+    const out: Record<string, string> = {};
+    if (node.value !== undefined && prefix.length > 0) {
+      out[prefix.join("_")] = node.value;
+    }
+    const children =
+      node._tag === "Record"
+        ? node.keys
+        : node._tag === "Array"
+          ? Array.from({ length: node.length }, (_, i) => String(i))
+          : [];
+    for (const key of children) {
+      Object.assign(
+        out,
+        yield* flattenDotEnvProvider(provider, [...prefix, key])
+      );
+    }
+    return out;
+  });
+
+/**
+ * Parse `<cwd>/.env` via {@link ConfigProvider.fromDotEnvContents}.
+ * Missing or empty file → `{}`.
+ */
+export const loadHostDotEnv = (
+  cwd: string
+): Effect.Effect<
+  Readonly<Record<string, string>>,
+  never,
+  FileSystem.FileSystem | Path.Path
+> =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const contents = yield* fs
+      .readFileString(path.join(cwd, ".env"))
+      .pipe(Effect.orElseSucceed(() => ""));
+    if (contents.trim() === "") {
+      return {};
+    }
+    return yield* flattenDotEnvProvider(
+      ConfigProvider.fromDotEnvContents(contents)
+    );
+  });
+
+/** Shell env wins over file keys (ADR-0003). */
+export const mergeHostOperatorEnv = (
+  fileEnv: Readonly<Record<string, string>>,
+  shell: HostEnvRecord
+): Record<string, string> => {
+  const merged: Record<string, string> = { ...fileEnv };
+  for (const [key, value] of Object.entries(shell)) {
+    if (value !== undefined) {
+      merged[key] = value;
+    }
+  }
+  return merged;
+};
+
+const argvHasCwdFlag = (argv: readonly string[]): boolean => {
+  const args = argv[0] === "--" ? argv.slice(1) : argv;
+  for (const arg of args) {
+    if (arg === "--cwd" || arg.startsWith("--cwd=")) {
+      return true;
+    }
+  }
+  return false;
+};
+
+/**
+ * `adw-host` bin: when the caller omitted `--cwd` and `ADW_CWD`, inject the
+ * invoker directory as `--cwd` so Host aims at the foreign tree even though the
+ * bin loads Factory `tsx` / packages from this checkout.
+ * Explicit `--cwd` / non-empty `ADW_CWD` win over the injected invoker path.
+ */
+export const prepareAdwHostArgv = (
+  argv: readonly string[],
+  invokerCwd: string,
+  env: { readonly ADW_CWD?: string } = {}
+): string[] => {
+  const adwCwd = env.ADW_CWD;
+  if (argvHasCwdFlag(argv) || (adwCwd !== undefined && adwCwd !== "")) {
+    return [...argv];
+  }
+  if (argv[0] === "--") {
+    return ["--", "--cwd", invokerCwd, ...argv.slice(1)];
+  }
+  return ["--cwd", invokerCwd, ...argv];
+};
+
+/** Parse argv flags: --ticket/--prompt or --issue, plus --repo-url / --cwd. */
+export const parseHostOperatorArgs = (
+  argv: readonly string[],
+  env: HostEnvRecord = process.env
 ): HostOperatorArgs | { readonly error: string } | { readonly help: true } => {
   // `pnpm … -- --flags` leaves a leading `--` that would end option parsing.
   const args = argv[0] === "--" ? argv.slice(1) : [...argv];
@@ -63,6 +254,7 @@ export const parseHostOperatorArgs = (
     prompt?: string;
     issue?: string;
     "repo-url"?: string;
+    cwd?: string;
     help?: boolean;
   };
   try {
@@ -73,6 +265,7 @@ export const parseHostOperatorArgs = (
         prompt: { type: "string" },
         issue: { type: "string" },
         "repo-url": { type: "string" },
+        cwd: { type: "string" },
         help: { type: "boolean", short: "h" },
       },
       strict: true,
@@ -88,10 +281,11 @@ export const parseHostOperatorArgs = (
     return { help: true as const };
   }
 
-  const ticketId = values.ticket ?? optionalEnv("ADW_TICKET_ID");
-  const prompt = values.prompt ?? optionalEnv("ADW_PROMPT");
-  const issueRef = values.issue ?? optionalEnv("ADW_ISSUE");
-  const repoUrl = values["repo-url"] ?? optionalEnv("ADW_REPO_URL");
+  const ticketId = values.ticket ?? optionalEnv("ADW_TICKET_ID", env);
+  const prompt = values.prompt ?? optionalEnv("ADW_PROMPT", env);
+  const issueRef = values.issue ?? optionalEnv("ADW_ISSUE", env);
+  const repoUrl = values["repo-url"] ?? optionalEnv("ADW_REPO_URL", env);
+  const cwd = values.cwd ?? optionalEnv("ADW_CWD", env);
 
   if (issueRef && (ticketId || prompt)) {
     return {
@@ -104,6 +298,7 @@ export const parseHostOperatorArgs = (
     return {
       issueRef,
       ...(repoUrl ? { repoUrl } : {}),
+      ...(cwd ? { cwd } : {}),
     };
   }
 
@@ -118,6 +313,7 @@ export const parseHostOperatorArgs = (
     ticketId,
     prompt,
     ...(repoUrl ? { repoUrl } : {}),
+    ...(cwd ? { cwd } : {}),
   };
 };
 
@@ -126,11 +322,11 @@ const isIssueArgs = (args: HostOperatorArgs): args is HostOperatorIssueArgs =>
 
 type HostOperatorAdwFields = Pick<
   MinimalAdwInput,
-  "ticketId" | "prompt" | "repoUrl"
+  "ticketId" | "prompt" | "repoUrl" | "cwd"
 >;
 
 /**
- * Resolve Host CLI args to `runMinimalAdw` ticketId/prompt/repoUrl.
+ * Resolve Host CLI args to `runMinimalAdw` ticketId/prompt/repoUrl/cwd.
  * Issue refs load through {@link TicketIntake}.
  */
 export function resolveHostOperatorAdwInput(
@@ -145,11 +341,14 @@ export function resolveHostOperatorAdwInput(
   if (isIssueArgs(args)) {
     return Effect.gen(function* () {
       const intake = yield* TicketIntake;
-      const ready = yield* intake.loadReadyTicket(args.issueRef);
+      const ready = yield* intake.loadReadyTicket(args.issueRef, {
+        cwd: args.cwd,
+      });
       return {
         ticketId: ready.ticketId,
         prompt: ready.prompt,
         ...(args.repoUrl ? { repoUrl: args.repoUrl } : {}),
+        ...(args.cwd ? { cwd: args.cwd } : {}),
       };
     });
   }
@@ -158,6 +357,7 @@ export function resolveHostOperatorAdwInput(
     ticketId: args.ticketId,
     prompt: args.prompt,
     ...(args.repoUrl ? { repoUrl: args.repoUrl } : {}),
+    ...(args.cwd ? { cwd: args.cwd } : {}),
   });
 }
 
