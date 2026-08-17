@@ -105,8 +105,8 @@ A pluggable adapter that creates/execs/destroys sandboxes. Local options include
 _Avoid_: Docker Sandboxes / `sbx` as the only path (optional later; requires Docker login); bypassing SandboxProvider for host spikes
 
 **Host sandbox**:
-A `SandboxProvider` backend where the sandbox **is** the host process/filesystem (local `exec`). Valid default until Docker lands, and a lasting option for single-ADW-at-a-time local use without containers. Not a second orchestration path — same warm-sandbox rules, weaker isolation.
-_Avoid_: Treating host runs as outside the Runtime; multi-ticket parallel on one host sandbox (one ADW at a time)
+A `SandboxProvider` backend where the sandbox **is** the host process/filesystem (local `exec`). Valid default until Docker lands, and a lasting option for single-ADW-at-a-time local use without containers. Not a second orchestration path — same warm-sandbox rules, weaker isolation. Operator may aim the warm sandbox at a named git tree via **`--cwd` / `ADW_CWD`** or the Factory checkout **`adw-host`** bin (invoker cwd when `--cwd` omitted) — still Host, not Docker (VISION §4 / ADR-0015).
+_Avoid_: Treating host runs as outside the Runtime; multi-ticket parallel on one host sandbox (one ADW at a time); using `--repo-url` to “switch” trees when `.git` already exists in the sandbox cwd (Workspace provision reuses that worktree)
 
 **Warm sandbox**:
 One sandbox per ticket/task, kept alive for the whole ADW so Build, Test agent, and Review share filesystem, installs, and agent session state. On Host sandbox, that means one active ADW on the machine at a time.
@@ -114,7 +114,7 @@ _Avoid_: New sandbox per agent step
 
 **Workspace provision**:
 Deterministic ADW setup inside the warm sandbox **before** Build: ensure a git worktree exists, create/checkout the ticket branch (orchestration-owned, e.g. `adw/<ticketId>`), then run a **locked install** when a lockfile is present (e.g. `pnpm install` for this monorepo). **Host:** reuse an already-cloned path when `.git` is present (skip clone; still branch + install as needed). **Cloud/empty box:** Git host clone (+ install) using per-run credentials. Provision failure → ADW `failed` with no agent run. Not an LLM step; not Ship.
-_Avoid_: Assuming every sandbox already has the repo; making the Build agent own clone/branch/install; treating Host and cloud as different ADW graphs; requiring a custom bootstrap script in v0
+_Avoid_: Assuming every sandbox already has the repo; making the Build agent own clone/branch/install; treating Host and cloud as different ADW graphs; requiring a custom bootstrap script in v0; expecting `--repo-url` to replace an existing Host `.git`
 
 **TicketIntake**:
 Tracker-agnostic Host operator seam: given a ready-ticket reference, produce Minimal ADW `ticketId` + prompt (and minimal metadata). **GitHub Issues** is the first adapter (`gh`, gate on `ready-for-agent`). Lives on the Host CLI / operator path **outside** `runMinimalAdw` — feeds the Initial prompt; not a Build/Test/Review/Ship node. Manual `--ticket` / `--prompt` bypasses it. Other trackers (e.g. Jira) are later adapters on the same seam. Tracker **issue dependencies** (`blocked_by`, wayfinder frontier) are **not** an ADW or TicketIntake hard gate — stacking PRs leaves blockers open on purpose. An optional Host operator warning is allowed; fail-closed is not. Stack/deps orchestration stays in the target repo’s tracker workflow, not Factory routing.

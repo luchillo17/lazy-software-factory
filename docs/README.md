@@ -4,8 +4,8 @@ Design notes and ADRs for the factory live here. Domain language: [`CONTEXT.md`]
 
 ## Consumer notes
 
-- **[Host Minimal self-build (v0)](./host-self-build.md)** — `ready-for-agent` Issue → `pnpm adw:host -- --issue` → live `shipped` PR
-- **[Extractability (v0)](./extractability.md)** — depend on `runtime` / `adw` / `git-host` from outside monorepo apps (rough DX OK; npm publish not required)
+- **[Host Minimal self-build (v0)](./host-self-build.md)** — `ready-for-agent` Issue → `pnpm adw:host -- --issue` (or `adw-host` / `--cwd` on a foreign tree) → live `shipped` PR
+- **[Extractability (v0)](./extractability.md)** — depend on `runtime` / `adw` / `git-host` from outside monorepo apps; invoke Host on a foreign cwd (rough DX OK; npm publish not required)
 
 ## ADW flow diagrams
 
@@ -80,6 +80,7 @@ classDef ship fill:#1a2e2e,stroke:#5eead4,color:#ccfbf1
 | [0012](./adr/0012-vendor-effect-source-for-agents.md)          | Vendored Effect source for agents                                    |
 | [0013](./adr/0013-test-agent-parallel-check-gates.md)          | Test agent: parallel check-only gates + full fail report             |
 | [0014](./adr/0014-structured-agent-output-via-custom-tools.md) | Structured LLM Agent output via local customTools (tool-only wire)   |
+| [0015](./adr/0015-host-foreign-cwd-before-docker.md)           | Host-on-foreign-cwd before classic Docker in the vision cut          |
 
 ## Open decisions
 

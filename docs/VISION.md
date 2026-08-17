@@ -8,7 +8,7 @@ Status: **locked** for this map — [Factory vision + v0 cut](https://github.com
 
 Extractable open-source **Factory** (`packages/runtime` + `packages/adw`, plus git-host seam): orchestrated AI developer workflows with hard gates, usable locally, on-prem, or as packages. The Factory is **self-building** — it develops this repo through its own ADWs.
 
-Hosted multi-org **Organization** Platform is a later packaging of the same core (org-scoped credentials and compute), not the v0 lead. Sketch only in §5.
+Hosted multi-org **Organization** Platform is a later packaging of the same core (org-scoped credentials and compute), not the v0 lead. Sketch only in §6.
 
 ## 2. Domain primitives
 
@@ -69,7 +69,7 @@ Ship **opens the PR** inside Minimal; it does **not** merge or deploy. Dashed fa
 
 ### Feature intake vs Planning/PM ADW
 
-- **Upstream (HITL today; later Planning/PM ADW):** grill → spec → tickets. Building that ADW is out of this map (§6); compose principle is in scope.
+- **Upstream (HITL today; later Planning/PM ADW):** grill → spec → tickets. Building that ADW is out of this map (§7); compose principle is in scope.
 - **Feature ADW intake:** tracer-bullet **ticket required**; parent **spec/feature issue attached when present**. Planner plans _around_ that ticket — does not re-run grill/spec/ticket minting.
 
 ### Feature Review-fail routing (provisional)
@@ -116,23 +116,43 @@ Acceptance criteria for **Minimal ADW** v0 green (self-building this repo on **H
 
 ### Explicitly not required for v0
 
-- Parallel classic Docker **SandboxProvider** (see §4)
+- Host-on-foreign-cwd (`adw-host` / `--cwd`) — post-v0 Host operator slice (see §4); not part of the §3 green bar
+- Parallel classic Docker **SandboxProvider** (see §5)
 - **Feature ADW** / Planner Agent
 - Grill/wayfinder / Planning-PM ADW as nodes (stay HITL upstream for now; compose later)
 - Multi-org hosted control plane
 
-## 4. v0→v1 seam (parallel sandboxes)
+## 4. Host-on-foreign-cwd (post-v0 Host)
+
+Post-v0 Host operator slice ([#66](https://github.com/luchillo17/lazy-software-factory/issues/66)): run one Host **Minimal ADW** against a **foreign git tree** without Docker and without npm publish. Sits **before** classic Docker (§5) so “next = Docker” is not the only compatibility story. Sequencing why: [ADR-0015](adr/0015-host-foreign-cwd-before-docker.md). Docker’s parallel / hosted-compute hard gate is unchanged (#29).
+
+### Must ship
+
+- [x] **`adw-host` bin** on this Factory checkout — starts Host with this repo’s toolchain even when the invoker cwd has no Factory `node_modules`; omitted `--cwd` from a sibling repo defaults the sandbox to the invoker directory — [#68](https://github.com/luchillo17/lazy-software-factory/issues/68)
+- [x] **`--cwd` / `ADW_CWD`** — aim Host from the Factory clone at another tree (relative paths resolve from the invoker directory); omit for Factory self-build (`pnpm adw:host -- --issue N` = process cwd) — [#67](https://github.com/luchillo17/lazy-software-factory/issues/67)
+- [x] **Operator docs** — Host self-build + extractability cover bin/`--cwd` and the `--repo-url` footgun — [`docs/host-self-build.md`](host-self-build.md), [`docs/extractability.md`](extractability.md) — [#69](https://github.com/luchillo17/lazy-software-factory/issues/69)
+
+### Rules that stay
+
+- Still **one Host ADW at a time** (`SandboxBusyError`); weaker isolation than Docker
+- Workspace provision stays ADR-0010: existing `.git` in the sandbox cwd is **reused** — `--repo-url` does **not** switch trees. Aim with `--cwd` / `adw-host`, not `--repo-url` from a Factory checkout
+- Build still needs `.agents/skills` on the target cwd; Review still uses the Host-bundled `/adw-review` pack
+- npm publish remains **not** required
+
+**Feature ADW** / Planner may still land on Host before Docker (composition ≠ parallelism; same as §5).
+
+## 5. v0→v1 seam (parallel sandboxes)
 
 Locked in [Place parallel SandboxProvider on v0/v1 seam](https://github.com/luchillo17/lazy-software-factory/issues/29).
 
 ### Defaults
 
-- **Host** = v0 / single-ADW local default (lasting option; weaker isolation).
+- **Host** = v0 / single-ADW local default (lasting option; weaker isolation). Host-on-foreign-cwd (§4) extends that default to another checkout — still Host, not Docker.
 - **Classic Docker** thin adapter = v1 parallel default (ADR-0008; not Docker Sandboxes/`sbx`). Cloud BYO plugs the same seam later — does **not** shortcut this gate.
 
 ### Timing
 
-Ship anytime in v1. **Hard gate:** no hosted multi-org **compute** until classic Docker meets the green bar below. Vision sketch/docs (§5) stay free. **Feature ADW** / Planner may land on Host before Docker (composition ≠ parallelism).
+Ship anytime in v1. **Hard gate:** no hosted multi-org **compute** until classic Docker meets the green bar below. Vision sketch/docs (§6) stay free. **Feature ADW** / Planner may land on Host before Docker (composition ≠ parallelism).
 
 ### Green bar
 
@@ -141,11 +161,11 @@ Ship anytime in v1. **Hard gate:** no hosted multi-org **compute** until classic
 
 Image pin / default digest is an implementation detail — not part of this vision lock.
 
-## 5. v1+ / hosted Organization sketch
+## 6. v1+ / hosted Organization sketch
 
-Non-goals for v0 detail. Later packaging may add Organization tenancy, org-scoped credentials/compute, and Skill pack overlays for cloud ADW runs. **Hosted multi-org compute** waits on §4 Docker green. Auth, billing edges, and control-plane implementation are out of this vision’s build scope (see §6).
+Non-goals for v0 detail. Later packaging may add Organization tenancy, org-scoped credentials/compute, and Skill pack overlays for cloud ADW runs. **Hosted multi-org compute** waits on §5 Docker green. Auth, billing edges, and control-plane implementation are out of this vision’s build scope (see §7).
 
-## 6. Out of scope
+## 7. Out of scope
 
 - Billing / commercial packaging work in this effort.
 - Non-Cursor **AgentProvider** implementations for this map.
@@ -153,8 +173,8 @@ Non-goals for v0 detail. Later packaging may add Organization tenancy, org-scope
 - Always-on `/improve-codebase-architecture` inside every Review.
 - Specialized intake / Planning-PM product ADWs (grill → spec → tickets as their own shipped ADWs) — compose principle + Feature/Minimal naming are in scope; building those ADWs is not.
 
-## 7. Open decisions
+## 8. Open decisions
 
 No open children on [Factory vision + v0 cut](https://github.com/luchillo17/lazy-software-factory/issues/26). Residual fog (cloud Skill-pack UX, npm publish timing, `/improve-codebase-architecture` as specialized ADW vs big-ticket policy) stays in the map’s **Not yet specified** — not blocking this destination.
 
-Closed on this map: vision shape (#27), v0 Minimal acceptance (#28), parallel SandboxProvider seam (#29), skill-pack research (#30), Build skill closure (#31), Feature Review-fail eval (#32), Feature Review-fail routing (#33), Planner skill bindings (#34).
+Closed on this map: vision shape (#27), v0 Minimal acceptance (#28), parallel SandboxProvider seam (#29), skill-pack research (#30), Build skill closure (#31), Feature Review-fail eval (#32), Feature Review-fail routing (#33), Planner skill bindings (#34). Host-on-foreign-cwd (#66) amends this cut before Docker (ADR-0015); not a reopen of #29.
