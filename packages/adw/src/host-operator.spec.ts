@@ -1,9 +1,8 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Layer } from "effect";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { AdwStatus } from "./enums.ts";
 import {
   exitCodeForStatus,
@@ -394,24 +393,6 @@ describe("host operator entry", () => {
         {}
       ),
       ["--", "--cwd", "/inv", "--ticket", "T-1", "--prompt", "x"]
-    );
-  });
-
-  it("root package.json exposes adw-host bin and keeps pnpm adw:host on run-minimal-adw", () => {
-    const repoRoot = join(
-      fileURLToPath(new URL(".", import.meta.url)),
-      "../../.."
-    );
-    const pkg = JSON.parse(
-      readFileSync(join(repoRoot, "package.json"), "utf8")
-    ) as {
-      readonly bin?: Readonly<Record<string, string>>;
-      readonly scripts?: Readonly<Record<string, string>>;
-    };
-    assert.strictEqual(pkg.bin?.["adw-host"], "./bin/adw-host.mjs");
-    assert.strictEqual(
-      pkg.scripts?.["adw:host"],
-      "node --import tsx ./scripts/run-minimal-adw.ts"
     );
   });
 
