@@ -15,7 +15,6 @@ import {
   Path,
   Schema,
 } from "effect";
-import { parseArgs } from "node:util";
 import {
   AdwBuildAttemptCap,
   AdwReviewAttemptCap,
@@ -58,6 +57,8 @@ export type HostOperatorArgs = HostOperatorManualArgs | HostOperatorIssueArgs;
 
 export const HostOperatorErrorTag = {
   HostCwdError: "HostCwdError",
+  HostOperatorParseError: "HostOperatorParseError",
+  HostCliExitError: "HostCliExitError",
 } as const;
 
 export const HostOperatorErrorTagSchema = Schema.Enum(HostOperatorErrorTag);
@@ -66,6 +67,27 @@ export class HostCwdError extends Schema.TaggedError<HostCwdError>()(
   HostOperatorErrorTag.HostCwdError,
   { message: Schema.String }
 ) {}
+
+/** Missing required flags/env or exclusive `--issue` vs `--ticket`/`--prompt`. */
+export class HostOperatorParseError extends Schema.TaggedError<HostOperatorParseError>()(
+  HostOperatorErrorTag.HostOperatorParseError,
+  { message: Schema.String }
+) {}
+
+/** ADW finished; process should exit with `code` (not 0). */
+export class HostCliExitError extends Schema.TaggedError<HostCliExitError>()(
+  HostOperatorErrorTag.HostCliExitError,
+  { code: Schema.Number }
+) {}
+
+/** Flag values after CLI parse (env fallbacks applied later). */
+export interface HostOperatorFlagValues {
+  readonly ticket?: string;
+  readonly prompt?: string;
+  readonly issue?: string;
+  readonly repoUrl?: string;
+  readonly cwd?: string;
+}
 
 /** Node FileSystem + Path for Host cwd / `<cwd>/.env` (ADR-0003). */
 export const hostOperatorFsLayer = Layer.mergeAll(
@@ -86,27 +108,6 @@ const optionalEnv = (
         .pipe(Effect.orElseSucceed(() => Option.none()))
     )
   );
-
-/** Raw `--cwd` / `ADW_CWD` before full Host parse (dotenv path). */
-export const readHostOperatorCwdInput = (
-  argv: readonly string[]
-): string | undefined => {
-  const args = argv[0] === "--" ? argv.slice(1) : [...argv];
-  try {
-    const { values } = parseArgs({
-      args,
-      options: {
-        cwd: { type: "string" },
-      },
-      strict: false,
-      allowPositionals: true,
-    });
-    const cwd = values.cwd;
-    return typeof cwd === "string" ? cwd : optionalEnv("ADW_CWD");
-  } catch {
-    return optionalEnv("ADW_CWD");
-  }
-};
 
 /**
  * Resolve Host sandbox cwd to an absolute existing directory.
@@ -241,51 +242,19 @@ export const prepareAdwHostArgv = (
   return ["--cwd", invokerCwd, ...argv];
 };
 
-/** Parse argv flags: --ticket/--prompt or --issue, plus --repo-url / --cwd. */
-export const parseHostOperatorArgs = (
-  argv: readonly string[],
+/**
+ * Map parsed flags + env to Host operator args.
+ * Env is the merged shell+file record (ADR-0003); flags win.
+ */
+export const hostOperatorArgsFromFlags = (
+  flags: HostOperatorFlagValues,
   env: HostEnvRecord = process.env
-): HostOperatorArgs | { readonly error: string } | { readonly help: true } => {
-  // `pnpm … -- --flags` leaves a leading `--` that would end option parsing.
-  const args = argv[0] === "--" ? argv.slice(1) : [...argv];
-
-  let values: {
-    ticket?: string;
-    prompt?: string;
-    issue?: string;
-    "repo-url"?: string;
-    cwd?: string;
-    help?: boolean;
-  };
-  try {
-    ({ values } = parseArgs({
-      args,
-      options: {
-        ticket: { type: "string" },
-        prompt: { type: "string" },
-        issue: { type: "string" },
-        "repo-url": { type: "string" },
-        cwd: { type: "string" },
-        help: { type: "boolean", short: "h" },
-      },
-      strict: true,
-      allowPositionals: false,
-    }));
-  } catch (err) {
-    return {
-      error: err instanceof Error ? err.message.split("\n")[0]! : String(err),
-    };
-  }
-
-  if (values.help) {
-    return { help: true as const };
-  }
-
-  const ticketId = values.ticket ?? optionalEnv("ADW_TICKET_ID", env);
-  const prompt = values.prompt ?? optionalEnv("ADW_PROMPT", env);
-  const issueRef = values.issue ?? optionalEnv("ADW_ISSUE", env);
-  const repoUrl = values["repo-url"] ?? optionalEnv("ADW_REPO_URL", env);
-  const cwd = values.cwd ?? optionalEnv("ADW_CWD", env);
+): HostOperatorArgs | { readonly error: string } => {
+  const ticketId = flags.ticket ?? optionalEnv("ADW_TICKET_ID", env);
+  const prompt = flags.prompt ?? optionalEnv("ADW_PROMPT", env);
+  const issueRef = flags.issue ?? optionalEnv("ADW_ISSUE", env);
+  const repoUrl = flags.repoUrl ?? optionalEnv("ADW_REPO_URL", env);
+  const cwd = flags.cwd ?? optionalEnv("ADW_CWD", env);
 
   if (issueRef && (ticketId || prompt)) {
     return {
@@ -317,6 +286,36 @@ export const parseHostOperatorArgs = (
   };
 };
 
+export interface HostOperatorSession {
+  readonly args: HostOperatorArgs;
+  readonly env: Record<string, string>;
+}
+
+/**
+ * Resolve cwd, load `<cwd>/.env`, then apply flag+env Host args.
+ * Flags parse once; file env fills ADW_ISSUE / credentials after cwd is known.
+ */
+export const prepareHostOperatorSession = (
+  flags: HostOperatorFlagValues,
+  shell: HostEnvRecord = process.env
+): Effect.Effect<
+  HostOperatorSession,
+  HostCwdError | HostOperatorParseError,
+  FileSystem.FileSystem | Path.Path
+> =>
+  Effect.gen(function* () {
+    const cwd = yield* resolveHostOperatorCwd(
+      flags.cwd ?? optionalEnv("ADW_CWD", shell)
+    );
+    const env = mergeHostOperatorEnv(yield* loadHostDotEnv(cwd), shell);
+    const parsed = hostOperatorArgsFromFlags(flags, env);
+    if ("error" in parsed) {
+      return yield* new HostOperatorParseError({ message: parsed.error });
+    }
+    const args: HostOperatorArgs = { ...parsed, cwd };
+    return { args, env };
+  });
+
 const isIssueArgs = (args: HostOperatorArgs): args is HostOperatorIssueArgs =>
   "issueRef" in args;
 
@@ -335,6 +334,9 @@ export function resolveHostOperatorAdwInput(
 export function resolveHostOperatorAdwInput(
   args: HostOperatorManualArgs
 ): Effect.Effect<HostOperatorAdwFields>;
+export function resolveHostOperatorAdwInput(
+  args: HostOperatorArgs
+): Effect.Effect<HostOperatorAdwFields, TicketIntakeError, TicketIntake>;
 export function resolveHostOperatorAdwInput(
   args: HostOperatorArgs
 ): Effect.Effect<HostOperatorAdwFields, TicketIntakeError, TicketIntake> {

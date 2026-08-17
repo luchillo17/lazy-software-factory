@@ -8,58 +8,30 @@ import {
   exitCodeForStatus,
   formatOperatorResult,
   HostCwdError,
+  hostOperatorArgsFromFlags,
   hostOperatorFsLayer,
+  HostOperatorParseError,
   loadHostDotEnv,
   mergeHostOperatorEnv,
-  parseHostOperatorArgs,
   prepareAdwHostArgv,
+  prepareHostOperatorSession,
   redactSecrets,
   resolveHostOperatorAdwInput,
   resolveHostOperatorCwd,
 } from "./host-operator.ts";
 import { TicketIntake } from "./ticket-intake.ts";
 
-const ADW_ENV_KEYS = [
-  "ADW_TICKET_ID",
-  "ADW_PROMPT",
-  "ADW_ISSUE",
-  "ADW_REPO_URL",
-  "ADW_CWD",
-] as const;
-
-/** Clear Host CLI env fallbacks for isolated parse tests. */
-const withClearedAdwEnv = <T>(fn: () => T): T => {
-  const previous = new Map(
-    ADW_ENV_KEYS.map((key) => [key, process.env[key]] as const)
-  );
-  for (const key of ADW_ENV_KEYS) {
-    delete process.env[key];
-  }
-  try {
-    return fn();
-  } finally {
-    for (const key of ADW_ENV_KEYS) {
-      const value = previous.get(key);
-      if (value === undefined) {
-        delete process.env[key];
-      } else {
-        process.env[key] = value;
-      }
-    }
-  }
-};
+const emptyEnv = {};
 
 describe("host operator entry", () => {
-  it("parseHostOperatorArgs reads flags", () => {
-    const parsed = withClearedAdwEnv(() =>
-      parseHostOperatorArgs([
-        "--ticket",
-        "T-1",
-        "--prompt",
-        "do the thing",
-        "--repo-url",
-        "https://example.test/r.git",
-      ])
+  it("hostOperatorArgsFromFlags reads flags", () => {
+    const parsed = hostOperatorArgsFromFlags(
+      {
+        ticket: "T-1",
+        prompt: "do the thing",
+        repoUrl: "https://example.test/r.git",
+      },
+      emptyEnv
     );
     assert.deepStrictEqual(parsed, {
       ticketId: "T-1",
@@ -68,19 +40,18 @@ describe("host operator entry", () => {
     });
   });
 
-  it("parseHostOperatorArgs errors without ticket/prompt or issue", () => {
-    const parsed = withClearedAdwEnv(() => parseHostOperatorArgs([]));
+  it("hostOperatorArgsFromFlags errors without ticket/prompt or issue", () => {
+    const parsed = hostOperatorArgsFromFlags({}, emptyEnv);
     assert.isTrue("error" in parsed);
   });
 
-  it("parseHostOperatorArgs accepts Issue ref", () => {
-    const parsed = withClearedAdwEnv(() =>
-      parseHostOperatorArgs([
-        "--issue",
-        "37",
-        "--repo-url",
-        "https://example.test/r.git",
-      ])
+  it("hostOperatorArgsFromFlags accepts Issue ref", () => {
+    const parsed = hostOperatorArgsFromFlags(
+      {
+        issue: "37",
+        repoUrl: "https://example.test/r.git",
+      },
+      emptyEnv
     );
     assert.deepStrictEqual(parsed, {
       issueRef: "37",
@@ -88,15 +59,15 @@ describe("host operator entry", () => {
     });
   });
 
-  it("parseHostOperatorArgs rejects mixing --issue with --ticket/--prompt", () => {
-    const parsed = parseHostOperatorArgs([
-      "--issue",
-      "37",
-      "--ticket",
-      "T-1",
-      "--prompt",
-      "x",
-    ]);
+  it("hostOperatorArgsFromFlags rejects mixing --issue with --ticket/--prompt", () => {
+    const parsed = hostOperatorArgsFromFlags(
+      {
+        issue: "37",
+        ticket: "T-1",
+        prompt: "x",
+      },
+      emptyEnv
+    );
     assert.isTrue("error" in parsed);
   });
 
@@ -168,64 +139,28 @@ describe("host operator entry", () => {
     assert.strictEqual(exitCodeForStatus(AdwStatus.Failed), 1);
   });
 
-  it("parseHostOperatorArgs rejects flag-as-value", () => {
-    const parsed = parseHostOperatorArgs(["--ticket", "--prompt", "x"]);
-    assert.isTrue("error" in parsed);
-  });
-
-  it("parseHostOperatorArgs strips leading -- from pnpm", () => {
-    const parsed = withClearedAdwEnv(() =>
-      parseHostOperatorArgs([
-        "--",
-        "--ticket",
-        "T-1",
-        "--prompt",
-        "do the thing",
-      ])
+  it("hostOperatorArgsFromFlags falls back to Config env", () => {
+    const parsed = hostOperatorArgsFromFlags(
+      {},
+      {
+        ADW_TICKET_ID: "T-ENV",
+        ADW_PROMPT: "from env",
+      }
     );
-    assert.deepStrictEqual(parsed, {
-      ticketId: "T-1",
-      prompt: "do the thing",
-    });
-  });
-
-  it("parseHostOperatorArgs accepts equals-form flags", () => {
-    const parsed = withClearedAdwEnv(() =>
-      parseHostOperatorArgs([
-        "--ticket=T-9",
-        "--prompt=do it",
-        "--repo-url=https://example.test/r.git",
-      ])
-    );
-    assert.deepStrictEqual(parsed, {
-      ticketId: "T-9",
-      prompt: "do it",
-      repoUrl: "https://example.test/r.git",
-    });
-  });
-
-  it("parseHostOperatorArgs falls back to Config env", () => {
-    const parsed = withClearedAdwEnv(() => {
-      process.env["ADW_TICKET_ID"] = "T-ENV";
-      process.env["ADW_PROMPT"] = "from env";
-      return parseHostOperatorArgs([]);
-    });
     assert.deepStrictEqual(parsed, {
       ticketId: "T-ENV",
       prompt: "from env",
     });
   });
 
-  it("parseHostOperatorArgs accepts --cwd", () => {
-    const parsed = withClearedAdwEnv(() =>
-      parseHostOperatorArgs([
-        "--ticket",
-        "T-1",
-        "--prompt",
-        "do the thing",
-        "--cwd",
-        "/tmp/target-tree",
-      ])
+  it("hostOperatorArgsFromFlags accepts cwd flag", () => {
+    const parsed = hostOperatorArgsFromFlags(
+      {
+        ticket: "T-1",
+        prompt: "do the thing",
+        cwd: "/tmp/target-tree",
+      },
+      emptyEnv
     );
     assert.deepStrictEqual(parsed, {
       ticketId: "T-1",
@@ -234,13 +169,15 @@ describe("host operator entry", () => {
     });
   });
 
-  it("parseHostOperatorArgs falls back to ADW_CWD", () => {
-    const parsed = withClearedAdwEnv(() => {
-      process.env["ADW_CWD"] = "/tmp/from-env";
-      process.env["ADW_TICKET_ID"] = "T-ENV";
-      process.env["ADW_PROMPT"] = "from env";
-      return parseHostOperatorArgs([]);
-    });
+  it("hostOperatorArgsFromFlags falls back to ADW_CWD", () => {
+    const parsed = hostOperatorArgsFromFlags(
+      {},
+      {
+        ADW_CWD: "/tmp/from-env",
+        ADW_TICKET_ID: "T-ENV",
+        ADW_PROMPT: "from env",
+      }
+    );
     assert.deepStrictEqual(parsed, {
       ticketId: "T-ENV",
       prompt: "from env",
@@ -248,17 +185,16 @@ describe("host operator entry", () => {
     });
   });
 
-  it("parseHostOperatorArgs keeps --issue vs --ticket/--prompt exclusivity with --cwd", () => {
-    const parsed = parseHostOperatorArgs([
-      "--issue",
-      "37",
-      "--ticket",
-      "T-1",
-      "--prompt",
-      "x",
-      "--cwd",
-      "/tmp/tree",
-    ]);
+  it("hostOperatorArgsFromFlags keeps --issue vs --ticket/--prompt exclusivity with cwd", () => {
+    const parsed = hostOperatorArgsFromFlags(
+      {
+        issue: "37",
+        ticket: "T-1",
+        prompt: "x",
+        cwd: "/tmp/tree",
+      },
+      emptyEnv
+    );
     assert.isTrue("error" in parsed);
   });
 
@@ -347,6 +283,42 @@ describe("host operator entry", () => {
         rmSync(dir, { recursive: true, force: true });
       }
     })
+  );
+
+  it.effect("prepareHostOperatorSession fills ADW_ISSUE from <cwd>/.env", () =>
+    Effect.gen(function* () {
+      const dir = mkdtempSync(join(tmpdir(), "adw-session-"));
+      writeFileSync(join(dir, ".env"), "ADW_ISSUE=99\n");
+      try {
+        const session = yield* prepareHostOperatorSession(
+          { cwd: dir },
+          emptyEnv
+        ).pipe(Effect.provide(hostOperatorFsLayer));
+        assert.strictEqual(
+          "issueRef" in session.args ? session.args.issueRef : undefined,
+          "99"
+        );
+        assert.strictEqual(session.args.cwd, dir);
+        assert.strictEqual(session.env["ADW_ISSUE"], "99");
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    })
+  );
+
+  it.effect(
+    "prepareHostOperatorSession fails closed when flags and env are empty",
+    () =>
+      Effect.gen(function* () {
+        const result = yield* prepareHostOperatorSession({}, emptyEnv).pipe(
+          Effect.provide(hostOperatorFsLayer),
+          Effect.result
+        );
+        assert.strictEqual(result._tag, "Failure");
+        if (result._tag === "Failure") {
+          assert.isTrue(result.failure instanceof HostOperatorParseError);
+        }
+      })
   );
 
   it("mergeHostOperatorEnv lets shell env win over file keys", () => {
