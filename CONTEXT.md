@@ -117,8 +117,8 @@ Deterministic ADW setup inside the warm sandbox **before** Build: ensure a git w
 _Avoid_: Assuming every sandbox already has the repo; making the Build agent own clone/branch/install; treating Host and cloud as different ADW graphs; requiring a custom bootstrap script in v0
 
 **TicketIntake**:
-Tracker-agnostic Host operator seam: given a ready-ticket reference, produce Minimal ADW `ticketId` + prompt (and minimal metadata). **GitHub Issues** is the first adapter (`gh`, gate on `ready-for-agent`). Lives on the Host CLI / operator path **outside** `runMinimalAdw` — feeds the Initial prompt; not a Build/Test/Review/Ship node. Manual `--ticket` / `--prompt` bypasses it. Other trackers (e.g. Jira) are later adapters on the same seam.
-_Avoid_: Treating intake as a Minimal ADW graph step; full triage/grill productization; requiring paste-by-hand as the only Host path once the GitHub adapter exists
+Tracker-agnostic Host operator seam: given a ready-ticket reference, produce Minimal ADW `ticketId` + prompt (and minimal metadata). **GitHub Issues** is the first adapter (`gh`, gate on `ready-for-agent`). Lives on the Host CLI / operator path **outside** `runMinimalAdw` — feeds the Initial prompt; not a Build/Test/Review/Ship node. Manual `--ticket` / `--prompt` bypasses it. Other trackers (e.g. Jira) are later adapters on the same seam. Tracker **issue dependencies** (`blocked_by`, wayfinder frontier) are **not** an ADW or TicketIntake hard gate — stacking PRs leaves blockers open on purpose. An optional Host operator warning is allowed; fail-closed is not. Stack/deps orchestration stays in the target repo’s tracker workflow, not Factory routing.
+_Avoid_: Treating intake as a Minimal ADW graph step; full triage/grill productization; requiring paste-by-hand as the only Host path once the GitHub adapter exists; failing intake because GitHub `blocked_by > 0`; encoding wayfinder/stack dependency graphs as ADW routing
 
 **Sandcastle**:
 Prior-art reference only ([mattpocock/sandcastle](https://github.com/mattpocock/sandcastle)) — not part of this Factory’s stack. Do not depend on `@ai-hero/sandcastle` for product paths.
