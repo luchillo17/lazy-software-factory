@@ -80,6 +80,143 @@ describe("GitHubGh", () => {
     })
   );
 
+  it.effect("remoteBranchExists is true when ls-remote returns a ref", () =>
+    Effect.gen(function* () {
+      const calls = yield* Ref.make<
+        Array<{ command: string; args: readonly string[] }>
+      >([]);
+
+      const fakeCli = Layer.succeed(
+        GhRunner,
+        GhRunner.of({
+          run: ({ command, args }) =>
+            Effect.gen(function* () {
+              yield* Ref.update(calls, (cs) => [...cs, { command, args }]);
+              return {
+                exitCode: 0,
+                stdout: "abc123\trefs/heads/adw/55\n",
+                stderr: "",
+              };
+            }),
+        })
+      );
+
+      const host = yield* GitHost.pipe(
+        Effect.provide(GitHubGh.pipe(Layer.provide(fakeCli)))
+      );
+
+      const exists = yield* host.remoteBranchExists({
+        cwd: "/tmp/repo",
+        branch: "adw/55",
+      });
+      assert.isTrue(exists);
+
+      const seen = yield* Ref.get(calls);
+      assert.deepStrictEqual(seen, [
+        {
+          command: "git",
+          args: ["ls-remote", "--heads", "origin", "adw/55"],
+        },
+      ]);
+    })
+  );
+
+  it.effect("remoteBranchExists is false when ls-remote is empty", () =>
+    Effect.gen(function* () {
+      const fakeCli = Layer.succeed(
+        GhRunner,
+        GhRunner.of({
+          run: () => Effect.succeed({ exitCode: 0, stdout: "", stderr: "" }),
+        })
+      );
+
+      const host = yield* GitHost.pipe(
+        Effect.provide(GitHubGh.pipe(Layer.provide(fakeCli)))
+      );
+
+      assert.isFalse(
+        yield* host.remoteBranchExists({
+          cwd: "/tmp/repo",
+          branch: "adw/55",
+        })
+      );
+    })
+  );
+
+  it.effect("findOpenPullRequest returns URL when gh lists an open PR", () =>
+    Effect.gen(function* () {
+      const calls = yield* Ref.make<
+        Array<{ command: string; args: readonly string[] }>
+      >([]);
+
+      const fakeCli = Layer.succeed(
+        GhRunner,
+        GhRunner.of({
+          run: ({ command, args }) =>
+            Effect.gen(function* () {
+              yield* Ref.update(calls, (cs) => [...cs, { command, args }]);
+              return {
+                exitCode: 0,
+                stdout: "https://github.com/example/repo/pull/49\n",
+                stderr: "",
+              };
+            }),
+        })
+      );
+
+      const host = yield* GitHost.pipe(
+        Effect.provide(GitHubGh.pipe(Layer.provide(fakeCli)))
+      );
+
+      const pr = yield* host.findOpenPullRequest({
+        cwd: "/tmp/repo",
+        head: "adw/55",
+      });
+      assert.deepStrictEqual(pr, {
+        url: "https://github.com/example/repo/pull/49",
+      });
+
+      const seen = yield* Ref.get(calls);
+      assert.deepStrictEqual(seen[0], {
+        command: "gh",
+        args: [
+          "pr",
+          "list",
+          "--head",
+          "adw/55",
+          "--state",
+          "open",
+          "--json",
+          "url",
+          "--jq",
+          ".[0].url // empty",
+        ],
+      });
+    })
+  );
+
+  it.effect("findOpenPullRequest returns null when none open", () =>
+    Effect.gen(function* () {
+      const fakeCli = Layer.succeed(
+        GhRunner,
+        GhRunner.of({
+          run: () => Effect.succeed({ exitCode: 0, stdout: "\n", stderr: "" }),
+        })
+      );
+
+      const host = yield* GitHost.pipe(
+        Effect.provide(GitHubGh.pipe(Layer.provide(fakeCli)))
+      );
+
+      assert.isNull(
+        yield* host.findOpenPullRequest({
+          cwd: "/tmp/repo",
+          head: "adw/55",
+        })
+      );
+    })
+  );
+
   it.effect("commitWorkingTree no-ops when porcelain is empty", () =>
     Effect.gen(function* () {
       const calls = yield* Ref.make<

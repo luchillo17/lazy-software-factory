@@ -50,6 +50,8 @@ describe("runShipAgent", () => {
           push: () => Effect.void,
           openPullRequest: () =>
             Effect.succeed({ url: "https://example.test/pr/1" }),
+          remoteBranchExists: () => Effect.succeed(false),
+          findOpenPullRequest: () => Effect.succeed(null),
         })
       );
 
@@ -83,6 +85,8 @@ describe("runShipAgent", () => {
               yield* Ref.update(bodies, (b) => [...b, body]);
               return { url: "https://example.test/pr/59" };
             }),
+          remoteBranchExists: () => Effect.succeed(false),
+          findOpenPullRequest: () => Effect.succeed(null),
         })
       );
 

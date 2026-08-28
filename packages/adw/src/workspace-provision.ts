@@ -1,6 +1,6 @@
 import type { Sandbox } from "@lazy-software-factory/runtime";
 import { Context, Effect, Layer, Schema } from "effect";
-import { GitHost, GitHostError } from "./git-host.ts";
+import { GitHost, GitHostError, type GitHostService } from "./git-host.ts";
 import { ticketBranch } from "./ticket-branch.ts";
 
 export class ProvisionError extends Schema.TaggedError<ProvisionError>()(
@@ -76,12 +76,72 @@ const LOCKFILE_INSTALLS: ReadonlyArray<{
   },
 ];
 
+const mapGitHostError = (err: GitHostError): ProvisionError =>
+  new ProvisionError({
+    message: `git host preflight failed: ${err.message}`,
+    cause: err,
+  });
+
+const refuseTicketBranchCollision = (options: {
+  readonly branch: string;
+  readonly remote: string;
+  readonly remoteExists: boolean;
+  readonly openPrUrl: string | null;
+}): Effect.Effect<void, ProvisionError> => {
+  const { branch, remote, remoteExists, openPrUrl } = options;
+  if (!remoteExists && openPrUrl === null) {
+    return Effect.void;
+  }
+
+  const parts: string[] = [];
+  if (remoteExists) {
+    parts.push(
+      `Ticket branch ${branch} already exists on remote ${remote} (refusing overwrite; no force-push).`
+    );
+  }
+  if (openPrUrl !== null) {
+    parts.push(
+      remoteExists
+        ? `Open PR: ${openPrUrl}`
+        : `Open pull request already exists for head ${branch}: ${openPrUrl} (refusing to re-provision; no force-push).`
+    );
+  }
+  return Effect.fail(new ProvisionError({ message: parts.join(" ") }));
+};
+
 const checkoutBranchAndInstall = (
   sandbox: Sandbox,
-  ticketId: string
+  ticketId: string,
+  gitHost: GitHostService,
+  env?: Readonly<Record<string, string>>
 ): Effect.Effect<void, ProvisionError> =>
   Effect.gen(function* () {
     const branch = ticketBranch(ticketId);
+    const remote = "origin";
+
+    const remoteExists = yield* gitHost
+      .remoteBranchExists({
+        cwd: sandbox.cwd,
+        branch,
+        remote,
+        env,
+      })
+      .pipe(Effect.mapError(mapGitHostError));
+    const openPr = yield* gitHost
+      .findOpenPullRequest({
+        cwd: sandbox.cwd,
+        head: branch,
+        env,
+      })
+      .pipe(Effect.mapError(mapGitHostError));
+
+    yield* refuseTicketBranchCollision({
+      branch,
+      remote,
+      remoteExists,
+      openPrUrl: openPr?.url ?? null,
+    });
+
     const checkout = yield* execOrProvisionFail(
       sandbox,
       "git",
@@ -166,7 +226,7 @@ export class WorkspaceProvision extends Context.Service<
                 );
             }
 
-            yield* checkoutBranchAndInstall(sandbox, ticketId);
+            yield* checkoutBranchAndInstall(sandbox, ticketId, gitHost, env);
           }),
       });
     })

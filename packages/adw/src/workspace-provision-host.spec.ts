@@ -1,6 +1,7 @@
 import { assert, describe, it } from "@effect/vitest";
 import type { Sandbox } from "@lazy-software-factory/runtime";
 import { Effect, Layer, Ref } from "effect";
+import { stubGitHost } from "./git-host-stub.ts";
 import { GitHost, GitHostError } from "./git-host.ts";
 import { WorkspaceProvision } from "./workspace-provision.ts";
 
@@ -37,11 +38,8 @@ const recordingSandbox = (
 
 const unusedGitHost = Layer.succeed(
   GitHost,
-  GitHost.of({
-    commitWorkingTree: () => Effect.void,
+  stubGitHost({
     clone: () => Effect.die("clone must not run when .git present"),
-    push: () => Effect.die("unused"),
-    openPullRequest: () => Effect.die("unused"),
   })
 );
 
@@ -200,6 +198,8 @@ describe("WorkspaceProvision.Host", () => {
             }),
           push: () => Effect.die("unused"),
           openPullRequest: () => Effect.die("unused"),
+          remoteBranchExists: () => Effect.succeed(false),
+          findOpenPullRequest: () => Effect.succeed(null),
         })
       );
 
@@ -257,6 +257,8 @@ describe("WorkspaceProvision.Host", () => {
             Effect.fail(new GitHostError({ message: "auth failed" })),
           push: () => Effect.die("unused"),
           openPullRequest: () => Effect.die("unused"),
+          remoteBranchExists: () => Effect.succeed(false),
+          findOpenPullRequest: () => Effect.succeed(null),
         })
       );
 
@@ -300,6 +302,8 @@ describe("WorkspaceProvision.Host", () => {
             }),
           push: () => Effect.die("unused"),
           openPullRequest: () => Effect.die("unused"),
+          remoteBranchExists: () => Effect.succeed(false),
+          findOpenPullRequest: () => Effect.succeed(null),
         })
       );
 

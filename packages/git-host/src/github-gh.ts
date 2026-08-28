@@ -107,6 +107,42 @@ export const GitHubGh = Layer.effect(
           }
           return { url };
         }),
+
+      remoteBranchExists: ({ cwd, branch, remote = "origin", env }) =>
+        Effect.gen(function* () {
+          const listed = yield* cli.run({
+            command: "git",
+            args: ["ls-remote", "--heads", remote, branch],
+            cwd,
+            env,
+          });
+          yield* requireZero(listed, "git ls-remote");
+          return listed.stdout.trim().length > 0;
+        }),
+
+      findOpenPullRequest: ({ cwd, head, env }) =>
+        Effect.gen(function* () {
+          const listed = yield* cli.run({
+            command: "gh",
+            args: [
+              "pr",
+              "list",
+              "--head",
+              head,
+              "--state",
+              "open",
+              "--json",
+              "url",
+              "--jq",
+              ".[0].url // empty",
+            ],
+            cwd,
+            env,
+          });
+          yield* requireZero(listed, "gh pr list");
+          const url = listed.stdout.trim();
+          return url.length > 0 ? { url } : null;
+        }),
     });
   })
 );

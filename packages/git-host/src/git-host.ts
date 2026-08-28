@@ -39,6 +39,27 @@ export interface GitHostService {
     readonly base?: string;
     readonly env?: Readonly<Record<string, string>>;
   }) => Effect.Effect<{ readonly url: string }, GitHostError>;
+
+  /**
+   * True when `remote` already has heads/`branch` (e.g. `git ls-remote --heads`).
+   * Used by Workspace provision to fail closed before overwriting a ticket branch.
+   */
+  readonly remoteBranchExists: (options: {
+    readonly cwd: string;
+    readonly branch: string;
+    readonly remote?: string;
+    readonly env?: Readonly<Record<string, string>>;
+  }) => Effect.Effect<boolean, GitHostError>;
+
+  /**
+   * Open PR/MR whose head is `head`, or `null` when none. URL surfaced in
+   * provision failure detail when present.
+   */
+  readonly findOpenPullRequest: (options: {
+    readonly cwd: string;
+    readonly head: string;
+    readonly env?: Readonly<Record<string, string>>;
+  }) => Effect.Effect<{ readonly url: string } | null, GitHostError>;
 }
 
 /** Forge-swappable Git host seam (ADR-0011). */

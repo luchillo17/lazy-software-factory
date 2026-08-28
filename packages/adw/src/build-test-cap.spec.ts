@@ -45,6 +45,8 @@ const passThroughShip = Layer.mergeAll(
       push: () => Effect.void,
       openPullRequest: () =>
         Effect.succeed({ url: "https://example.test/pr/1" }),
+      remoteBranchExists: () => Effect.succeed(false),
+      findOpenPullRequest: () => Effect.succeed(null),
     })
   ),
   Layer.succeed(
@@ -79,6 +81,8 @@ const passThroughShipWithoutGates = Layer.mergeAll(
       push: () => Effect.void,
       openPullRequest: () =>
         Effect.succeed({ url: "https://example.test/pr/1" }),
+      remoteBranchExists: () => Effect.succeed(false),
+      findOpenPullRequest: () => Effect.succeed(null),
     })
   )
 );
