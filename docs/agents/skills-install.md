@@ -17,7 +17,10 @@ npx skills add juliusbrussee/caveman --agent claude-code cursor -y
 npx skills add fallow-rs/fallow-skills --agent claude-code cursor -y
 npx skills add mattpocock/skills --agent claude-code cursor -y
 npx skills add luchillo17/gh-stack-compact --agent claude-code cursor -y
+npx skills add cursor/plugins --skill cursor-sdk --agent claude-code cursor -y --full-depth
 ```
+
+`--full-depth` is required for `cursor/plugins`: it is a multi-plugin marketplace, so the Skills CLI otherwise stops at the first `SKILL.md` and misses `cursor-sdk/skills/cursor-sdk`. Install only `--skill cursor-sdk` (do not pull the other marketplace plugins).
 
 Verify: every entry under `.claude/skills/` is a symlink to `../../.agents/skills/<name>`, not a real directory of files.
 

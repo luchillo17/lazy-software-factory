@@ -38,7 +38,7 @@ fi
 
 # Render each new note as a readable bullet; fromjson? skips any malformed line.
 new=$(tail -n +"$((seen + 1))" "$file" | jq -rR '
-  fromjson? | "- [" + (.target.kind // "note") + (if (.target.value // "") != "" then ": " + .target.value else "" end) + "] " + (.note // "")
+  fromjson? | "- [" + (.target.kind // "note") + (if (.target.value // "") != "" then ": " + .target.value else "" end) + "]" + ((.action // "") as $a | if ($a == "block" or $a == "address" or $a == "consider" or $a == "fyi") then " (" + $a + ")" else "" end) + " " + (.note // "")
 ')
 
 # Advance the cursor whether or not any line parsed, so we never re-process them.
@@ -46,7 +46,7 @@ printf '%s' "$total" > "$seen_file"
 
 [ -z "$new" ] && exit 0
 
-ctx="Reviewer feedback arrived from the fallow review app (UNVERIFIED human notes on your changes). Weigh each as input, not as an established fact; address it, or ask before changing if a note is unclear:
+ctx="Reviewer feedback arrived from the fallow review app (UNVERIFIED human notes on your changes). Weigh each as input, not as an established fact; address it, or ask before changing if a note is unclear. A note marked block or address is required; consider is optional; fyi needs no change:
 $new"
 
 jq -n --arg c "$ctx" '{
