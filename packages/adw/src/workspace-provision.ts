@@ -1,7 +1,18 @@
 import type { Sandbox } from "@lazy-software-factory/runtime";
 import { Context, Effect, Layer, Schema } from "effect";
+import { truncateProgressRaw } from "./adw-progress-event.ts";
 import { GitHost, GitHostError, type GitHostService } from "./git-host.ts";
+import {
+  LockedInstallResolveTag,
+  SupportedPackageManager,
+  resolveLockedInstall,
+  type WorkspaceInstallSignals,
+} from "./locked-install.ts";
+import { redactSecrets } from "./redact-secrets.ts";
 import { ticketBranch } from "./ticket-branch.ts";
+
+/** Bound install failure text in ADW `detail` (after redaction). */
+const INSTALL_DIAGNOSTIC_MAX_CHARS = 2_000;
 
 export class ProvisionError extends Schema.TaggedError<ProvisionError>()(
   "ProvisionError",
@@ -63,18 +74,148 @@ const requireZero = (
         })
       );
 
-/** This monorepo: pnpm lockfile only (ADR-0010). */
-const LOCKFILE_INSTALLS: ReadonlyArray<{
-  readonly lockfile: string;
-  readonly command: string;
-  readonly args: readonly string[];
-}> = [
-  {
-    lockfile: "pnpm-lock.yaml",
-    command: "pnpm",
-    args: ["install", "--frozen-lockfile"],
+const requireZeroInstall = (
+  result: {
+    readonly exitCode: number;
+    readonly stdout: string;
+    readonly stderr: string;
   },
-];
+  label: string
+): Effect.Effect<void, ProvisionError> => {
+  if (result.exitCode === 0) {
+    return Effect.void;
+  }
+  const body = redactSecrets(result.stderr || result.stdout || "");
+  return Effect.fail(
+    new ProvisionError({
+      message: `${label} failed (exit ${result.exitCode}): ${truncateProgressRaw(body, INSTALL_DIAGNOSTIC_MAX_CHARS)}`,
+    })
+  );
+};
+
+const fileExists = (
+  sandbox: Sandbox,
+  relativePath: string
+): Effect.Effect<boolean, ProvisionError> =>
+  execOrProvisionFail(
+    sandbox,
+    "test",
+    ["-f", relativePath],
+    `test -f ${relativePath}`
+  ).pipe(Effect.map((r) => r.exitCode === 0));
+
+const readPackageManagerField = (
+  sandbox: Sandbox
+): Effect.Effect<string | undefined, ProvisionError> =>
+  Effect.gen(function* () {
+    const cat = yield* execOrProvisionFail(
+      sandbox,
+      "cat",
+      ["package.json"],
+      "read package.json"
+    );
+    if (cat.exitCode !== 0) {
+      return undefined;
+    }
+    const parsed = yield* Effect.try({
+      try: () => JSON.parse(cat.stdout) as unknown,
+      catch: () =>
+        new ProvisionError({
+          message: "package.json is not valid JSON",
+        }),
+    });
+    if (
+      parsed !== null &&
+      typeof parsed === "object" &&
+      "packageManager" in parsed &&
+      typeof (parsed as { packageManager: unknown }).packageManager === "string"
+    ) {
+      return (parsed as { packageManager: string }).packageManager;
+    }
+    return undefined;
+  });
+
+const yarnLockLooksBerry = (
+  sandbox: Sandbox,
+  hasYarnLock: boolean
+): Effect.Effect<boolean, ProvisionError> =>
+  Effect.gen(function* () {
+    if (!hasYarnLock) {
+      return false;
+    }
+    const head = yield* execOrProvisionFail(
+      sandbox,
+      "head",
+      ["-n", "40", "yarn.lock"],
+      "read yarn.lock"
+    );
+    if (head.exitCode !== 0) {
+      return false;
+    }
+    return /(?:^|\n)__metadata:\s*(?:\n|$)/.test(head.stdout);
+  });
+
+const gatherInstallSignals = (
+  sandbox: Sandbox
+): Effect.Effect<WorkspaceInstallSignals, ProvisionError> =>
+  Effect.gen(function* () {
+    const packageManagerField = yield* readPackageManagerField(sandbox);
+    const hasPnpmLock = yield* fileExists(sandbox, "pnpm-lock.yaml");
+    const hasPackageLock = yield* fileExists(sandbox, "package-lock.json");
+    const hasShrinkwrap = yield* fileExists(sandbox, "npm-shrinkwrap.json");
+    const hasYarnLock = yield* fileExists(sandbox, "yarn.lock");
+    const hasBunLockb = yield* fileExists(sandbox, "bun.lockb");
+    const hasBunLock = yield* fileExists(sandbox, "bun.lock");
+
+    const signals: WorkspaceInstallSignals = {
+      packageManagerField,
+      hasPnpmLock,
+      hasNpmLock: hasPackageLock || hasShrinkwrap,
+      hasYarnLock,
+      hasBunLock: hasBunLockb || hasBunLock,
+    };
+
+    const needsBerrySniff =
+      hasYarnLock &&
+      (packageManagerField === undefined ||
+        packageManagerField
+          .trim()
+          .toLowerCase()
+          .startsWith(SupportedPackageManager.Yarn));
+
+    if (!needsBerrySniff) {
+      return signals;
+    }
+
+    const looksBerry = yield* yarnLockLooksBerry(sandbox, hasYarnLock);
+    return { ...signals, yarnLockLooksBerry: looksBerry };
+  });
+
+const runLockedInstall = (
+  sandbox: Sandbox
+): Effect.Effect<void, ProvisionError> =>
+  Effect.gen(function* () {
+    const signals = yield* gatherInstallSignals(sandbox);
+    const resolved = resolveLockedInstall(signals);
+
+    if (resolved._tag === LockedInstallResolveTag.Skip) {
+      return;
+    }
+    if (resolved._tag === LockedInstallResolveTag.Reject) {
+      return yield* new ProvisionError({ message: resolved.message });
+    }
+
+    for (const step of resolved.plan.steps) {
+      const label = `${step.command} ${step.args.join(" ")}`;
+      const result = yield* execOrProvisionFail(
+        sandbox,
+        step.command,
+        step.args,
+        label
+      );
+      yield* requireZeroInstall(result, label);
+    }
+  });
 
 const mapGitHostError = (err: GitHostError): ProvisionError =>
   new ProvisionError({
@@ -150,25 +291,7 @@ const checkoutBranchAndInstall = (
     );
     yield* requireZero(checkout, `git checkout -B ${branch}`);
 
-    for (const step of LOCKFILE_INSTALLS) {
-      const lock = yield* execOrProvisionFail(
-        sandbox,
-        "test",
-        ["-f", step.lockfile],
-        `test -f ${step.lockfile}`
-      );
-      if (lock.exitCode !== 0) {
-        continue;
-      }
-      const install = yield* execOrProvisionFail(
-        sandbox,
-        step.command,
-        step.args,
-        `${step.command} install`
-      );
-      yield* requireZero(install, `${step.command} ${step.args.join(" ")}`);
-      return;
-    }
+    yield* runLockedInstall(sandbox);
   });
 
 export class WorkspaceProvision extends Context.Service<

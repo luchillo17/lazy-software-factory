@@ -48,6 +48,13 @@ describe("runMinimalAdwGraph progress events", () => {
                     stderr: "",
                   });
                 }
+                if (command === "cat" && args[0] === "package.json") {
+                  return Effect.succeed({
+                    exitCode: 0,
+                    stdout: JSON.stringify({ packageManager: "pnpm@9.0.0" }),
+                    stderr: "",
+                  });
+                }
                 if (command === "test" && args[0] === "-f") {
                   return Effect.succeed({
                     exitCode: args[1] === "pnpm-lock.yaml" ? 0 : 1,
@@ -55,7 +62,7 @@ describe("runMinimalAdwGraph progress events", () => {
                     stderr: "",
                   });
                 }
-                if (command === "pnpm") {
+                if (command === "corepack" || command === "pnpm") {
                   return Effect.succeed({
                     exitCode: 0,
                     stdout: "",
