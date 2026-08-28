@@ -74,6 +74,31 @@ remains an agent-layer aid whose discipline is the prompt's.
    interaction in `tradeoff`. For the truly anchorless case you MAY emit at most ONE
    item with `anchor: "cross-cutting"`, `confidence: "low"`, naming the spanned
    files/invariants in `observed`. If in doubt, anchor locally; this slot is rare.
+8. **Options make the choice space legible; they never pick.** "This is complex"
+   leaves the author guessing, so an item MAY carry an `options` array naming the
+   moves available. When present it holds at least TWO entries, each with a real
+   `gains` and a real `costs`, in no ranked order, with no "recommended" marker
+   and no adjective that tips the scale. "Keep as is" is a REQUIRED entry whenever
+   `options` is present, with its own real gain and cost; it is the guard that
+   keeps the named-moves list from turning into a refactor backlog. If you can
+   only formulate one option besides it, omit `options` entirely: a single move
+   is a prescription wearing a list.
+
+## Named moves
+
+Use this vocabulary for `move` so two runs describe the same restructuring the
+same way. It is a vocabulary, not a checklist; "keep as is" is always a legitimate
+option and often the one with the lowest cost.
+
+- Replace a conditional chain with a typed model or a dispatcher.
+- Collapse duplicate branches into one flow.
+- Separate orchestration from business logic.
+- Move feature-specific logic to the module that owns the concept.
+- Reuse the canonical helper instead of a near-duplicate.
+- Make a type boundary explicit so downstream branching disappears.
+- Delete a pass-through wrapper that adds indirection without clarifying the API.
+- Extract a helper, or split a large file into focused modules.
+- Keep as is.
 
 ## Inputs to gather
 
@@ -141,7 +166,19 @@ A single envelope: the echoed snapshot hash, an `abstained` flag, and the
       "anchor": "src/core/api.ts:42",
       "lens": "error-handling",
       "observed": "save() returns the raw DB error to the caller.",
-      "tradeoff": "Keeps the call site thin, but couples every caller to the storage layer's error shapes rather than a domain error.",
+      "tradeoff": "Callers see the full storage error with no translation layer. Callers depend on the storage layer's error shapes.",
+      "options": [
+        {
+          "move": "Keep as is",
+          "gains": "Callers keep the full error detail and can match on the exact storage failure.",
+          "costs": "Callers depend on the storage layer's error shapes."
+        },
+        {
+          "move": "Make a type boundary explicit",
+          "gains": "Callers depend on one domain error shape.",
+          "costs": "Callers lose the storage detail the mapping does not carry, and the mapping is a new surface to keep in sync."
+        }
+      ],
       "question": "How should save() surface a storage failure to its callers?",
       "consequence": "high",
       "confidence": "medium",
@@ -165,10 +202,15 @@ A single envelope: the echoed snapshot hash, an `abstained` flag, and the
   shows it; `medium` = the diff plus a reasonable assumption about intent; `low` =
   mostly reconstructed, or the cross-cutting slot.
 - `captured`: provenance hint, see rule 4. Not a trust score.
+- `options`: OPTIONAL, see rule 8. Two or more `{ move, gains, costs }` entries drawn
+  from the named moves, unranked, always including "Keep as is". Omit rather than
+  pad; omit when no move besides keeping exists. No review surface renders
+  `options` yet; it is for the terminal report and the human reading the JSON, and
+  a surface that does not render it loses nothing, the question stands alone.
 - `abstained: true` with `tradeoffs: []` is the terminal "looked, found nothing"
   state; distinguish it from a parse failure (no envelope at all).
-- Render for a human as the anchor, then `observed -> trade-off -> question`, with
-  the question LAST so the human lands on the decision they own.
+- Render for a human as the anchor, then `observed -> trade-off -> options ->
+question`, with the question LAST so the human lands on the decision they own.
 
 ## What good looks like
 
@@ -178,6 +220,16 @@ A single envelope: the echoed snapshot hash, an `abstained` flag, and the
   abstain. Never padded to fill slots.
 - `observed` reads as a neutral fact; the `question` names no fix. If a reader can
   guess your preferred answer from the question, reframe it.
+- When `options` is present, both entries carry a real cost. If a reader can guess
+  the preferred option from how the entries are worded, drop `options`.
 - It does not repeat fallow's deterministic decisions; it covers the part the graph
   cannot see.
 - It never tells the human what to choose.
+
+## What is enforced, and by whom
+
+The `options` rules, the render order, and "cite a number or path" are agent-enforced:
+the model checks its own output against this prompt. Only the anchor (`signal_id` or
+`change_anchor`), the `graph_snapshot_hash`, and, once the engine ships it, the
+`action` label are fallow-validated on reentry. Do not claim more than that for any
+item.
