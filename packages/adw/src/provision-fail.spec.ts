@@ -80,6 +80,8 @@ describe("runMinimalAdw provision failure", () => {
             clone: () => Effect.die("unused"),
             push: () => Effect.die("unused"),
             openPullRequest: () => Effect.die("unused"),
+            remoteBranchExists: () => Effect.succeed(false),
+            findOpenPullRequest: () => Effect.succeed(null),
           })
         ),
         Layer.succeed(

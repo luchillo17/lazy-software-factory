@@ -132,6 +132,8 @@ describe("runMinimalAdw happy path", () => {
               yield* Ref.update(pushThenPr, (s) => [...s, "pr"]);
               return { url: "https://example.test/pr/1" };
             }),
+          remoteBranchExists: () => Effect.succeed(false),
+          findOpenPullRequest: () => Effect.succeed(null),
         })
       );
 
@@ -239,6 +241,8 @@ describe("runMinimalAdw happy path", () => {
             push: () => Effect.void,
             openPullRequest: () =>
               Effect.succeed({ url: "https://example.test/pr/1" }),
+            remoteBranchExists: () => Effect.succeed(false),
+            findOpenPullRequest: () => Effect.succeed(null),
           })
         ),
         Layer.succeed(
@@ -319,6 +323,8 @@ describe("runMinimalAdw happy path", () => {
             push: () => Effect.void,
             openPullRequest: () =>
               Effect.succeed({ url: "https://example.test/pr/1" }),
+            remoteBranchExists: () => Effect.succeed(false),
+            findOpenPullRequest: () => Effect.succeed(null),
           })
         ),
         Layer.succeed(

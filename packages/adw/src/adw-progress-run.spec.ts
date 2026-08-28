@@ -105,6 +105,8 @@ describe("runMinimalAdw progress events", () => {
                 push: () => Effect.void,
                 openPullRequest: () =>
                   Effect.succeed({ url: "https://example.test/pr/1" }),
+                remoteBranchExists: () => Effect.succeed(false),
+                findOpenPullRequest: () => Effect.succeed(null),
               })
             ),
             WorkspaceProvision.Host.pipe(
@@ -117,6 +119,8 @@ describe("runMinimalAdw progress events", () => {
                     push: () => Effect.void,
                     openPullRequest: () =>
                       Effect.succeed({ url: "https://example.test/pr/1" }),
+                    remoteBranchExists: () => Effect.succeed(false),
+                    findOpenPullRequest: () => Effect.succeed(null),
                   })
                 )
               )
@@ -222,6 +226,8 @@ describe("runMinimalAdw progress events", () => {
                 push: () => Effect.void,
                 openPullRequest: () =>
                   Effect.succeed({ url: "https://example.test/pr/1" }),
+                remoteBranchExists: () => Effect.succeed(false),
+                findOpenPullRequest: () => Effect.succeed(null),
               })
             ),
             Layer.succeed(

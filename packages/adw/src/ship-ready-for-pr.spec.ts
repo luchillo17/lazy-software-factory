@@ -105,6 +105,8 @@ describe("runMinimalAdw Ship → ready_for_pr", () => {
           push: () =>
             Effect.fail(new GitHostError({ message: "gh not available" })),
           openPullRequest: () => Effect.die("PR must not run after push fail"),
+          remoteBranchExists: () => Effect.succeed(false),
+          findOpenPullRequest: () => Effect.succeed(null),
         })
       );
 
@@ -138,6 +140,8 @@ describe("runMinimalAdw Ship → ready_for_pr", () => {
           push: () => Ref.set(pushed, true),
           openPullRequest: () =>
             Effect.fail(new GitHostError({ message: "cannot open PR" })),
+          remoteBranchExists: () => Effect.succeed(false),
+          findOpenPullRequest: () => Effect.succeed(null),
         })
       );
 
@@ -185,6 +189,8 @@ describe("runMinimalAdw Ship → ready_for_pr", () => {
               yield* Ref.set(opened, { title: opts.title, body: opts.body });
               return { url: "https://example.test/pr/9" };
             }),
+          remoteBranchExists: () => Effect.succeed(false),
+          findOpenPullRequest: () => Effect.succeed(null),
         })
       );
 
@@ -219,6 +225,8 @@ describe("runMinimalAdw Ship → ready_for_pr", () => {
               yield* Ref.update(steps, (s) => [...s, "pr"]);
               return { url: "https://example.test/pr/10" };
             }),
+          remoteBranchExists: () => Effect.succeed(false),
+          findOpenPullRequest: () => Effect.succeed(null),
         })
       );
 
@@ -244,6 +252,8 @@ describe("runMinimalAdw Ship → ready_for_pr", () => {
           clone: () => Effect.void,
           push: () => Ref.set(pushed, true),
           openPullRequest: () => Effect.die("unused"),
+          remoteBranchExists: () => Effect.succeed(false),
+          findOpenPullRequest: () => Effect.succeed(null),
         })
       );
 
