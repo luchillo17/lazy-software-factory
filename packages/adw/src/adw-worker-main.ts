@@ -33,6 +33,7 @@ import {
 import { resolvePackageJsonTestCommands } from "./package-json-test-commands.ts";
 import { runMinimalAdwGraph } from "./run-minimal-adw-graph.ts";
 import { AdwTestCommands } from "./test-commands.ts";
+import { installWorkerProtocolStdoutGuard } from "./worker-stdio.ts";
 import { WorkspaceProvision } from "./workspace-provision.ts";
 
 const AdwWorkerMainErrorTag = {
@@ -60,8 +61,13 @@ const workerCapabilities: AdwWorkerEffectiveCapabilities = {
   isolation: AdwWorkerIsolation.Host,
 };
 
+const protocolStdout = installWorkerProtocolStdoutGuard(
+  process.stdout,
+  process.stderr
+);
+
 const writeFrame = (frame: Parameters<typeof encodeWorkerFrame>[0]): void => {
-  process.stdout.write(encodeWorkerFrame(frame));
+  protocolStdout.writeProtocol(encodeWorkerFrame(frame));
 };
 
 const diagnosticsLogger: Logger.Logger<unknown, void> = Logger.make(
