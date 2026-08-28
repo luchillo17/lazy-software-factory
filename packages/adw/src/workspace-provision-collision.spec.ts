@@ -15,7 +15,7 @@ import { AdwStatus } from "./enums.ts";
 import { stubGitHost } from "./git-host-stub.ts";
 import { GitHost, type GitHostService } from "./git-host.ts";
 import { monorepoRoot } from "./monorepo-root.ts";
-import { runMinimalAdw } from "./run-minimal-adw.ts";
+import { runMinimalAdwGraph } from "./run-minimal-adw-graph.ts";
 import { AdwTestCommands } from "./test-commands.ts";
 import { WorkspaceProvision } from "./workspace-provision.ts";
 
@@ -70,6 +70,7 @@ const minimalAdwCollisionLayers = (options: {
     Layer.succeed(
       SandboxProvider,
       SandboxProvider.of({
+        acquire: () => Effect.die("acquire unused in graph test"),
         create: () =>
           Effect.succeed({
             id: "sandbox-1",
@@ -266,7 +267,7 @@ describe("WorkspaceProvision ticket-branch collision preflight", () => {
         const reviewRuns = yield* Ref.make(0);
         const shipCalls = yield* Ref.make(0);
 
-        const result = yield* runMinimalAdw({
+        const result = yield* runMinimalAdwGraph({
           ticketId: "55",
           prompt: "do the thing",
         }).pipe(
@@ -303,7 +304,7 @@ describe("WorkspaceProvision ticket-branch collision preflight", () => {
         const shipCalls = yield* Ref.make(0);
         const prUrl = "https://github.com/example/repo/pull/49";
 
-        const result = yield* runMinimalAdw({
+        const result = yield* runMinimalAdwGraph({
           ticketId: "55",
           prompt: "do the thing",
         }).pipe(

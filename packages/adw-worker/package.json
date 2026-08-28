@@ -1,5 +1,5 @@
 {
-  "name": "@lazy-software-factory/adw",
+  "name": "@lazy-software-factory/adw-worker",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -9,16 +9,12 @@
   "nx": {
     "tags": [
       "type:lib",
-      "scope:adw"
+      "scope:adw-worker"
     ],
-    "sourceRoot": "packages/adw/src",
+    "sourceRoot": "packages/adw-worker/src",
     "projectType": "library"
   },
   "dependencies": {
-    "@effect/platform-node": "4.0.0-beta.106",
-    "@lazy-software-factory/adw-worker": "workspace:*",
-    "@lazy-software-factory/git-host": "workspace:*",
-    "@lazy-software-factory/runtime": "workspace:*",
     "effect": "4.0.0-beta.106"
   },
   "devDependencies": {

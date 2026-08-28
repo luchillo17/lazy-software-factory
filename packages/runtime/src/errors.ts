@@ -6,6 +6,8 @@ export const RuntimeErrorTag = {
   SandboxExecError: "SandboxExecError",
   SandboxDestroyError: "SandboxDestroyError",
   SandboxBusyError: "SandboxBusyError",
+  SandboxCapabilityError: "SandboxCapabilityError",
+  SandboxWorkerError: "SandboxWorkerError",
   AgentError: "AgentError",
 } as const;
 
@@ -40,6 +42,22 @@ export class SandboxBusyError extends Schema.TaggedError<SandboxBusyError>()(
   RuntimeErrorTag.SandboxBusyError,
   {
     message: Schema.String,
+  }
+) {}
+
+export class SandboxCapabilityError extends Schema.TaggedError<SandboxCapabilityError>()(
+  RuntimeErrorTag.SandboxCapabilityError,
+  {
+    message: Schema.String,
+    missing: Schema.optional(Schema.Array(Schema.String)),
+  }
+) {}
+
+export class SandboxWorkerError extends Schema.TaggedError<SandboxWorkerError>()(
+  RuntimeErrorTag.SandboxWorkerError,
+  {
+    message: Schema.String,
+    cause: Schema.optional(Schema.Defect()),
   }
 ) {}
 

@@ -101,12 +101,20 @@ Our Effect TypeScript layer (`packages/runtime`) that owns sandbox lifecycle and
 _Avoid_: Sandcastle, orchestrator (ADW owns routing; Runtime owns isolation/agents)
 
 **SandboxProvider**:
-A pluggable adapter that creates/execs/destroys sandboxes. Local options include a **Host sandbox** (this machine as the box) and classic Docker; later BYO cloud such as Vercel. Credentials are per run / per Organization. ADW always goes through a sandbox pointer — never calls the agent provider with “no sandbox.”
-_Avoid_: Docker Sandboxes / `sbx` as the only path (optional later; requires Docker login); bypassing SandboxProvider for host spikes
+A pluggable adapter that acquires a scoped **Sandbox lease**, validates capabilities, runs one **ADW worker** through a typed protocol, and releases resources; also creates/execs/destroys sandboxes for worker-local work. Local options include a **Host sandbox** (this machine as the box) and classic Docker; later BYO cloud such as Vercel. Credentials are per run / per Organization. ADW always goes through a sandbox pointer — never calls the agent provider with “no sandbox.”
+_Avoid_: Docker Sandboxes / `sbx` as the only path (optional later; requires Docker login); bypassing SandboxProvider for host spikes; a second Host-only orchestration path that skips the worker protocol
+
+**Sandbox lease**:
+The scoped controller handle for one **Sandbox**: capability check, exactly one **ADW worker** run, typed progress/terminal consumption, and idempotent release (including on Effect interruption after graceful stop / force-kill). One lease ↔ one ADW; Host capacity remains one active lease at a time.
+_Avoid_: Equating lease with Agent session; treating `create` alone as the public Minimal ADW entry after ADR-0016; sharing one lease across tickets
+
+**ADW worker**:
+The versioned process that runs Minimal ADW orchestration and all Agent / Code agents **inside** the Sandbox (WorkspaceProvision, Cursor local Agent create/resume and custom tools, gates, Ship). Speaks a framed Effect Schema protocol on stdout; diagnostics on stderr. Public `runMinimalAdw` is the controller that leases and consumes the worker — the graph is not the public in-process path.
+_Avoid_: Parsing raw worker logs for routing; running Cursor local SDK on the controller while only wrapping shell in the Sandbox; baking provider-specific fields into the worker request
 
 **Host sandbox**:
-A `SandboxProvider` backend where the sandbox **is** the host process/filesystem (local `exec`). Valid default until Docker lands, and a lasting option for single-ADW-at-a-time local use without containers. Not a second orchestration path — same warm-sandbox rules, weaker isolation. Operator may aim the warm sandbox at a named git tree via **`--cwd` / `ADW_CWD`** or the Factory checkout **`adw-host`** bin (invoker cwd when `--cwd` omitted) — still Host, not Docker (VISION §4 / ADR-0015).
-_Avoid_: Treating host runs as outside the Runtime; multi-ticket parallel on one host sandbox (one ADW at a time); using `--repo-url` to “switch” trees when `.git` already exists in the sandbox cwd (Workspace provision reuses that worktree)
+A `SandboxProvider` backend where the sandbox **is** the host process/filesystem (local `exec` + Host-launched **ADW worker**). Valid default until Docker lands, and a lasting option for single-ADW-at-a-time local use without containers. Not a second orchestration path — same worker protocol and warm-sandbox rules, weaker isolation. Operator may aim the warm sandbox at a named git tree via **`--cwd` / `ADW_CWD`** or the Factory checkout **`adw-host`** bin (invoker cwd when `--cwd` omitted) — still Host, not Docker (VISION §4 / ADR-0015 / ADR-0016).
+_Avoid_: Treating host runs as outside the Runtime; multi-ticket parallel on one host sandbox (one ADW at a time); using `--repo-url` to “switch” trees when `.git` already exists in the sandbox cwd (Workspace provision reuses that worktree); assuming Host skips the ADW worker
 
 **Warm sandbox**:
 One sandbox per ticket/task, kept alive for the whole ADW so Build, Test agent, and Review share filesystem, installs, and agent session state. On Host sandbox, that means one active ADW on the machine at a time.

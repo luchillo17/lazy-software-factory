@@ -24,7 +24,10 @@
     "paths": {
       "@lazy-software-factory/runtime": ["./packages/runtime/src/index.ts"],
       "@lazy-software-factory/adw": ["./packages/adw/src/index.ts"],
-      "@lazy-software-factory/git-host": ["./packages/git-host/src/index.ts"]
+      "@lazy-software-factory/git-host": ["./packages/git-host/src/index.ts"],
+      "@lazy-software-factory/adw-worker": [
+        "./packages/adw-worker/src/index.ts"
+      ]
     }
   }
 }

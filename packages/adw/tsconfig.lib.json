@@ -23,6 +23,9 @@
     },
     {
       "path": "../git-host/tsconfig.lib.json"
+    },
+    {
+      "path": "../adw-worker/tsconfig.lib.json"
     }
   ]
 }

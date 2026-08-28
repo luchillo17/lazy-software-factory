@@ -14,7 +14,7 @@ import {
 } from "./attempt-caps.ts";
 import { AdwStatus } from "./enums.ts";
 import { GitHost } from "./git-host.ts";
-import { runMinimalAdw } from "./run-minimal-adw.ts";
+import { runMinimalAdwGraph } from "./run-minimal-adw-graph.ts";
 import {
   submitReviewFailViaTools,
   submitReviewPassViaTools,
@@ -43,7 +43,7 @@ const provisionAndShip = Layer.mergeAll(
   )
 );
 
-describe("runMinimalAdw Review routing + cap", () => {
+describe("runMinimalAdwGraph Review routing + cap", () => {
   it.effect(
     "Review fail resumes Build with fail report without spending Build attempts",
     () =>
@@ -56,6 +56,7 @@ describe("runMinimalAdw Review routing + cap", () => {
         const sandboxLayer = Layer.succeed(
           SandboxProvider,
           SandboxProvider.of({
+            acquire: () => Effect.die("acquire unused in graph test"),
             create: () =>
               Effect.succeed({
                 id: "sandbox-1",
@@ -122,7 +123,7 @@ describe("runMinimalAdw Review routing + cap", () => {
           })
         );
 
-        const result = yield* runMinimalAdw({
+        const result = yield* runMinimalAdwGraph({
           ticketId: "T-REV",
           prompt: "work",
         }).pipe(
@@ -169,6 +170,7 @@ describe("runMinimalAdw Review routing + cap", () => {
       const sandboxLayer = Layer.succeed(
         SandboxProvider,
         SandboxProvider.of({
+          acquire: () => Effect.die("acquire unused in graph test"),
           create: () =>
             Effect.succeed({
               id: "sandbox-1",
@@ -202,7 +204,7 @@ describe("runMinimalAdw Review routing + cap", () => {
         })
       );
 
-      const result = yield* runMinimalAdw({
+      const result = yield* runMinimalAdwGraph({
         ticketId: "T-CONTRACT",
         prompt: "work",
       }).pipe(
@@ -247,6 +249,7 @@ describe("runMinimalAdw Review routing + cap", () => {
         const sandboxLayer = Layer.succeed(
           SandboxProvider,
           SandboxProvider.of({
+            acquire: () => Effect.die("acquire unused in graph test"),
             create: () =>
               Effect.succeed({
                 id: "sandbox-1",
@@ -295,7 +298,7 @@ describe("runMinimalAdw Review routing + cap", () => {
           })
         );
 
-        const result = yield* runMinimalAdw({
+        const result = yield* runMinimalAdwGraph({
           ticketId: "T-WIRE-REPAIR",
           prompt: "work",
         }).pipe(
@@ -340,6 +343,7 @@ describe("runMinimalAdw Review routing + cap", () => {
       const sandboxLayer = Layer.succeed(
         SandboxProvider,
         SandboxProvider.of({
+          acquire: () => Effect.die("acquire unused in graph test"),
           create: () =>
             Effect.succeed({
               id: "sandbox-1",
@@ -376,7 +380,7 @@ describe("runMinimalAdw Review routing + cap", () => {
         })
       );
 
-      const result = yield* runMinimalAdw({
+      const result = yield* runMinimalAdwGraph({
         ticketId: "T-PASS-DRAFT",
         prompt: "work",
       }).pipe(
@@ -415,6 +419,7 @@ describe("runMinimalAdw Review routing + cap", () => {
         const sandboxLayer = Layer.succeed(
           SandboxProvider,
           SandboxProvider.of({
+            acquire: () => Effect.die("acquire unused in graph test"),
             create: () =>
               Effect.succeed({
                 id: "sandbox-1",
@@ -469,7 +474,7 @@ describe("runMinimalAdw Review routing + cap", () => {
           })
         );
 
-        const result = yield* runMinimalAdw({
+        const result = yield* runMinimalAdwGraph({
           ticketId: "T-WIRE-FAIL",
           prompt: "work",
         }).pipe(
@@ -511,6 +516,7 @@ describe("runMinimalAdw Review routing + cap", () => {
         const sandboxLayer = Layer.succeed(
           SandboxProvider,
           SandboxProvider.of({
+            acquire: () => Effect.die("acquire unused in graph test"),
             create: () =>
               Effect.succeed({
                 id: "sandbox-1",
@@ -557,7 +563,7 @@ describe("runMinimalAdw Review routing + cap", () => {
           })
         );
 
-        const result = yield* runMinimalAdw({
+        const result = yield* runMinimalAdwGraph({
           ticketId: "T-WIRE-CAP",
           prompt: "work",
         }).pipe(
@@ -604,6 +610,7 @@ describe("runMinimalAdw Review routing + cap", () => {
       const sandboxLayer = Layer.succeed(
         SandboxProvider,
         SandboxProvider.of({
+          acquire: () => Effect.die("acquire unused in graph test"),
           create: () =>
             Effect.succeed({
               id: "sandbox-1",
@@ -644,7 +651,7 @@ describe("runMinimalAdw Review routing + cap", () => {
         })
       );
 
-      const result = yield* runMinimalAdw({
+      const result = yield* runMinimalAdwGraph({
         ticketId: "T-REV-CAP",
         prompt: "work",
       }).pipe(
