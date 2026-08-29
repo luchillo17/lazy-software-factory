@@ -34,3 +34,4 @@ coverage/
 .claude/settings.local.json
 vitest.config.*.timestamp*
 tmp/
+packages/adw-worker/runner/dist/

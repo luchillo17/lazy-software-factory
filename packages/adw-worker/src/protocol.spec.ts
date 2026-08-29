@@ -12,13 +12,39 @@ import {
   AdwWorkerStep,
   AdwWorkerTerminalKind,
   decodeWorkerFrame,
+  decodeWorkerHandshake,
   decodeWorkerRequest,
   encodeWorkerFrame,
+  encodeWorkerHandshake,
   encodeWorkerRequest,
   redactWorkerDiagnostics,
+  AdwWorkerHandshakeKind,
 } from "./index.ts";
 
 describe("adw worker protocol framing", () => {
+  it.effect("round-trips handshake encode/decode", () =>
+    Effect.gen(function* () {
+      const line = encodeWorkerHandshake();
+      const handshake = yield* decodeWorkerHandshake(line);
+      assert.strictEqual(handshake.kind, AdwWorkerHandshakeKind.Handshake);
+      assert.strictEqual(
+        handshake.protocolVersion,
+        ADW_WORKER_PROTOCOL_VERSION
+      );
+    })
+  );
+
+  it.effect("round-trips handshake_ok frame", () =>
+    Effect.gen(function* () {
+      const line = encodeWorkerFrame({
+        protocolVersion: ADW_WORKER_PROTOCOL_VERSION,
+        kind: AdwWorkerFrameKind.HandshakeOk,
+      });
+      const frame = yield* decodeWorkerFrame(line);
+      assert.strictEqual(frame.kind, AdwWorkerFrameKind.HandshakeOk);
+    })
+  );
+
   it.effect("round-trips a progress frame", () =>
     Effect.gen(function* () {
       const line = encodeWorkerFrame({

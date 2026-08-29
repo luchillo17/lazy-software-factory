@@ -1,4 +1,4 @@
-import type { AgentRunOptions } from "@lazy-software-factory/runtime";
+import type { AgentRunOptions } from "@lazy-software-factory/runtime/agent-provider";
 import { Effect } from "effect";
 import type { ReviewPassOutput } from "./review-output.ts";
 import { reviewPassFixture } from "./review-pass-fixture.ts";

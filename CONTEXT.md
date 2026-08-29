@@ -116,6 +116,10 @@ _Avoid_: Parsing raw worker logs for routing; running Cursor local SDK on the co
 A `SandboxProvider` backend where the sandbox **is** the host process/filesystem (local `exec` + Host-launched **ADW worker**). Valid default until Docker lands, and a lasting option for single-ADW-at-a-time local use without containers. Not a second orchestration path — same worker protocol and warm-sandbox rules, weaker isolation. Operator may aim the warm sandbox at a named git tree via **`--cwd` / `ADW_CWD`** or the Factory checkout **`adw-host`** bin (invoker cwd when `--cwd` omitted) — still Host, not Docker (VISION §4 / ADR-0015 / ADR-0016).
 _Avoid_: Treating host runs as outside the Runtime; multi-ticket parallel on one host sandbox (one ADW at a time); using `--repo-url` to “switch” trees when `.git` already exists in the sandbox cwd (Workspace provision reuses that worktree); assuming Host skips the ADW worker
 
+**Docker sandbox**:
+Classic Docker Engine adapter: one hardened container + ephemeral named workspace volume per lease; remote Git source only (no host cwd bind mounts); worker protocol via `docker exec` after a handshake probe. Generic `adw --sandbox docker` selects it explicitly; Host remains the default until live proof (#86).
+_Avoid_: Publishing inbound ports; mounting the Docker socket; privileged mode; baking run secrets into image layers or `docker create` env; claiming retained workspaces or disk quotas in Docker v1
+
 **Warm sandbox**:
 One sandbox per ticket/task, kept alive for the whole ADW so Build, Test agent, and Review share filesystem, installs, and agent session state. On Host sandbox, that means one active ADW on the machine at a time.
 _Avoid_: New sandbox per agent step

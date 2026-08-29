@@ -19,7 +19,7 @@ export const GitHubGh = Layer.effect(
     const cli = yield* GhRunner;
 
     return GitHost.of({
-      clone: ({ repoUrl, destination, env }) =>
+      clone: ({ repoUrl, destination, ref, env }) =>
         Effect.gen(function* () {
           const result = yield* cli.run({
             command: "gh",
@@ -27,6 +27,15 @@ export const GitHubGh = Layer.effect(
             env,
           });
           yield* requireZero(result, "gh repo clone");
+          if (ref !== undefined && ref.length > 0) {
+            const checkout = yield* cli.run({
+              command: "git",
+              args: ["checkout", ref],
+              cwd: destination,
+              env,
+            });
+            yield* requireZero(checkout, `git checkout ${ref}`);
+          }
         }),
 
       commitWorkingTree: ({ cwd, message, env }) =>

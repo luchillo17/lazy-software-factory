@@ -2,8 +2,11 @@ import { Effect, Schema } from "effect";
 import {
   ADW_WORKER_PROTOCOL_VERSION,
   AdwWorkerFrameSchema,
+  AdwWorkerHandshakeKind,
+  AdwWorkerHandshakeRequestSchema,
   AdwWorkerRequestSchema,
   type AdwWorkerFrame,
+  type AdwWorkerHandshakeRequest,
   type AdwWorkerRequest,
 } from "./protocol.ts";
 
@@ -28,6 +31,14 @@ export const encodeWorkerFrame = (frame: AdwWorkerFrame): string =>
 export const encodeWorkerRequest = (request: AdwWorkerRequest): string =>
   `${JSON.stringify(request)}\n`;
 
+/** Encode the pre-secret handshake line for worker stdin. */
+export const encodeWorkerHandshake = (
+  handshake: AdwWorkerHandshakeRequest = {
+    protocolVersion: ADW_WORKER_PROTOCOL_VERSION,
+    kind: AdwWorkerHandshakeKind.Handshake,
+  }
+): string => `${JSON.stringify(handshake)}\n`;
+
 const parseJsonLine = (
   line: string,
   label: string
@@ -39,6 +50,24 @@ const parseJsonLine = (
         message: `${label} is not valid JSON`,
         cause,
       }),
+  });
+
+export const decodeWorkerHandshake = (
+  line: string
+): Effect.Effect<AdwWorkerHandshakeRequest, AdwWorkerProtocolError> =>
+  Effect.gen(function* () {
+    const raw = yield* parseJsonLine(line, "Worker handshake");
+    return yield* Schema.decodeUnknownEffect(AdwWorkerHandshakeRequestSchema)(
+      raw
+    ).pipe(
+      Effect.mapError(
+        (cause) =>
+          new AdwWorkerProtocolError({
+            message: `Worker handshake schema decode failed: ${cause.message}`,
+            cause,
+          })
+      )
+    );
   });
 
 export const decodeWorkerRequest = (

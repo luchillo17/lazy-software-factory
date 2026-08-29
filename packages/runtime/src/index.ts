@@ -31,6 +31,30 @@ export type {
 export { SandboxProvider } from "./sandbox-provider.ts";
 export type { HostSandboxOptions } from "./sandbox-provider.ts";
 export {
+  dockerSandboxProviderLayer,
+  makeDockerSandboxProviderLayer,
+  rejectDockerHostSourceIntake,
+  type DockerSandboxOptions,
+} from "./docker-sandbox.ts";
+export {
+  DockerCli,
+  DockerCliError,
+  DockerCliErrorTag,
+  DockerCliErrorTagSchema,
+  parseDockerJson,
+  parseDockerJsonLines,
+  requireDockerOk,
+} from "./docker-cli.ts";
+export type { DockerCliRunResult, DockerCliService } from "./docker-cli.ts";
+export {
+  DOCKER_CACHE_PATH,
+  DOCKER_TMP_PATH,
+  DOCKER_WORKSPACE_PATH,
+  dockerCreateArgs,
+  dockerExecInteractiveArgs,
+  dockerVolumeCreateArgs,
+} from "./docker-argv.ts";
+export {
   AgentError,
   RuntimeErrorTag,
   RuntimeErrorTagSchema,

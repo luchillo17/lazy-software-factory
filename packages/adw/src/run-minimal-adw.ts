@@ -146,7 +146,7 @@ export const runMinimalAdwController = (
       const sandboxes = yield* SandboxProvider;
       const acquireExit = yield* Effect.exit(
         sandboxes.acquire({
-          cwd: input.cwd ?? process.cwd(),
+          ...(input.cwd !== undefined ? { cwd: input.cwd } : {}),
           env: input.env,
           requirements: defaultMinimalAdwCapabilityRequirements,
         })
@@ -170,6 +170,7 @@ export const runMinimalAdwController = (
             prompt: input.prompt,
             cwd: input.cwd ?? lease.cwd,
             ...(input.repoUrl ? { repoUrl: input.repoUrl } : {}),
+            ...(input.startingRef ? { startingRef: input.startingRef } : {}),
             ...(input.env ? { env: input.env } : {}),
           },
           {
