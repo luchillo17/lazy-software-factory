@@ -9,6 +9,11 @@ export default defineConfig(() => ({
     globals: true,
     environment: "node",
     include: ["{src,tests}/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}"],
+    exclude: [
+      "**/docker-integration.spec.ts",
+      "**/node_modules/**",
+      "**/dist/**",
+    ],
     passWithNoTests: true,
     reporters: ["default"],
     coverage: {

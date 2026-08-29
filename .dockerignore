@@ -1,0 +1,7 @@
+*
+!packages/adw-worker/runner/dist/
+!packages/adw-worker/runner/dist/**
+!packages/adw/host-skill-pack/
+!packages/adw/host-skill-pack/**
+!packages/adw-worker/runner/Dockerfile
+!packages/adw-worker/runner/image-pins.env

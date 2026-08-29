@@ -1,4 +1,4 @@
-import type { Sandbox } from "@lazy-software-factory/runtime";
+import type { Sandbox } from "@lazy-software-factory/runtime/sandbox";
 import { Context, Effect, Layer, Schema } from "effect";
 import { truncateProgressRaw } from "./adw-progress-event.ts";
 import { GitHost, GitHostError, type GitHostService } from "./git-host.ts";
@@ -31,6 +31,8 @@ export interface WorkspaceProvisionService {
     readonly sandbox: Sandbox;
     readonly ticketId: string;
     readonly repoUrl?: string;
+    /** Optional branch name or commit SHA after clone. */
+    readonly startingRef?: string;
     readonly env?: Readonly<Record<string, string>>;
   }) => Effect.Effect<void, ProvisionError>;
 }
@@ -316,7 +318,7 @@ export class WorkspaceProvision extends Context.Service<
       const gitHost = yield* GitHost;
 
       return WorkspaceProvision.of({
-        provision: ({ sandbox, ticketId, repoUrl, env }) =>
+        provision: ({ sandbox, ticketId, repoUrl, startingRef, env }) =>
           Effect.gen(function* () {
             const gitDir = yield* execOrProvisionFail(
               sandbox,
@@ -336,6 +338,7 @@ export class WorkspaceProvision extends Context.Service<
                 .clone({
                   repoUrl,
                   destination: sandbox.cwd,
+                  ...(startingRef ? { ref: startingRef } : {}),
                   env,
                 })
                 .pipe(
@@ -347,6 +350,14 @@ export class WorkspaceProvision extends Context.Service<
                       })
                   )
                 );
+            } else if (startingRef) {
+              const checkoutRef = yield* execOrProvisionFail(
+                sandbox,
+                "git",
+                ["checkout", startingRef],
+                "git checkout startingRef"
+              );
+              yield* requireZero(checkoutRef, `git checkout ${startingRef}`);
             }
 
             yield* checkoutBranchAndInstall(sandbox, ticketId, gitHost, env);

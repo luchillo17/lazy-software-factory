@@ -3,7 +3,7 @@
  * Effect Schema hard-decode in `execute`; JSON Schema `inputSchema` soft guide.
  * Last successful submit wins (stash overwrite).
  */
-import type { AgentCustomTool } from "@lazy-software-factory/runtime";
+import type { AgentCustomTool } from "@lazy-software-factory/runtime/agent-provider";
 import { Effect, Schema } from "effect";
 import { truncateProgressRaw } from "./adw-progress-event.ts";
 import { ReviewVerdict } from "./enums.ts";

@@ -1,9 +1,6 @@
 /**
- * Versioned ADW worker process entry.
- *
- * Protocol: one JSON request line on stdin; newline-framed machine messages on
- * stdout; redacted diagnostics on stderr. Runs the Minimal ADW graph with
- * SandboxProvider.Local so Cursor local SDK and gates share this cwd.
+ * Deterministic ADW worker entry for Docker integration images.
+ * No Cursor SDK import — keeps the compiled bundle free of native helpers.
  */
 import {
   ADW_WORKER_PROTOCOL_VERSION,
@@ -18,12 +15,7 @@ import {
   redactWorkerDiagnostics,
   type AdwWorkerEffectiveCapabilities,
 } from "@lazy-software-factory/adw-worker";
-import { GitHubGhLive } from "@lazy-software-factory/git-host";
-import {
-  CursorBuildAgentLive,
-  CursorReviewAgentLive,
-  SandboxProvider,
-} from "@lazy-software-factory/runtime";
+import { SandboxProvider } from "@lazy-software-factory/runtime/sandbox-provider";
 import { Effect, Layer, Logger, Schema } from "effect";
 import { AdwProgressSink } from "./adw-progress.ts";
 import {
@@ -36,9 +28,7 @@ import {
   DeterministicGitHostLive,
   DeterministicTestCommandsLive,
 } from "./deterministic-worker-adapters.ts";
-import { resolvePackageJsonTestCommands } from "./package-json-test-commands.ts";
 import { runMinimalAdwGraph } from "./run-minimal-adw-graph.ts";
-import { AdwTestCommands } from "./test-commands.ts";
 import {
   exitWorkerAfterProtocolFlush,
   installWorkerProtocolStdoutGuard,
@@ -68,16 +58,9 @@ const workerCapabilities: AdwWorkerEffectiveCapabilities = {
     AdwWorkerCapability.SkillPackMount,
   ],
   maxConcurrentLeases: 1,
-  isolation:
-    process.env["ADW_SANDBOX_ISOLATION"] === "container"
-      ? AdwWorkerIsolation.Container
-      : AdwWorkerIsolation.Host,
-  ...(process.env["ADW_SANDBOX_ISOLATION"] === "container"
-    ? {
-        retainedWorkspaces: AdwWorkerSupportLevel.Unsupported,
-        diskQuota: AdwWorkerSupportLevel.Unsupported,
-      }
-    : {}),
+  isolation: AdwWorkerIsolation.Container,
+  retainedWorkspaces: AdwWorkerSupportLevel.Unsupported,
+  diskQuota: AdwWorkerSupportLevel.Unsupported,
 };
 
 const protocolStdout = installWorkerProtocolStdoutGuard(
@@ -103,42 +86,7 @@ const diagnosticsLogger: Logger.Logger<unknown, void> = Logger.make(
   }
 );
 
-const progressSinkLayer = Layer.succeed(
-  AdwProgressSink,
-  AdwProgressSink.of({
-    emit: (event) =>
-      Effect.sync(() => {
-        writeFrame({
-          protocolVersion: ADW_WORKER_PROTOCOL_VERSION,
-          kind: AdwWorkerFrameKind.Progress,
-          event,
-        });
-      }),
-  })
-);
-
-const useDeterministic = process.env["ADW_WORKER_DETERMINISTIC"] === "1";
-
-const liveGraphLayer = Layer.mergeAll(
-  SandboxProvider.Local,
-  CursorBuildAgentLive,
-  CursorReviewAgentLive,
-  GitHubGhLive,
-  WorkspaceProvision.Host.pipe(Layer.provide(GitHubGhLive)),
-  Layer.succeed(
-    AdwTestCommands,
-    AdwTestCommands.of({
-      resolve: resolvePackageJsonTestCommands,
-    })
-  ),
-  AdwBuildAttemptCap.Default,
-  AdwReviewAttemptCap.Default,
-  AdwSchemaResumeCap.Default,
-  progressSinkLayer,
-  Logger.layer([diagnosticsLogger])
-);
-
-const deterministicGraphLayer = Layer.mergeAll(
+const workerGraphLayer = Layer.mergeAll(
   SandboxProvider.Local,
   DeterministicAgentLive,
   DeterministicGitHostLive,
@@ -147,13 +95,21 @@ const deterministicGraphLayer = Layer.mergeAll(
   AdwBuildAttemptCap.Default,
   AdwReviewAttemptCap.Default,
   AdwSchemaResumeCap.Default,
-  progressSinkLayer,
+  Layer.succeed(
+    AdwProgressSink,
+    AdwProgressSink.of({
+      emit: (event) =>
+        Effect.sync(() => {
+          writeFrame({
+            protocolVersion: ADW_WORKER_PROTOCOL_VERSION,
+            kind: AdwWorkerFrameKind.Progress,
+            event,
+          });
+        }),
+    })
+  ),
   Logger.layer([diagnosticsLogger])
 );
-
-const workerGraphLayer = useDeterministic
-  ? deterministicGraphLayer
-  : liveGraphLayer;
 
 const stdin = createStdinLineReader();
 

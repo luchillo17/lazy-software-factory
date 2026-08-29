@@ -104,10 +104,21 @@ export const AdwWorkerIsolation = {
 export const AdwWorkerIsolationSchema = Schema.Enum(AdwWorkerIsolation);
 export type AdwWorkerIsolation = typeof AdwWorkerIsolationSchema.Type;
 
+/** Honest support reporting for capabilities Docker v1 does not enforce. */
+export const AdwWorkerSupportLevel = {
+  Unsupported: "unsupported",
+  Supported: "supported",
+  Unknown: "unknown",
+} as const;
+export const AdwWorkerSupportLevelSchema = Schema.Enum(AdwWorkerSupportLevel);
+export type AdwWorkerSupportLevel = typeof AdwWorkerSupportLevelSchema.Type;
+
 export const AdwWorkerEffectiveCapabilitiesSchema = Schema.Struct({
   capabilities: Schema.Array(AdwWorkerCapabilitySchema),
   maxConcurrentLeases: Schema.Number,
   isolation: AdwWorkerIsolationSchema,
+  retainedWorkspaces: Schema.optionalKey(AdwWorkerSupportLevelSchema),
+  diskQuota: Schema.optionalKey(AdwWorkerSupportLevelSchema),
 });
 export type AdwWorkerEffectiveCapabilities =
   typeof AdwWorkerEffectiveCapabilitiesSchema.Type;
@@ -118,11 +129,28 @@ export const AdwWorkerRequestSchema = Schema.Struct({
   prompt: Schema.String,
   cwd: Schema.String,
   repoUrl: Schema.optionalKey(Schema.String),
+  /** Optional branch name or commit SHA after clone (Docker remote intake). */
+  startingRef: Schema.optionalKey(Schema.String),
   env: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),
 });
 export type AdwWorkerRequest = typeof AdwWorkerRequestSchema.Type;
 
+/** First stdin line before any secret-bearing request (custom image gate). */
+export const AdwWorkerHandshakeKind = {
+  Handshake: "handshake",
+} as const;
+export const AdwWorkerHandshakeKindSchema = Schema.Enum(AdwWorkerHandshakeKind);
+export type AdwWorkerHandshakeKind = typeof AdwWorkerHandshakeKindSchema.Type;
+
+export const AdwWorkerHandshakeRequestSchema = Schema.Struct({
+  protocolVersion: AdwWorkerProtocolVersionSchema,
+  kind: AdwWorkerHandshakeKindSchema,
+});
+export type AdwWorkerHandshakeRequest =
+  typeof AdwWorkerHandshakeRequestSchema.Type;
+
 export const AdwWorkerFrameKind = {
+  HandshakeOk: "handshake_ok",
   Progress: "progress",
   Terminal: "terminal",
 } as const;
@@ -154,6 +182,10 @@ export type AdwWorkerTerminalOutcome =
   typeof AdwWorkerTerminalOutcomeSchema.Type;
 
 export const AdwWorkerFrameSchema = Schema.Union([
+  Schema.Struct({
+    protocolVersion: AdwWorkerProtocolVersionSchema,
+    kind: Schema.Literal(AdwWorkerFrameKind.HandshakeOk),
+  }),
   Schema.Struct({
     protocolVersion: AdwWorkerProtocolVersionSchema,
     kind: Schema.Literal(AdwWorkerFrameKind.Progress),

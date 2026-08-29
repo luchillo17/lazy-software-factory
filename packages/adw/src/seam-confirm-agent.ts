@@ -1,8 +1,8 @@
-import {
-  RuntimeErrorTag,
-  type ExecResult,
-  type Sandbox,
-} from "@lazy-software-factory/runtime";
+import { RuntimeErrorTag } from "@lazy-software-factory/runtime/errors";
+import type {
+  ExecResult,
+  Sandbox,
+} from "@lazy-software-factory/runtime/sandbox";
 import { Effect, Schema } from "effect";
 import {
   AdwProgressKind,

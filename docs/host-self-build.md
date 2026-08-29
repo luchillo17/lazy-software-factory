@@ -76,3 +76,14 @@ pnpm adw:host -- --issue 42
 ```
 
 from this repo root (TicketIntake + Role skill bindings). Result: `status=shipped` and PR [#63](https://github.com/luchillo17/lazy-software-factory/pull/63) (`feat(runtime): pass Cursor SDK agents on create/resume`), later merged to `main`.
+
+## Docker (explicit; not yet default)
+
+Isolated Minimal ADW via classic Docker (issue #84). Build the local runner image, then:
+
+```bash
+pnpm adw:runner:build
+pnpm adw -- --sandbox docker --issue <n> --repo-url <git-url> [--starting-ref <ref>]
+```
+
+Docker rejects `--cwd` (no dirty-tree bind mounts). Default `--sandbox` remains `host` until the live proof (#86). Real-daemon integration: `pnpm nx run @lazy-software-factory/adw:test-docker` (not cached; fails if Docker is unavailable).

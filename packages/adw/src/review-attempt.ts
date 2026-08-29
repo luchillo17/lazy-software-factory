@@ -3,11 +3,9 @@
  * accepted stash decode, emit Review progress (ADR-0009, ADR-0014).
  * Caller owns Review attempt cap routing and Build resume.
  */
-import {
-  type AgentError,
-  type AgentProviderService,
-  type Sandbox,
-} from "@lazy-software-factory/runtime";
+import type { AgentProviderService } from "@lazy-software-factory/runtime/agent-provider";
+import type { AgentError } from "@lazy-software-factory/runtime/errors";
+import type { Sandbox } from "@lazy-software-factory/runtime/sandbox";
 import { Effect, Schema } from "effect";
 import {
   AdwProgressKind,

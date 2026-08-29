@@ -12,6 +12,8 @@ export interface GitHostService {
   readonly clone: (options: {
     readonly repoUrl: string;
     readonly destination: string;
+    /** Optional branch name or commit to check out after clone. */
+    readonly ref?: string;
     readonly env?: Readonly<Record<string, string>>;
   }) => Effect.Effect<void, GitHostError>;
 

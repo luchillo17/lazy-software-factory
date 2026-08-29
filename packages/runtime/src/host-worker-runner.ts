@@ -4,6 +4,7 @@ import {
   AdwWorkerProtocolError,
   AdwWorkerTerminalKind,
   decodeWorkerFrame,
+  encodeWorkerHandshake,
   encodeWorkerRequest,
   redactWorkerDiagnostics,
   type AdwWorkerProgressEvent,
@@ -17,15 +18,22 @@ import type { ChildProcessHandle } from "effect/unstable/process/ChildProcessSpa
 import { SandboxWorkerError } from "./errors.ts";
 import { NodeChildProcessLive } from "./run-captured-process.ts";
 
-export interface HostWorkerLaunch {
+export interface WorkerProcessLaunch {
   readonly command: string;
   readonly args: readonly string[];
 }
 
-export interface RunHostWorkerOptions {
-  readonly launch: HostWorkerLaunch;
+/** @deprecated Use {@link WorkerProcessLaunch}. */
+export type HostWorkerLaunch = WorkerProcessLaunch;
+
+export interface RunWorkerProtocolOptions {
+  readonly launch: WorkerProcessLaunch;
   readonly request: AdwWorkerRequest;
-  readonly cwd: string;
+  readonly cwd?: string;
+  /**
+   * Process env for the launch command itself (e.g. docker CLI). Must not carry
+   * ADW run secrets — those travel only in the worker request stdin payload.
+   */
   readonly env?: Readonly<Record<string, string | undefined>>;
   readonly onProgress: (event: AdwWorkerProgressEvent) => Effect.Effect<void>;
   readonly onSpawn?: (handle: ChildProcessHandle) => void;
@@ -33,6 +41,9 @@ export interface RunHostWorkerOptions {
   /** Grace after SIGTERM before SIGKILL (default 5s). */
   readonly terminateGrace?: `${number} seconds` | `${number} millis`;
 }
+
+/** @deprecated Use {@link RunWorkerProtocolOptions}. */
+export type RunHostWorkerOptions = RunWorkerProtocolOptions;
 
 const textEncoder = new TextEncoder();
 
@@ -66,11 +77,16 @@ const toWorkerError = (
 };
 
 /**
- * Spawn one ADW worker, write the request to stdin, decode newline frames from
- * stdout, and map interrupt to bounded SIGTERM → SIGKILL.
+ * Spawn one ADW worker process (Host node or `docker exec`), write handshake
+ * then the secret-bearing request as one stdin payload (worker buffers lines
+ * and refuses repository work until handshake completes), decode newline
+ * frames from stdout, and map interrupt to bounded SIGTERM → SIGKILL.
+ *
+ * Custom Docker images should call {@link runDockerWorkerHandshake} first so
+ * secrets never enter transport until the probe passes.
  */
-export const runHostWorkerProcess = (
-  options: RunHostWorkerOptions
+export const runWorkerProtocolProcess = (
+  options: RunWorkerProtocolOptions
 ): Effect.Effect<
   AdwWorkerTerminalOutcome,
   SandboxWorkerError | AdwWorkerProtocolError
@@ -102,14 +118,16 @@ export const runHostWorkerProcess = (
         })
       );
 
-      const requestBytes = textEncoder.encode(
-        encodeWorkerRequest(options.request)
+      // One stdin write so Docker exec / OS pipes flush. Worker reads handshake
+      // first and only then consumes the request line (buffered).
+      const stdinBytes = textEncoder.encode(
+        `${encodeWorkerHandshake()}${encodeWorkerRequest(options.request)}`
       );
-      yield* Stream.run(Stream.succeed(requestBytes), handle.stdin).pipe(
+      yield* Stream.run(Stream.succeed(stdinBytes), handle.stdin).pipe(
         Effect.mapError(
           (cause) =>
             new SandboxWorkerError({
-              message: "Failed to write ADW worker request to stdin",
+              message: "Failed to write ADW worker protocol stdin",
               cause,
             })
         )
@@ -117,6 +135,7 @@ export const runHostWorkerProcess = (
 
       let terminal: AdwWorkerTerminalOutcome | undefined;
       let sawTerminal = false;
+      let handshakeOk = false;
 
       const consumeStdout = handle.stdout.pipe(
         Stream.decodeText(),
@@ -127,6 +146,21 @@ export const runHostWorkerProcess = (
               return;
             }
             const frame = yield* decodeWorkerFrame(line);
+            if (frame.kind === AdwWorkerFrameKind.HandshakeOk) {
+              if (handshakeOk) {
+                return yield* new SandboxWorkerError({
+                  message: "Duplicate worker handshake_ok frame",
+                });
+              }
+              handshakeOk = true;
+              return;
+            }
+            if (!handshakeOk) {
+              return yield* new SandboxWorkerError({
+                message:
+                  "Worker sent protocol traffic before handshake_ok; refusing to accept outcome",
+              });
+            }
             if (frame.kind === AdwWorkerFrameKind.Progress) {
               if (sawTerminal) {
                 return yield* new SandboxWorkerError({
@@ -195,6 +229,15 @@ export const runHostWorkerProcess = (
       const exitCode = Number(yield* Fiber.join(exitFiber));
       const stderr = redactWorkerDiagnostics(yield* Fiber.join(stderrFiber));
 
+      if (!handshakeOk) {
+        return yield* new SandboxWorkerError({
+          message:
+            stderr.length > 0
+              ? `ADW worker failed protocol handshake (code ${exitCode}): ${stderr}`
+              : `ADW worker failed protocol handshake (code ${exitCode})`,
+        });
+      }
+
       if (!terminal) {
         return yield* new SandboxWorkerError({
           message:
@@ -213,3 +256,6 @@ export const runHostWorkerProcess = (
       return terminal;
     })
   ).pipe(Effect.provide(NodeChildProcessLive));
+
+/** Host alias for {@link runWorkerProtocolProcess}. */
+export const runHostWorkerProcess = runWorkerProtocolProcess;

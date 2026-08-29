@@ -1,9 +1,9 @@
 import {
   BuildAgentProvider,
   ReviewAgentProvider,
-  SandboxProvider,
   type AgentSession,
-} from "@lazy-software-factory/runtime";
+} from "@lazy-software-factory/runtime/agent-provider";
+import { SandboxProvider } from "@lazy-software-factory/runtime/sandbox-provider";
 import { Effect, Schema } from "effect";
 import {
   AdwProgressKind,
@@ -51,6 +51,8 @@ export interface MinimalAdwInput {
   readonly prompt: string;
   /** Required when sandbox has no `.git` (clone-when-empty). */
   readonly repoUrl?: string;
+  /** Optional branch or commit after clone (remote intake). */
+  readonly startingRef?: string;
   /** Warm sandbox root; omit to use `process.cwd()`. */
   readonly cwd?: string;
   readonly env?: Readonly<Record<string, string>>;
@@ -109,6 +111,7 @@ export const runMinimalAdwGraph = (
           sandbox,
           ticketId: input.ticketId,
           repoUrl: input.repoUrl,
+          startingRef: input.startingRef,
           env: input.env,
         })
         .pipe(

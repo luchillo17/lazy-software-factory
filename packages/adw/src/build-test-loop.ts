@@ -1,9 +1,9 @@
-import {
-  type AgentError,
-  type AgentProviderService,
-  type AgentSession,
-  type Sandbox,
-} from "@lazy-software-factory/runtime";
+import type {
+  AgentProviderService,
+  AgentSession,
+} from "@lazy-software-factory/runtime/agent-provider";
+import type { AgentError } from "@lazy-software-factory/runtime/errors";
+import type { Sandbox } from "@lazy-software-factory/runtime/sandbox";
 import { Effect, Schema } from "effect";
 import {
   AdwProgressKind,
