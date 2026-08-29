@@ -39,7 +39,10 @@ import {
 import { resolvePackageJsonTestCommands } from "./package-json-test-commands.ts";
 import { runMinimalAdwGraph } from "./run-minimal-adw-graph.ts";
 import { AdwTestCommands } from "./test-commands.ts";
-import { installWorkerProtocolStdoutGuard } from "./worker-stdio.ts";
+import {
+  exitWorkerAfterProtocolFlush,
+  installWorkerProtocolStdoutGuard,
+} from "./worker-stdio.ts";
 import { createStdinLineReader } from "./worker-stdin.ts";
 import { WorkspaceProvision } from "./workspace-provision.ts";
 
@@ -245,3 +248,7 @@ const run = Effect.gen(function* () {
 );
 
 await Effect.runPromise(run);
+await exitWorkerAfterProtocolFlush(
+  protocolStdout,
+  Number(process.exitCode ?? 0)
+);
