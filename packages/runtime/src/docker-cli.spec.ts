@@ -2,6 +2,7 @@ import { assert, describe, it } from "@effect/vitest";
 import { Effect, Layer } from "effect";
 import {
   DOCKER_CACHE_PATH,
+  DOCKER_HOME_PATH,
   DOCKER_TMP_PATH,
   DOCKER_WORKSPACE_PATH,
   dockerCreateArgs,
@@ -78,11 +79,12 @@ describe("docker argv builders", () => {
       )
     );
     assert.isTrue(args.some((a) => a.startsWith(`${DOCKER_TMP_PATH}:`)));
-    const cacheMount = args.find((a) => a.startsWith(`${DOCKER_CACHE_PATH}:`));
-    assert.isDefined(cacheMount);
-    assert.include(cacheMount, "uid=10001");
-    assert.include(cacheMount, "gid=10001");
-    assert.include(cacheMount, "mode=0700");
+    const homeMount = args.find((a) => a.startsWith(`${DOCKER_HOME_PATH}:`));
+    assert.isDefined(homeMount);
+    assert.include(homeMount, "uid=10001");
+    assert.include(homeMount, "gid=10001");
+    assert.include(homeMount, "mode=0700");
+    assert.notStrictEqual(DOCKER_CACHE_PATH, DOCKER_HOME_PATH);
   });
 
   it("create args never embed secret-looking env by convention tests", () => {
