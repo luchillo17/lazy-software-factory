@@ -3,6 +3,13 @@ import { GhRunner } from "./gh-runner.ts";
 import { GitHost, GitHostError } from "./git-host.ts";
 import { requireZero, runProcess } from "./run-process.ts";
 
+const gitHubCredentialArgs = [
+  "-c",
+  "credential.helper=",
+  "-c",
+  "credential.helper=!gh auth git-credential",
+] as const;
+
 /** Live process runner for `gh` / `git`. */
 export const GhRunnerLive = Layer.succeed(
   GhRunner,
@@ -70,7 +77,7 @@ export const GitHubGh = Layer.effect(
         Effect.gen(function* () {
           const push = yield* cli.run({
             command: "git",
-            args: ["push", "-u", "origin", branch],
+            args: [...gitHubCredentialArgs, "push", "-u", "origin", branch],
             cwd,
             env,
           });
@@ -121,7 +128,13 @@ export const GitHubGh = Layer.effect(
         Effect.gen(function* () {
           const listed = yield* cli.run({
             command: "git",
-            args: ["ls-remote", "--heads", remote, branch],
+            args: [
+              ...gitHubCredentialArgs,
+              "ls-remote",
+              "--heads",
+              remote,
+              branch,
+            ],
             cwd,
             env,
           });

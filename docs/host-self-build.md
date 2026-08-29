@@ -77,13 +77,13 @@ pnpm adw:host -- --issue 42
 
 from this repo root (TicketIntake + Role skill bindings). Result: `status=shipped` and PR [#63](https://github.com/luchillo17/lazy-software-factory/pull/63) (`feat(runtime): pass Cursor SDK agents on create/resume`), later merged to `main`.
 
-## Docker (explicit; not yet default)
+## Docker (generic `adw` default)
 
-Isolated Minimal ADW via classic Docker (issue #84). Build the local runner image, then:
+Classic Docker is the **default** for generic `adw` after the live proof ([#86](https://github.com/luchillo17/lazy-software-factory/issues/86)). Full operator runbook (prerequisites, image build, `--repo-url` / `--starting-ref`, credentials, limits, cancel, cleanup, failures, evidence): [`docs/docker-operator.md`](./docker-operator.md).
 
 ```bash
 pnpm adw:runner:build
-pnpm adw -- --sandbox docker --issue <n> --repo-url <git-url> [--starting-ref <ref>]
+pnpm adw -- --issue <n> --repo-url <git-url> [--starting-ref <ref>]
 ```
 
-Docker rejects `--cwd` (no dirty-tree bind mounts). Default `--sandbox` remains `host` until the live proof (#86). Real-daemon integration: `pnpm nx run @lazy-software-factory/adw:test-docker` (not cached; fails if Docker is unavailable) — builds the runner image once, runs concurrent Minimal ADWs, isolation + cancel leak checks (#85). Provider contract map (incl. future Vercel semantics): `docs/agents/sandbox-provider-conformance.md`.
+This Host runbook (`adw-host` / `pnpm adw:host` / `adw --sandbox host`) stays the explicit lightweight path. Docker rejects `--cwd`.

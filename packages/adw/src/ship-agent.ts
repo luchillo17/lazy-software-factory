@@ -1,4 +1,4 @@
-import { Effect, Exit } from "effect";
+import { Cause, Effect, Exit } from "effect";
 import { AdwStatus } from "./enums.ts";
 import { GitHost } from "./git-host.ts";
 import type { ShipInput } from "./ship-input.ts";
@@ -24,6 +24,11 @@ export const shipCommitMessage = (ticketId: string): string =>
 /** GitHub Issue closing keywords (v0 forge). */
 const GITHUB_ISSUE_CLOSING_KEYWORD =
   /(?:close|closes|closed|fix|fixes|fixed|resolve|resolves|resolved)\s+#(\d+)\b/gi;
+
+const shipFailureDetail = (
+  operation: "commit" | "push" | "open PR",
+  cause: Cause.Cause<unknown>
+): string => `Ship ${operation} failed: ${String(Cause.squash(cause))}`;
 
 /**
  * PR body for Ship open: when `ticketId` is a numeric GitHub Issue id, ensure
@@ -66,7 +71,7 @@ export const runShipAgent = (
     if (Exit.isFailure(commitResult)) {
       return {
         status: AdwStatus.ReadyForPr,
-        detail: "Ship commit failed",
+        detail: shipFailureDetail("commit", commitResult.cause),
       } satisfies ShipAgentResult;
     }
 
@@ -77,7 +82,7 @@ export const runShipAgent = (
     if (Exit.isFailure(pushResult)) {
       return {
         status: AdwStatus.ReadyForPr,
-        detail: "Ship push failed",
+        detail: shipFailureDetail("push", pushResult.cause),
       } satisfies ShipAgentResult;
     }
 
@@ -94,7 +99,7 @@ export const runShipAgent = (
     if (Exit.isFailure(prResult)) {
       return {
         status: AdwStatus.ReadyForPr,
-        detail: "Ship open PR failed",
+        detail: shipFailureDetail("open PR", prResult.cause),
       } satisfies ShipAgentResult;
     }
 

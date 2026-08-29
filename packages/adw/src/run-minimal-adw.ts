@@ -201,10 +201,16 @@ export const runMinimalAdwController = (
       // Lease metadata is authoritative for provider limits / unmet soft prefs;
       // the worker terminal frame may echo a subset for protocol completeness.
       const effectiveCapabilities = lease.effectiveCapabilities;
+      const result = {
+        ...minimalAdwResultFromOutcome(outcome, input.ticketId),
+        // Worker-local providers report their own internal id (for example
+        // "local"). Operators need the authoritative outer lease id.
+        sandboxId: lease.id,
+      } satisfies MinimalAdwResult;
 
       return {
         outcome,
-        result: minimalAdwResultFromOutcome(outcome, input.ticketId),
+        result,
         effectiveCapabilities,
       } satisfies MinimalAdwControllerResult;
     })

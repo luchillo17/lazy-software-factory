@@ -23,12 +23,9 @@ import {
   HostOperatorErrorTag,
   HostOperatorParseError,
   hostTicketIntakeLayer,
-  loadHostDotEnv,
-  mergeHostOperatorEnv,
   prepareHostOperatorSession,
   resolveHostOperatorAdwInput,
   runHostMinimalAdw,
-  hostOperatorFsLayer,
   type HostOperatorFlagValues,
 } from "./host-operator.ts";
 import {
@@ -36,7 +33,11 @@ import {
   stripPnpmLeadingDashDash,
   type HostOperatorCliConfig,
 } from "./host-operator-cli.ts";
-import { runMinimalAdw, type MinimalAdwResult } from "./run-minimal-adw.ts";
+import {
+  runMinimalAdwController,
+  type MinimalAdwControllerResult,
+  type MinimalAdwResult,
+} from "./run-minimal-adw.ts";
 import { TicketIntake, TicketIntakeError } from "./ticket-intake.ts";
 
 export const OPERATOR_CLI_VERSION = "0.0.0";
@@ -57,9 +58,9 @@ const operatorFlagConfig = {
     AdwSandboxProviderKind.Docker,
   ]).pipe(
     Flag.withDescription(
-      "Sandbox backend. Default: host (unchanged). Pass docker explicitly for isolated ADWs."
+      "Sandbox backend. Default: docker. Pass --sandbox host (or use adw-host) for the lightweight Host path."
     ),
-    Flag.withDefault(AdwSandboxProviderKind.Host)
+    Flag.withDefault(AdwSandboxProviderKind.Docker)
   ),
   issue: optionalStringFlag(
     "issue",
@@ -69,7 +70,7 @@ const operatorFlagConfig = {
   prompt: optionalStringFlag("prompt", "Manual Initial prompt. Or ADW_PROMPT."),
   repoUrl: optionalStringFlag(
     "repo-url",
-    "Remote Git URL. Required for --sandbox docker; Host uses it when cwd has no .git."
+    "Remote Git URL. Required for Docker (default); Host uses it when cwd has no .git."
   ),
   startingRef: optionalStringFlag(
     "starting-ref",
@@ -77,7 +78,7 @@ const operatorFlagConfig = {
   ),
   cwd: optionalStringFlag(
     "cwd",
-    "Host warm sandbox directory only. Rejected for --sandbox docker."
+    "Host warm sandbox directory only. Rejected for Docker (default sandbox)."
   ),
 };
 
@@ -111,20 +112,19 @@ export const operatorFlagsFromCli = (
 });
 
 const OPERATOR_CLI_DESCRIPTION =
-  "Run one Minimal ADW. Default --sandbox host (same as adw-host). Pass --sandbox docker for an isolated container worker; Docker requires --repo-url and rejects --cwd.";
+  "Run one Minimal ADW. Default --sandbox docker (isolated container worker; requires --repo-url; rejects --cwd). Pass --sandbox host or use adw-host for the lightweight Host path.";
 
 const OPERATOR_CLI_EXAMPLES: ReadonlyArray<{
   readonly command: string;
   readonly description?: string;
 }> = [
   {
-    command: "adw --issue <n> [--cwd <dir>]",
-    description: "Host Minimal ADW (default sandbox)",
+    command: "adw --issue <n> --repo-url <url> [--starting-ref <ref>]",
+    description: "Docker Minimal ADW (default sandbox)",
   },
   {
-    command:
-      "adw --sandbox docker --issue <n> --repo-url <url> [--starting-ref <ref>]",
-    description: "Isolated Docker Minimal ADW (explicit; not yet the default)",
+    command: "adw --sandbox host --issue <n> [--cwd <dir>]",
+    description: "Host Minimal ADW (explicit; same as adw-host)",
   },
 ];
 
@@ -146,6 +146,24 @@ export const dockerMinimalAdwLayer = (
 ) =>
   Layer.mergeAll(dockerSandboxProviderLayer({ image }), AdwProgressStderrLive);
 
+export const runDockerMinimalAdwController = (
+  input: {
+    readonly ticketId: string;
+    readonly prompt: string;
+    readonly repoUrl: string;
+    readonly startingRef?: string;
+    readonly env?: Readonly<Record<string, string>>;
+  },
+  image: string = resolveAdwRunnerImage()
+): Effect.Effect<MinimalAdwControllerResult> =>
+  runMinimalAdwController({
+    ticketId: input.ticketId,
+    prompt: input.prompt,
+    repoUrl: input.repoUrl,
+    ...(input.startingRef ? { startingRef: input.startingRef } : {}),
+    env: input.env,
+  }).pipe(Effect.provide(dockerMinimalAdwLayer(image)));
+
 export const runDockerMinimalAdw = (
   input: {
     readonly ticketId: string;
@@ -156,30 +174,19 @@ export const runDockerMinimalAdw = (
   },
   image: string = resolveAdwRunnerImage()
 ): Effect.Effect<MinimalAdwResult> =>
-  runMinimalAdw({
-    ticketId: input.ticketId,
-    prompt: input.prompt,
-    repoUrl: input.repoUrl,
-    ...(input.startingRef ? { startingRef: input.startingRef } : {}),
-    env: input.env,
-  }).pipe(Effect.provide(dockerMinimalAdwLayer(image)));
-
-/**
- * Load operator-machine credentials for Docker without aiming a Host cwd into
- * the sandbox (secrets still travel only on worker stdin via request.env).
- */
-const prepareDockerOperatorEnv = (
-  shell: NodeJS.ProcessEnv = process.env
-): Effect.Effect<Record<string, string>, never, never> =>
-  loadHostDotEnv(process.cwd()).pipe(
-    Effect.provide(hostOperatorFsLayer),
-    Effect.map((fileEnv) =>
-      selectDockerWorkerEnv(mergeHostOperatorEnv(fileEnv, shell))
-    ),
-    Effect.orElseSucceed(() =>
-      selectDockerWorkerEnv(mergeHostOperatorEnv({}, shell))
-    )
+  runDockerMinimalAdwController(input, image).pipe(
+    Effect.map((controlled) => controlled.result)
   );
+
+export const formatDockerOperatorResult = (
+  controlled: MinimalAdwControllerResult,
+  image: string
+): string => {
+  const capabilities = controlled.effectiveCapabilities
+    ? JSON.stringify(controlled.effectiveCapabilities)
+    : "unavailable";
+  return `${formatOperatorResult(controlled.result)} terminal=${controlled.outcome.kind} image=${image} capabilities=${capabilities}`;
+};
 
 const dockerWorkerEnvKeys = [
   "CURSOR_API_KEY",
@@ -203,45 +210,60 @@ export const selectDockerWorkerEnv = (
     )
   );
 
+/** Load Docker operator config from the Factory cwd without honoring ADW_CWD. */
+export const prepareDockerOperatorSession = (
+  flags: HostOperatorFlagValues,
+  operatorCwd: string = process.cwd(),
+  shell: NodeJS.ProcessEnv = process.env
+) =>
+  prepareHostOperatorSession({ ...flags, cwd: operatorCwd }, shell).pipe(
+    Effect.flatMap((session) =>
+      flags.cwd || (session.env["ADW_CWD"] ?? "") !== ""
+        ? Effect.fail(
+            new HostOperatorParseError({
+              message:
+                "Docker sandbox rejects --cwd / ADW_CWD (no local dirty-tree bind mounts). Use --repo-url and optional --starting-ref.",
+            })
+          )
+        : Effect.succeed(session)
+    )
+  );
+
 const handleOperator = (config: OperatorCliConfig) =>
   Effect.gen(function* () {
     const flags = operatorFlagsFromCli(config);
 
     if (flags.sandbox === AdwSandboxProviderKind.Docker) {
-      if (Option.isSome(config.cwd) || (process.env["ADW_CWD"] ?? "") !== "") {
-        return yield* new HostOperatorParseError({
-          message:
-            "Docker sandbox rejects --cwd / ADW_CWD (no local dirty-tree bind mounts). Use --repo-url and optional --starting-ref.",
-        });
-      }
-      const repoUrl =
-        Option.getOrUndefined(config.repoUrl) ?? process.env["ADW_REPO_URL"];
-      if (!repoUrl) {
+      // Resolve ticket/prompt using Host session helpers against operator cwd
+      // for intake only — do not pass cwd into Docker acquire.
+      const session = yield* prepareDockerOperatorSession({
+        issue: Option.getOrUndefined(config.issue),
+        ticket: Option.getOrUndefined(config.ticket),
+        prompt: Option.getOrUndefined(config.prompt),
+        repoUrl: Option.getOrUndefined(config.repoUrl),
+        cwd: Option.getOrUndefined(config.cwd),
+      });
+      const input = yield* resolveHostOperatorAdwInput(session.args);
+      if (!input.repoUrl) {
         return yield* new HostOperatorParseError({
           message:
             "Docker sandbox requires --repo-url (or ADW_REPO_URL) for remote Git intake.",
         });
       }
-
-      // Resolve ticket/prompt using Host session helpers against operator cwd
-      // for intake only — do not pass cwd into Docker acquire.
-      const session = yield* prepareHostOperatorSession({
-        issue: Option.getOrUndefined(config.issue),
-        ticket: Option.getOrUndefined(config.ticket),
-        prompt: Option.getOrUndefined(config.prompt),
-        repoUrl,
-      });
-      const input = yield* resolveHostOperatorAdwInput(session.args);
-      const env = yield* prepareDockerOperatorEnv(session.env);
-
-      const result = yield* runDockerMinimalAdw({
-        ticketId: input.ticketId,
-        prompt: input.prompt,
-        repoUrl,
-        ...(flags.startingRef ? { startingRef: flags.startingRef } : {}),
-        env,
-      });
-      yield* Console.log(formatOperatorResult(result));
+      const env = selectDockerWorkerEnv(session.env);
+      const image = resolveAdwRunnerImage(session.env);
+      const controlled = yield* runDockerMinimalAdwController(
+        {
+          ticketId: input.ticketId,
+          prompt: input.prompt,
+          repoUrl: input.repoUrl,
+          ...(flags.startingRef ? { startingRef: flags.startingRef } : {}),
+          env,
+        },
+        image
+      );
+      const result = controlled.result;
+      yield* Console.log(formatDockerOperatorResult(controlled, image));
       const code = exitCodeForStatus(result.status);
       if (code !== 0) {
         return yield* new HostCliExitError({ code });
@@ -300,19 +322,21 @@ export const runOperatorArgv = (
     Effect.catchIf(CliError.isCliError, () => Effect.succeed(1))
   );
 
-export const runOperatorMain = (
+export const operatorMainEffect = (
   argv: readonly string[] = process.argv.slice(2)
-): Promise<number> =>
-  Effect.runPromise(
-    runOperatorArgv(argv).pipe(
-      Effect.provide(
-        Layer.mergeAll(
-          NodeServices.layer,
-          hostTicketIntakeLayer,
-          operatorCliConfigLayer
-        )
+): Effect.Effect<number> =>
+  runOperatorArgv(argv).pipe(
+    Effect.provide(
+      Layer.mergeAll(
+        NodeServices.layer,
+        hostTicketIntakeLayer,
+        operatorCliConfigLayer
       )
     )
   );
+
+export const runOperatorMain = (
+  argv: readonly string[] = process.argv.slice(2)
+): Promise<number> => Effect.runPromise(operatorMainEffect(argv));
 
 export { DOCKER_WORKSPACE_PATH };

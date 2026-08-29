@@ -378,6 +378,12 @@ export const formatOperatorResult = (result: MinimalAdwResult): string => {
   if (result.sandboxId) {
     parts.push(`sandbox=${result.sandboxId}`);
   }
+  if (result.buildSessionId) {
+    parts.push(`buildSession=${result.buildSessionId}`);
+  }
+  if (result.reviewSessionId) {
+    parts.push(`reviewSession=${result.reviewSessionId}`);
+  }
   return parts.join(" ");
 };
 

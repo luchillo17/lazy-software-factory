@@ -4,8 +4,10 @@ Design notes and ADRs for the factory live here. Domain language: [`CONTEXT.md`]
 
 ## Consumer notes
 
-- **[Host Minimal self-build (v0)](./host-self-build.md)** — `ready-for-agent` Issue → `pnpm adw:host -- --issue` (or `adw-host` / `--cwd` on a foreign tree) → live `shipped` PR
-- **[Extractability (v0)](./extractability.md)** — depend on `runtime` / `adw` / `git-host` from outside monorepo apps; invoke Host on a foreign cwd (rough DX OK; npm publish not required)
+- **[Docker Minimal ADW operator](./docker-operator.md)** — generic `adw` default; remote Git → isolated worker → live `shipped` PR; cleanup + isolation limits
+- **[Host Minimal self-build (v0)](./host-self-build.md)** — `ready-for-agent` Issue → `pnpm adw:host -- --issue` (or `adw-host` / `adw --sandbox host` / `--cwd`) → live `shipped` PR
+- **[Extractability (v0)](./extractability.md)** — depend on `runtime` / `adw` / `git-host`; compose a `SandboxProvider` Layer without Docker types in ADW code
+- **[SandboxProvider conformance](./agents/sandbox-provider-conformance.md)** — Host · Docker · future Vercel semantic map (no Vercel adapter claimed)
 
 ## ADW flow diagrams
 
@@ -92,6 +94,5 @@ Agent skills config: [`AGENTS.md`](../AGENTS.md) (SoT) → [`docs/agents/`](./ag
 
 ## Next setup
 
-1. Harden Host dogfood loop (`pnpm adw:host`) once parallel Test gates + Docker land
-2. Implement Runtime Docker adapter + Cursor SDK resume (ADR-0008) for parallel ADWs
-3. Enable GitHub **stacked PRs** on the repo if `gh stack` reports exit 9
+1. Harden Host dogfood loop (`pnpm adw:host` / `adw --sandbox host`) alongside Docker default (`docs/docker-operator.md`)
+2. Enable GitHub **stacked PRs** on the repo if `gh stack` reports exit 9

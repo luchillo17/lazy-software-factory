@@ -6,7 +6,9 @@ a runtime validation suite and does **not** add the Vercel SDK or claim that
 current CI exercises Vercel.
 
 Related: [ADR-0008](../adr/0008-runtime-docker-cursor-sdk.md),
-[ADR-0016](../adr/0016-sandbox-resident-adw-worker.md), issue #81 / #85.
+[ADR-0016](../adr/0016-sandbox-resident-adw-worker.md),
+operator [`docs/docker-operator.md`](../docker-operator.md),
+issues #81 / #85 / #86.
 
 ## Portable contract (Factory-owned)
 
@@ -39,6 +41,10 @@ lifetime (ms). Features that may be hard/soft: `disk_quota`, `retained_workspace
 Shared conformance suite: `packages/runtime/src/sandbox-provider.conformance.ts`
 (Host stub worker + Docker fake CLI). Live Docker concurrency:
 `packages/adw/src/docker-integration.spec.ts` (`adw:test-docker`).
+
+**Isolation boundary:** Sandbox isolates **compute and filesystem** only. Shared
+external backends (git forges, cloud deployments, SaaS APIs — e.g. [#78](https://github.com/luchillo17/lazy-software-factory/issues/78))
+remain shared across concurrent ADWs; the provider does not virtualize them.
 
 ## Vercel Sandbox — semantic mapping (no SDK)
 

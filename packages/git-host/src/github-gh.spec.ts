@@ -69,7 +69,16 @@ describe("GitHubGh", () => {
       });
       assert.deepStrictEqual(seen[1], {
         command: "git",
-        args: ["push", "-u", "origin", "adw/T-1"],
+        args: [
+          "-c",
+          "credential.helper=",
+          "-c",
+          "credential.helper=!gh auth git-credential",
+          "push",
+          "-u",
+          "origin",
+          "adw/T-1",
+        ],
       });
       assert.strictEqual(seen[2]?.command, "gh");
       assert.deepStrictEqual(seen[2]?.args.slice(0, 2), ["pr", "create"]);
@@ -115,7 +124,16 @@ describe("GitHubGh", () => {
       assert.deepStrictEqual(seen, [
         {
           command: "git",
-          args: ["ls-remote", "--heads", "origin", "adw/55"],
+          args: [
+            "-c",
+            "credential.helper=",
+            "-c",
+            "credential.helper=!gh auth git-credential",
+            "ls-remote",
+            "--heads",
+            "origin",
+            "adw/55",
+          ],
         },
       ]);
     })

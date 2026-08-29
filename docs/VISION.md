@@ -147,8 +147,9 @@ Locked in [Place parallel SandboxProvider on v0/v1 seam](https://github.com/luch
 
 ### Defaults
 
-- **Host** = v0 / single-ADW local default (lasting option; weaker isolation). Host-on-foreign-cwd (§4) extends that default to another checkout — still Host, not Docker.
-- **Classic Docker** thin adapter = v1 parallel default (ADR-0008; not Docker Sandboxes/`sbx`). Cloud BYO plugs the same seam later — does **not** shortcut this gate.
+- **Classic Docker** = generic `adw` default (ADR-0008; not Docker Sandboxes/`sbx`). Concurrent leases; remote Git intake; ephemeral container + volume.
+- **Host** = lasting lightweight option (`adw --sandbox host`, `adw-host`, `pnpm adw:host`). Single-ADW-at-a-time; weaker isolation. Host-on-foreign-cwd (§4) stays Host.
+- Cloud BYO plugs the same seam later — does **not** shortcut this gate.
 
 ### Timing
 
@@ -156,10 +157,11 @@ Ship anytime in v1. **Hard gate:** no hosted multi-org **compute** until classic
 
 ### Green bar
 
-- [ ] Classic Docker `SandboxProvider` adapter + unit tests (multi-`create` without `SandboxBusyError`; exec/destroy)
-- [ ] Automated: ≥2 concurrent Minimal ADWs on Docker (Agent/Git fakes OK) reach Ship statuses (`shipped` / `ready_for_pr` as applicable)
+- [x] Classic Docker `SandboxProvider` adapter + unit tests (multi-`create` without `SandboxBusyError`; exec/destroy) — [#84](https://github.com/luchillo17/lazy-software-factory/issues/84); `packages/runtime` Docker + shared conformance suite
+- [x] Automated: ≥2 concurrent Minimal ADWs on Docker (Agent/Git fakes OK) reach Ship statuses (`shipped` / `ready_for_pr` as applicable) — [#85](https://github.com/luchillo17/lazy-software-factory/issues/85) / [PR #92](https://github.com/luchillo17/lazy-software-factory/pull/92); `packages/adw/src/docker-integration.spec.ts`
+- [x] Live credentialed Docker self-build reaches `shipped` with a real PR; cleanup verified — proof [#93](https://github.com/luchillo17/lazy-software-factory/issues/93) → [PR #94](https://github.com/luchillo17/lazy-software-factory/pull/94)
 
-Image pin / default digest is an implementation detail — not part of this vision lock.
+Image pin / default digest is an implementation detail — not part of this vision lock. Generic `adw` defaults to Docker after this green bar ([#86](https://github.com/luchillo17/lazy-software-factory/issues/86)); operator runbook: [`docs/docker-operator.md`](docker-operator.md).
 
 ## 6. v1+ / hosted Organization sketch
 
@@ -177,4 +179,4 @@ Non-goals for v0 detail. Later packaging may add Organization tenancy, org-scope
 
 No open children on [Factory vision + v0 cut](https://github.com/luchillo17/lazy-software-factory/issues/26). Residual fog (cloud Skill-pack UX, npm publish timing, `/improve-codebase-architecture` as specialized ADW vs big-ticket policy) stays in the map’s **Not yet specified** — not blocking this destination.
 
-Closed on this map: vision shape (#27), v0 Minimal acceptance (#28), parallel SandboxProvider seam (#29), skill-pack research (#30), Build skill closure (#31), Feature Review-fail eval (#32), Feature Review-fail routing (#33), Planner skill bindings (#34). Host-on-foreign-cwd (#66) amends this cut before Docker (ADR-0015); not a reopen of #29.
+Closed on this map: vision shape (#27), v0 Minimal acceptance (#28), parallel SandboxProvider seam (#29), skill-pack research (#30), Build skill closure (#31), Feature Review-fail eval (#32), Feature Review-fail routing (#33), Planner skill bindings (#34). Host-on-foreign-cwd (#66) amends this cut before Docker (ADR-0015); not a reopen of #29. Classic Docker green bar + generic `adw` default (#84 / #85 / #86).
