@@ -117,8 +117,8 @@ A `SandboxProvider` backend where the sandbox **is** the host process/filesystem
 _Avoid_: Treating host runs as outside the Runtime; multi-ticket parallel on one host sandbox (one ADW at a time); using `--repo-url` to “switch” trees when `.git` already exists in the sandbox cwd (Workspace provision reuses that worktree); assuming Host skips the ADW worker
 
 **Docker sandbox**:
-Classic Docker Engine adapter: one hardened container + ephemeral named workspace volume per lease; remote Git source only (no host cwd bind mounts); worker protocol via `docker exec` after a handshake probe. Generic `adw --sandbox docker` selects it explicitly; Host remains the default until live proof (#86).
-_Avoid_: Publishing inbound ports; mounting the Docker socket; privileged mode; baking run secrets into image layers or `docker create` env; claiming retained workspaces or disk quotas in Docker v1
+Classic Docker Engine adapter: one hardened container + ephemeral named workspace volume per lease; remote Git source only (no host cwd bind mounts); worker protocol via `docker exec` after a handshake probe. Configurable concurrent allocation (typed capacity error, no internal queue); CPU/memory/PID/lifetime enforced and reported where Docker supports them. Generic `adw --sandbox docker` selects it explicitly; Host remains the default until live proof (#86). Provider-semantic map for future Vercel: `docs/agents/sandbox-provider-conformance.md`.
+_Avoid_: Publishing inbound ports; mounting the Docker socket; privileged mode; baking run secrets into image layers or `docker create` env; claiming retained workspaces or disk quotas in Docker v1; provider-side scheduling/queueing
 
 **Warm sandbox**:
 One sandbox per ticket/task, kept alive for the whole ADW so Build, Test agent, and Review share filesystem, installs, and agent session state. On Host sandbox, that means one active ADW on the machine at a time.

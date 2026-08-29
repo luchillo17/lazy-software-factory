@@ -19,7 +19,13 @@ import {
   encodeWorkerRequest,
   redactWorkerDiagnostics,
   AdwWorkerHandshakeKind,
+  AdwWorkerResourceLimitKind,
+  AdwWorkerSandboxFeature,
+  AdwWorkerSupportLevel,
+  AdwWorkerCapabilityRequirementsSchema,
+  AdwWorkerEffectiveCapabilitiesSchema,
 } from "./index.ts";
+import { Schema } from "effect";
 
 describe("adw worker protocol framing", () => {
   it.effect("round-trips handshake encode/decode", () =>
@@ -152,6 +158,69 @@ describe("adw worker protocol framing", () => {
             AdwWorkerErrorTag.AdwWorkerProtocolError,
         true
       );
+    })
+  );
+});
+
+describe("adw worker capability requirements + effective metadata", () => {
+  it.effect(
+    "round-trips requirements with soft prefs and resource limits",
+    () =>
+      Effect.gen(function* () {
+        const decoded = yield* Schema.decodeUnknownEffect(
+          AdwWorkerCapabilityRequirementsSchema
+        )({
+          hard: [AdwWorkerCapability.WorkspaceExec],
+          soft: [AdwWorkerCapability.SkillPackMount],
+          hardFeatures: [AdwWorkerSandboxFeature.DiskQuota],
+          softFeatures: [AdwWorkerSandboxFeature.RetainedWorkspaces],
+          hardLimits: {
+            cpu: 1,
+            memoryBytes: 512 * 1024 * 1024,
+            pidsLimit: 256,
+            lifetimeMs: 60_000,
+          },
+          softLimits: { cpu: 2 },
+        });
+        assert.strictEqual(decoded.hardLimits?.cpu, 1);
+        assert.strictEqual(
+          decoded.hardFeatures?.[0],
+          AdwWorkerSandboxFeature.DiskQuota
+        );
+        assert.strictEqual(
+          decoded.soft?.[0],
+          AdwWorkerCapability.SkillPackMount
+        );
+      })
+  );
+
+  it.effect("round-trips effective caps with unmet soft + applied limits", () =>
+    Effect.gen(function* () {
+      const decoded = yield* Schema.decodeUnknownEffect(
+        AdwWorkerEffectiveCapabilitiesSchema
+      )({
+        capabilities: [AdwWorkerCapability.WorkspaceExec],
+        maxConcurrentLeases: 32,
+        isolation: AdwWorkerIsolation.Container,
+        retainedWorkspaces: AdwWorkerSupportLevel.Unsupported,
+        diskQuota: AdwWorkerSupportLevel.Unsupported,
+        limits: {
+          cpu: 1,
+          memoryBytes: 268_435_456,
+          pidsLimit: 128,
+          lifetimeMs: 30_000,
+        },
+        unmetSoftCapabilities: [AdwWorkerCapability.SkillPackMount],
+        unmetSoftFeatures: [AdwWorkerSandboxFeature.DiskQuota],
+        unmetSoftLimits: [AdwWorkerResourceLimitKind.Lifetime],
+      });
+      assert.strictEqual(decoded.limits?.pidsLimit, 128);
+      assert.deepStrictEqual(decoded.unmetSoftFeatures, [
+        AdwWorkerSandboxFeature.DiskQuota,
+      ]);
+      assert.deepStrictEqual(decoded.unmetSoftLimits, [
+        AdwWorkerResourceLimitKind.Lifetime,
+      ]);
     })
   );
 });

@@ -24,6 +24,21 @@ export interface DockerHardeningMounts {
   readonly cacheSize?: string;
 }
 
+/** Optional cgroup / lifetime controls applied at `docker create`. */
+export interface DockerCreateResourceLimits {
+  /** Fractional CPUs (`--cpus`). */
+  readonly cpu?: number;
+  /** Memory ceiling in bytes (`--memory`). */
+  readonly memoryBytes?: number;
+  /** Max PIDs (`--pids-limit`). */
+  readonly pidsLimit?: number;
+  /**
+   * Stop timeout in seconds used as the container's graceful stop bound
+   * (`--stop-timeout`). Lifetime enforcement itself is provider-side.
+   */
+  readonly stopTimeoutSeconds?: number;
+}
+
 /**
  * Hardened `docker create` argv (no start). Secrets must not appear here —
  * they enter only via worker launch stdin transport.
@@ -37,6 +52,7 @@ export const dockerCreateArgs = (options: {
   readonly user?: string;
   readonly workdir?: string;
   readonly cmd?: readonly string[];
+  readonly limits?: DockerCreateResourceLimits;
 }): readonly string[] => {
   const tmpSize = options.mounts.tmpSize ?? "256m";
   const cacheSize = options.mounts.cacheSize ?? "512m";
@@ -68,6 +84,20 @@ export const dockerCreateArgs = (options: {
     `${DOCKER_HOME_PATH}:rw,exec,nosuid,size=${cacheSize},uid=10001,gid=10001,mode=0700`,
     // No --privileged, no Docker socket mount, no -p / --publish.
   ];
+
+  const limits = options.limits;
+  if (limits?.cpu !== undefined) {
+    args.push("--cpus", String(limits.cpu));
+  }
+  if (limits?.memoryBytes !== undefined) {
+    args.push("--memory", String(limits.memoryBytes));
+  }
+  if (limits?.pidsLimit !== undefined) {
+    args.push("--pids-limit", String(limits.pidsLimit));
+  }
+  if (limits?.stopTimeoutSeconds !== undefined) {
+    args.push("--stop-timeout", String(limits.stopTimeoutSeconds));
+  }
 
   if (options.env) {
     for (const [key, value] of Object.entries(options.env)) {

@@ -1,8 +1,7 @@
 import {
   AdwWorkerCapability,
   AdwWorkerIsolation,
-  defaultMinimalAdwCapabilityRequirements,
-  type AdwWorkerCapabilityRequirements,
+  AdwWorkerSupportLevel,
   type AdwWorkerEffectiveCapabilities,
   type AdwWorkerProgressEvent,
   type AdwWorkerRequest,
@@ -13,7 +12,6 @@ import { Crypto } from "effect/Crypto";
 import type { ChildProcessHandle } from "effect/unstable/process/ChildProcessSpawner";
 import {
   SandboxBusyError,
-  SandboxCapabilityError,
   SandboxCreateError,
   SandboxExecError,
   SandboxWorkerError,
@@ -23,6 +21,10 @@ import {
   type HostWorkerLaunch,
 } from "./host-worker-runner.ts";
 import { runCapturedProcess } from "./run-captured-process.ts";
+import {
+  resolveEffectiveCapabilities,
+  type BackendCapabilityProfile,
+} from "./sandbox-capabilities.ts";
 import type {
   AcquireSandboxError,
   AcquireSandboxOptions,
@@ -37,7 +39,7 @@ export type {
   SandboxLease,
 } from "./sandbox-lease.ts";
 
-const hostCapabilities: AdwWorkerEffectiveCapabilities = {
+const hostProfile = (): BackendCapabilityProfile => ({
   capabilities: [
     AdwWorkerCapability.CursorLocalAgent,
     AdwWorkerCapability.GitHostCli,
@@ -46,26 +48,11 @@ const hostCapabilities: AdwWorkerEffectiveCapabilities = {
   ],
   maxConcurrentLeases: 1,
   isolation: AdwWorkerIsolation.Host,
-};
-
-const assertCapabilities = (
-  requirements: AdwWorkerCapabilityRequirements | undefined,
-  effective: AdwWorkerEffectiveCapabilities
-): Effect.Effect<void, SandboxCapabilityError> => {
-  const hard =
-    requirements?.hard ?? defaultMinimalAdwCapabilityRequirements.hard;
-  const supported = new Set(effective.capabilities);
-  const missing = hard.filter((cap) => !supported.has(cap));
-  if (missing.length > 0) {
-    return Effect.fail(
-      new SandboxCapabilityError({
-        message: `Sandbox backend missing required capabilities: ${missing.join(", ")}`,
-        missing: [...missing],
-      })
-    );
-  }
-  return Effect.void;
-};
+  diskQuota: AdwWorkerSupportLevel.Unsupported,
+  retainedWorkspaces: AdwWorkerSupportLevel.Unsupported,
+  // Host does not enforce cgroup CPU/memory/PID or lease lifetime.
+  enforceableLimits: new Set(),
+});
 
 export interface HostSandboxOptions {
   /** How the Host lease launches the versioned ADW worker process. */
@@ -173,6 +160,7 @@ export class SandboxProvider extends Context.Service<
       SandboxProvider,
       Effect.gen(function* () {
         const crypto = yield* Crypto;
+        const profile = hostProfile();
 
         let activeId: string | undefined;
 
@@ -318,7 +306,11 @@ export class SandboxProvider extends Context.Service<
           options?: AcquireSandboxOptions
         ): Effect.Effect<SandboxLease, AcquireSandboxError, Scope.Scope> =>
           Effect.gen(function* () {
-            yield* assertCapabilities(options?.requirements, hostCapabilities);
+            const effective: AdwWorkerEffectiveCapabilities =
+              yield* resolveEffectiveCapabilities(
+                profile,
+                options?.requirements
+              );
 
             const box = yield* allocateHostBox(options);
             let released = false;
@@ -337,7 +329,7 @@ export class SandboxProvider extends Context.Service<
             return {
               id: box.id,
               cwd: box.cwd,
-              effectiveCapabilities: hostCapabilities,
+              effectiveCapabilities: effective,
               release,
               runWorker: (
                 request: AdwWorkerRequest,

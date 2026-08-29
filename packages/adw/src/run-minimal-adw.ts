@@ -198,10 +198,9 @@ export const runMinimalAdwController = (
         },
       });
 
-      const effectiveCapabilities =
-        outcome.kind === AdwWorkerTerminalKind.Completed
-          ? outcome.effectiveCapabilities
-          : (outcome.effectiveCapabilities ?? lease.effectiveCapabilities);
+      // Lease metadata is authoritative for provider limits / unmet soft prefs;
+      // the worker terminal frame may echo a subset for protocol completeness.
+      const effectiveCapabilities = lease.effectiveCapabilities;
 
       return {
         outcome,

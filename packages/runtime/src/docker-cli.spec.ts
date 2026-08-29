@@ -17,6 +17,44 @@ import {
 } from "./docker-cli.ts";
 
 describe("docker argv builders", () => {
+  it("create args apply CPU, memory, PID, and stop-timeout limits", () => {
+    const args = dockerCreateArgs({
+      name: "adw-limits",
+      image: "factory-adw-worker:local",
+      mounts: { workspaceVolume: "adw-vol-1" },
+      limits: {
+        cpu: 1.5,
+        memoryBytes: 268_435_456,
+        pidsLimit: 256,
+        stopTimeoutSeconds: 10,
+      },
+    });
+    const cpuIdx = args.indexOf("--cpus");
+    assert.isTrue(cpuIdx >= 0);
+    assert.strictEqual(args[cpuIdx + 1], "1.5");
+    const memIdx = args.indexOf("--memory");
+    assert.isTrue(memIdx >= 0);
+    assert.strictEqual(args[memIdx + 1], "268435456");
+    const pidIdx = args.indexOf("--pids-limit");
+    assert.isTrue(pidIdx >= 0);
+    assert.strictEqual(args[pidIdx + 1], "256");
+    const stopIdx = args.indexOf("--stop-timeout");
+    assert.isTrue(stopIdx >= 0);
+    assert.strictEqual(args[stopIdx + 1], "10");
+  });
+
+  it("create args omit resource flags when limits are unset", () => {
+    const args = dockerCreateArgs({
+      name: "adw-test",
+      image: "factory-adw-worker:local",
+      mounts: { workspaceVolume: "adw-vol-1" },
+    });
+    assert.isFalse(args.includes("--cpus"));
+    assert.isFalse(args.includes("--memory"));
+    assert.isFalse(args.includes("--pids-limit"));
+    assert.isFalse(args.includes("--stop-timeout"));
+  });
+
   it("create args harden the container without publishing ports or privileges", () => {
     const args = dockerCreateArgs({
       name: "adw-test",

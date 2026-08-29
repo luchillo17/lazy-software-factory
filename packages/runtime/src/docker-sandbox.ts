@@ -1,15 +1,15 @@
 import {
   AdwWorkerCapability,
   AdwWorkerIsolation,
+  AdwWorkerResourceLimitKind,
   AdwWorkerSupportLevel,
-  defaultMinimalAdwCapabilityRequirements,
-  type AdwWorkerCapabilityRequirements,
   type AdwWorkerEffectiveCapabilities,
   type AdwWorkerProgressEvent,
   type AdwWorkerRequest,
+  type AdwWorkerResourceLimits,
 } from "@lazy-software-factory/adw-worker";
 import { NodeCrypto } from "@effect/platform-node";
-import { Effect, Layer, Scope } from "effect";
+import { Effect, Fiber, Layer, Scope } from "effect";
 import { Crypto } from "effect/Crypto";
 import type { ChildProcessHandle } from "effect/unstable/process/ChildProcessSpawner";
 import {
@@ -28,14 +28,18 @@ import {
   requireDockerOk,
 } from "./docker-cli.ts";
 import {
+  RuntimeErrorTag,
   SandboxBusyError,
-  SandboxCapabilityError,
   SandboxCreateError,
   SandboxExecError,
   SandboxWorkerError,
 } from "./errors.ts";
 import { runWorkerProtocolProcess } from "./host-worker-runner.ts";
 import { runDockerWorkerHandshake } from "./docker-worker-runner.ts";
+import {
+  resolveEffectiveCapabilities,
+  type BackendCapabilityProfile,
+} from "./sandbox-capabilities.ts";
 import type {
   AcquireSandboxError,
   AcquireSandboxOptions,
@@ -44,9 +48,17 @@ import type {
 import type { CreateSandboxOptions, ExecResult, Sandbox } from "./sandbox.ts";
 import { SandboxProvider } from "./sandbox-provider.ts";
 
-const dockerCapabilities = (
-  maxConcurrentLeases: number
-): AdwWorkerEffectiveCapabilities => ({
+const dockerEnforceableLimits = new Set([
+  AdwWorkerResourceLimitKind.Cpu,
+  AdwWorkerResourceLimitKind.Memory,
+  AdwWorkerResourceLimitKind.Pid,
+  AdwWorkerResourceLimitKind.Lifetime,
+]);
+
+const dockerProfile = (
+  maxConcurrentLeases: number,
+  defaultLimits?: AdwWorkerResourceLimits
+): BackendCapabilityProfile => ({
   capabilities: [
     AdwWorkerCapability.CursorLocalAgent,
     AdwWorkerCapability.GitHostCli,
@@ -57,26 +69,9 @@ const dockerCapabilities = (
   isolation: AdwWorkerIsolation.Container,
   retainedWorkspaces: AdwWorkerSupportLevel.Unsupported,
   diskQuota: AdwWorkerSupportLevel.Unsupported,
+  enforceableLimits: dockerEnforceableLimits,
+  ...(defaultLimits ? { defaultLimits } : {}),
 });
-
-const assertCapabilities = (
-  requirements: AdwWorkerCapabilityRequirements | undefined,
-  effective: AdwWorkerEffectiveCapabilities
-): Effect.Effect<void, SandboxCapabilityError> => {
-  const hard =
-    requirements?.hard ?? defaultMinimalAdwCapabilityRequirements.hard;
-  const supported = new Set(effective.capabilities);
-  const missing = hard.filter((cap) => !supported.has(cap));
-  if (missing.length > 0) {
-    return Effect.fail(
-      new SandboxCapabilityError({
-        message: `Sandbox backend missing required capabilities: ${missing.join(", ")}`,
-        missing: [...missing],
-      })
-    );
-  }
-  return Effect.void;
-};
 
 /** Reject Host-style cwd / bind-mount intake for Docker leases. */
 export const rejectDockerHostSourceIntake = (
@@ -111,7 +106,7 @@ export interface DockerSandboxOptions {
   readonly dockerCommand?: string;
   /** Optional Docker context name. */
   readonly context?: string;
-  /** Soft allocation ceiling; exhausted → SandboxBusyError. */
+  /** Soft allocation ceiling; exhausted → SandboxBusyError (no internal queue). */
   readonly maxConcurrentLeases?: number;
   readonly terminateGrace?: `${number} seconds` | `${number} millis`;
   /** Non-secret container env (e.g. isolation marker, integration stubs). */
@@ -119,6 +114,8 @@ export interface DockerSandboxOptions {
   readonly tmpSize?: string;
   readonly cacheSize?: string;
   readonly user?: string;
+  /** Default resource limits applied when acquire omits hard/soft limits. */
+  readonly defaultLimits?: AdwWorkerResourceLimits;
 }
 
 type DockerBox = {
@@ -132,6 +129,18 @@ type DockerBox = {
 
 const defaultWorkerCommand = "node";
 const defaultWorkerArgs = ["/opt/factory/adw-worker.mjs"] as const;
+
+const stopTimeoutSecondsFromGrace = (
+  grace: `${number} seconds` | `${number} millis` | undefined
+): number | undefined => {
+  if (!grace) {
+    return undefined;
+  }
+  if (grace.endsWith("millis")) {
+    return Math.max(1, Math.ceil(Number.parseInt(grace, 10) / 1000));
+  }
+  return Number.parseInt(grace, 10);
+};
 
 /**
  * Classic Docker SandboxProvider Layer: one hardened container + ephemeral
@@ -148,7 +157,7 @@ export const makeDockerSandboxProviderLayer = (config: DockerSandboxOptions) =>
       const crypto = yield* Crypto;
       const docker = yield* DockerCli;
       const maxConcurrent = config.maxConcurrentLeases ?? 32;
-      const effective = dockerCapabilities(maxConcurrent);
+      const profile = dockerProfile(maxConcurrent, config.defaultLimits);
       const active = new Set<string>();
 
       const releaseResources = (box: {
@@ -170,7 +179,8 @@ export const makeDockerSandboxProviderLayer = (config: DockerSandboxOptions) =>
         });
 
       const allocate = (
-        options?: CreateSandboxOptions
+        options: CreateSandboxOptions | undefined,
+        effective: AdwWorkerEffectiveCapabilities
       ): Effect.Effect<
         DockerBox,
         SandboxCreateError | SandboxBusyError,
@@ -234,6 +244,10 @@ export const makeDockerSandboxProviderLayer = (config: DockerSandboxOptions) =>
               "docker volume create"
             );
 
+            const limits = effective.limits;
+            const stopTimeoutSeconds = stopTimeoutSecondsFromGrace(
+              config.terminateGrace
+            );
             const createArgs = dockerCreateArgs({
               name: containerName,
               image: config.image,
@@ -251,6 +265,18 @@ export const makeDockerSandboxProviderLayer = (config: DockerSandboxOptions) =>
                 npm_config_store_dir: "/home/adw/.cache/pnpm-store",
                 XDG_CACHE_HOME: "/home/adw/.cache",
                 ...config.containerEnv,
+              },
+              limits: {
+                ...(limits?.cpu !== undefined ? { cpu: limits.cpu } : {}),
+                ...(limits?.memoryBytes !== undefined
+                  ? { memoryBytes: limits.memoryBytes }
+                  : {}),
+                ...(limits?.pidsLimit !== undefined
+                  ? { pidsLimit: limits.pidsLimit }
+                  : {}),
+                ...(stopTimeoutSeconds !== undefined
+                  ? { stopTimeoutSeconds }
+                  : {}),
               },
             });
 
@@ -313,54 +339,67 @@ export const makeDockerSandboxProviderLayer = (config: DockerSandboxOptions) =>
         );
 
       const create = (options?: CreateSandboxOptions) =>
-        allocate(options).pipe(
-          Effect.map((box) => {
-            const exec = (
-              command: string,
-              args: readonly string[] = []
-            ): Effect.Effect<ExecResult, SandboxExecError> =>
-              Effect.gen(function* () {
-                const result = yield* docker
-                  .run({
-                    args: dockerExecInteractiveArgs({
-                      container: box.containerName,
-                      command,
-                      args,
-                      workdir: DOCKER_WORKSPACE_PATH,
-                      user: config.user,
-                    }),
-                  })
-                  .pipe(
-                    Effect.mapError(
-                      (cause) =>
-                        new SandboxExecError({
-                          message: `Failed to exec in Docker sandbox ${box.id}`,
-                          cause,
-                        })
-                    )
-                  );
-                return {
-                  exitCode: result.exitCode,
-                  stdout: result.stdout,
-                  stderr: result.stderr,
-                };
-              });
+        Effect.gen(function* () {
+          // create has no requirements; resolve cannot fail for the default profile.
+          const effective = yield* resolveEffectiveCapabilities(profile).pipe(
+            Effect.catchTag(RuntimeErrorTag.SandboxCapabilityError, (err) =>
+              Effect.fail(
+                new SandboxCreateError({
+                  message: err.message,
+                })
+              )
+            )
+          );
+          const box = yield* allocate(options, effective);
+          const exec = (
+            command: string,
+            args: readonly string[] = []
+          ): Effect.Effect<ExecResult, SandboxExecError> =>
+            Effect.gen(function* () {
+              const result = yield* docker
+                .run({
+                  args: dockerExecInteractiveArgs({
+                    container: box.containerName,
+                    command,
+                    args,
+                    workdir: DOCKER_WORKSPACE_PATH,
+                    user: config.user,
+                  }),
+                })
+                .pipe(
+                  Effect.mapError(
+                    (cause) =>
+                      new SandboxExecError({
+                        message: `Failed to exec in Docker sandbox ${box.id}`,
+                        cause,
+                      })
+                  )
+                );
+              return {
+                exitCode: result.exitCode,
+                stdout: result.stdout,
+                stderr: result.stderr,
+              };
+            });
 
-            return {
-              id: box.id,
-              cwd: box.cwd,
-              exec,
-              destroy: box.destroy,
-            } satisfies Sandbox;
-          })
-        );
+          return {
+            id: box.id,
+            cwd: box.cwd,
+            exec,
+            destroy: box.destroy,
+          } satisfies Sandbox;
+        });
 
       const acquire = (
         options?: AcquireSandboxOptions
       ): Effect.Effect<SandboxLease, AcquireSandboxError, Scope.Scope> =>
         Effect.gen(function* () {
-          yield* assertCapabilities(options?.requirements, effective);
-          const box = yield* allocate(options);
+          // Hard requirements fail before volume/container allocation.
+          const effective = yield* resolveEffectiveCapabilities(
+            profile,
+            options?.requirements
+          );
+          const box = yield* allocate(options, effective);
           let released = false;
           let workerRan = false;
 
@@ -374,6 +413,18 @@ export const makeDockerSandboxProviderLayer = (config: DockerSandboxOptions) =>
             });
 
           yield* Effect.addFinalizer(() => release());
+
+          // Provider-side lifetime: destroy when the lease exceeds the limit.
+          if (effective.limits?.lifetimeMs !== undefined) {
+            const lifetimeMs = effective.limits.lifetimeMs;
+            const lifetimeFiber = yield* Effect.gen(function* () {
+              yield* Effect.sleep(`${lifetimeMs} millis`);
+              yield* release();
+            }).pipe(Effect.forkScoped);
+            yield* Effect.addFinalizer(() =>
+              Fiber.interrupt(lifetimeFiber).pipe(Effect.asVoid)
+            );
+          }
 
           return {
             id: box.id,

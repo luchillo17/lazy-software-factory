@@ -113,12 +113,64 @@ export const AdwWorkerSupportLevel = {
 export const AdwWorkerSupportLevelSchema = Schema.Enum(AdwWorkerSupportLevel);
 export type AdwWorkerSupportLevel = typeof AdwWorkerSupportLevelSchema.Type;
 
+/**
+ * Sandbox backend features beyond agent capabilities. Hard requests for an
+ * unsupported feature fail before allocation; soft requests surface as unmet.
+ */
+export const AdwWorkerSandboxFeature = {
+  DiskQuota: "disk_quota",
+  RetainedWorkspaces: "retained_workspaces",
+} as const;
+export const AdwWorkerSandboxFeatureSchema = Schema.Enum(
+  AdwWorkerSandboxFeature
+);
+export type AdwWorkerSandboxFeature = typeof AdwWorkerSandboxFeatureSchema.Type;
+
+/** Closed set of numeric resource controls providers may enforce. */
+export const AdwWorkerResourceLimitKind = {
+  Cpu: "cpu",
+  Memory: "memory",
+  Pid: "pid",
+  Lifetime: "lifetime",
+} as const;
+export const AdwWorkerResourceLimitKindSchema = Schema.Enum(
+  AdwWorkerResourceLimitKind
+);
+export type AdwWorkerResourceLimitKind =
+  typeof AdwWorkerResourceLimitKindSchema.Type;
+
+/**
+ * Optional numeric resource limits. Units: `cpu` = fractional cores,
+ * `memoryBytes` = bytes, `pidsLimit` = max PIDs, `lifetimeMs` = milliseconds.
+ */
+export const AdwWorkerResourceLimitsSchema = Schema.Struct({
+  cpu: Schema.optionalKey(Schema.Number),
+  memoryBytes: Schema.optionalKey(Schema.Number),
+  pidsLimit: Schema.optionalKey(Schema.Number),
+  lifetimeMs: Schema.optionalKey(Schema.Number),
+});
+export type AdwWorkerResourceLimits = typeof AdwWorkerResourceLimitsSchema.Type;
+
 export const AdwWorkerEffectiveCapabilitiesSchema = Schema.Struct({
   capabilities: Schema.Array(AdwWorkerCapabilitySchema),
   maxConcurrentLeases: Schema.Number,
   isolation: AdwWorkerIsolationSchema,
   retainedWorkspaces: Schema.optionalKey(AdwWorkerSupportLevelSchema),
   diskQuota: Schema.optionalKey(AdwWorkerSupportLevelSchema),
+  /** Resource limits actually applied for this lease (when enforced). */
+  limits: Schema.optionalKey(AdwWorkerResourceLimitsSchema),
+  /** Soft capability preferences the backend does not provide. */
+  unmetSoftCapabilities: Schema.optionalKey(
+    Schema.Array(AdwWorkerCapabilitySchema)
+  ),
+  /** Soft feature preferences the backend does not enforce. */
+  unmetSoftFeatures: Schema.optionalKey(
+    Schema.Array(AdwWorkerSandboxFeatureSchema)
+  ),
+  /** Soft limit preferences the backend could not apply. */
+  unmetSoftLimits: Schema.optionalKey(
+    Schema.Array(AdwWorkerResourceLimitKindSchema)
+  ),
 });
 export type AdwWorkerEffectiveCapabilities =
   typeof AdwWorkerEffectiveCapabilitiesSchema.Type;
@@ -199,10 +251,18 @@ export const AdwWorkerFrameSchema = Schema.Union([
 ]);
 export type AdwWorkerFrame = typeof AdwWorkerFrameSchema.Type;
 
-/** Hard requirements the controller asks the provider to satisfy before lease. */
+/**
+ * Hard requirements and soft preferences the controller asks the provider to
+ * satisfy before lease. Unsupported hard items fail before allocation;
+ * unsupported soft items remain visible on effective metadata.
+ */
 export const AdwWorkerCapabilityRequirementsSchema = Schema.Struct({
   hard: Schema.Array(AdwWorkerCapabilitySchema),
   soft: Schema.optionalKey(Schema.Array(AdwWorkerCapabilitySchema)),
+  hardFeatures: Schema.optionalKey(Schema.Array(AdwWorkerSandboxFeatureSchema)),
+  softFeatures: Schema.optionalKey(Schema.Array(AdwWorkerSandboxFeatureSchema)),
+  hardLimits: Schema.optionalKey(AdwWorkerResourceLimitsSchema),
+  softLimits: Schema.optionalKey(AdwWorkerResourceLimitsSchema),
 });
 export type AdwWorkerCapabilityRequirements =
   typeof AdwWorkerCapabilityRequirementsSchema.Type;
