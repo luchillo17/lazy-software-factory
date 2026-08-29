@@ -51,7 +51,7 @@ pnpm adw:host -- --issue <n|#N|Issues-URL> --cwd ../sibling-repo
 
 Synthetic work (no GitHub Issue): `--ticket <id> --prompt <text>` with the same `--cwd` / `adw-host` rules.
 
-Long runs: prefer a **detached** process. Chat-backgrounded shells often abort; that abort is not an ADW `failed` status.
+Long runs: a **human tty** should **detach** (`setsid` / `systemd-run --user`). Cursor **agent Shell** is the opposite — see Host gotchas. An aborted wrapper is not an ADW `failed` status.
 
 ## Done
 
@@ -65,6 +65,7 @@ The operator line must include **`status=shipped`** and **`pr=<https URL>`** for
 - **Branch yank.** Provision runs `git checkout -B adw/<ticketId>` **in the sandbox cwd**. Uncommitted work on another branch in that tree is not protected. Start from a clean `main` (or a base you intend to reset). Aiming `--cwd` at a sibling leaves the Factory clone alone; aiming at the Factory clone still yanks it.
 - **Forge identity.** `GH_TOKEN` must belong to an account that can push and open PRs on the **target** repo. Browser merge uses whatever GitHub session is logged in — a different account will hide merge actions even when Ship succeeded.
 - **Skill pack.** Build needs `.agents/skills` on the sandbox cwd (`/implement` closure). Review’s `/adw-review` comes from the Host-bundled pack (`packages/adw/host-skill-pack`); the target tree need not vendor it.
+- **Cursor agent Shell vs detach.** `adw-host` is fine; the wrapper’s lifetime is not. When the agent Shell **returns**, Cursor kills that **process group**. `nohup … &` then `head` the log dies after provision/build enter. Keep the Shell job **open** (`block_until_ms: 0` / foreground `adw-host`). Real detach from the agent needs a **new session** (`setsid` / `systemd-run --user`), not `nohup` in the same group. A human tty can `nohup`/`setsid` as usual.
 
 ## Proven live
 

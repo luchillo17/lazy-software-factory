@@ -17,6 +17,7 @@
   "dependencies": {
     "@cursor/sdk": "1.0.30",
     "@effect/platform-node": "4.0.0-beta.106",
+    "@lazy-software-factory/adw-worker": "workspace:*",
     "effect": "4.0.0-beta.106"
   },
   "devDependencies": {

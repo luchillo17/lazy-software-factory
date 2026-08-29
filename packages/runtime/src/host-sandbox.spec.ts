@@ -2,7 +2,7 @@ import { mkdtemp, readFile, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { assert, describe, it } from "@effect/vitest";
-import { Effect, Fiber } from "effect";
+import { Effect, Fiber, Cause } from "effect";
 import { SandboxProvider } from "./sandbox-provider.ts";
 
 describe("Host SandboxProvider", () => {
@@ -112,5 +112,27 @@ describe("Host SandboxProvider", () => {
         })
       );
     }).pipe(Effect.provide(SandboxProvider.Host))
+  );
+});
+
+describe("Host SandboxProvider.acquire", () => {
+  it.effect("second concurrent acquire returns SandboxBusyError", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const provider = yield* SandboxProvider;
+        yield* provider.acquire({ cwd: process.cwd() });
+        const second = yield* provider
+          .acquire({ cwd: process.cwd() })
+          .pipe(Effect.exit);
+        assert.strictEqual(second._tag, "Failure");
+        if (second._tag === "Failure") {
+          const squashed = Cause.squash(second.cause);
+          assert.strictEqual(
+            (squashed as { _tag?: string })._tag,
+            "SandboxBusyError"
+          );
+        }
+      })
+    ).pipe(Effect.provide(SandboxProvider.Host))
   );
 });

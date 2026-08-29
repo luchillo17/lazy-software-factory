@@ -14,7 +14,7 @@ import {
 import { AdwStatus } from "./enums.ts";
 import { GitHost, GitHostError } from "./git-host.ts";
 import { reviewPassFixture } from "./review-pass-fixture.ts";
-import { runMinimalAdw } from "./run-minimal-adw.ts";
+import { runMinimalAdwGraph } from "./run-minimal-adw-graph.ts";
 import { submitReviewPassViaTools } from "./review-tool-test-helpers.ts";
 import { AdwTestCommands } from "./test-commands.ts";
 import { WorkspaceProvision } from "./workspace-provision.ts";
@@ -28,6 +28,7 @@ const greenAgents = Layer.mergeAll(
   Layer.succeed(
     SandboxProvider,
     SandboxProvider.of({
+      acquire: () => Effect.die("acquire unused in graph test"),
       create: () =>
         Effect.succeed({
           id: "sandbox-1",
@@ -66,7 +67,7 @@ const greenAgents = Layer.mergeAll(
   AdwSchemaResumeCap.Default
 );
 
-describe("runMinimalAdw Ship → ready_for_pr", () => {
+describe("runMinimalAdwGraph Ship → ready_for_pr", () => {
   it.effect("push failure yields ready_for_pr without spending attempts", () =>
     Effect.gen(function* () {
       const buildResumes = yield* Ref.make(0);
@@ -110,7 +111,7 @@ describe("runMinimalAdw Ship → ready_for_pr", () => {
         })
       );
 
-      const result = yield* runMinimalAdw({
+      const result = yield* runMinimalAdwGraph({
         ticketId: "T-SHIP",
         prompt: "work",
       }).pipe(
@@ -145,7 +146,7 @@ describe("runMinimalAdw Ship → ready_for_pr", () => {
         })
       );
 
-      const result = yield* runMinimalAdw({
+      const result = yield* runMinimalAdwGraph({
         ticketId: "T-PR",
         prompt: "work",
       }).pipe(Effect.provide(Layer.mergeAll(greenAgents, gitLayer)));
@@ -194,7 +195,7 @@ describe("runMinimalAdw Ship → ready_for_pr", () => {
         })
       );
 
-      const result = yield* runMinimalAdw({
+      const result = yield* runMinimalAdwGraph({
         ticketId: "T-OK",
         prompt: "work",
       }).pipe(
@@ -230,7 +231,7 @@ describe("runMinimalAdw Ship → ready_for_pr", () => {
         })
       );
 
-      const result = yield* runMinimalAdw({
+      const result = yield* runMinimalAdwGraph({
         ticketId: "T-ORDER",
         prompt: "work",
       }).pipe(Effect.provide(Layer.mergeAll(greenAgents, gitLayer)));
@@ -257,7 +258,7 @@ describe("runMinimalAdw Ship → ready_for_pr", () => {
         })
       );
 
-      const result = yield* runMinimalAdw({
+      const result = yield* runMinimalAdwGraph({
         ticketId: "T-COMMIT",
         prompt: "work",
       }).pipe(Effect.provide(Layer.mergeAll(greenAgents, gitLayer)));

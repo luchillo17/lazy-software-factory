@@ -1,10 +1,5 @@
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
-import { GitHubGhLive } from "@lazy-software-factory/git-host";
-import {
-  CursorBuildAgentLive,
-  CursorReviewAgentLive,
-  SandboxProvider,
-} from "@lazy-software-factory/runtime";
+import { SandboxProvider } from "@lazy-software-factory/runtime";
 import {
   Config,
   ConfigProvider,
@@ -15,11 +10,7 @@ import {
   Path,
   Schema,
 } from "effect";
-import {
-  AdwBuildAttemptCap,
-  AdwReviewAttemptCap,
-  AdwSchemaResumeCap,
-} from "./attempt-caps.ts";
+import { join } from "node:path";
 import { AdwProgressStderrLive } from "./adw-progress.ts";
 import { AdwStatus } from "./enums.ts";
 import { GitHubTicketIntakeLive } from "./github-ticket-intake.ts";
@@ -29,12 +20,24 @@ import {
   type MinimalAdwResult,
 } from "./run-minimal-adw.ts";
 import { redactSecrets } from "./redact-secrets.ts";
-import { AdwTestCommands } from "./test-commands.ts";
 import { TicketIntake, type TicketIntakeError } from "./ticket-intake.ts";
-import { resolvePackageJsonTestCommands } from "./package-json-test-commands.ts";
-import { WorkspaceProvision } from "./workspace-provision.ts";
+import { monorepoRoot } from "./monorepo-root.ts";
 
 export { redactSecrets } from "./redact-secrets.ts";
+
+/** Absolute path to the versioned ADW worker entry (tsx). */
+export const hostAdwWorkerMainPath = join(
+  monorepoRoot,
+  "packages/adw/src/adw-worker-main.ts"
+);
+
+/** Host SandboxProvider that spawns the versioned ADW worker. */
+export const hostSandboxProviderLayer = SandboxProvider.host({
+  workerLaunch: {
+    command: process.execPath,
+    args: ["--import", "tsx", hostAdwWorkerMainPath],
+  },
+});
 
 /** Manual ticket/prompt flags. */
 export interface HostOperatorManualArgs {
@@ -381,28 +384,18 @@ export const formatOperatorResult = (result: MinimalAdwResult): string => {
 /** Live GitHub Issues TicketIntake (`gh` + GhRunner) for Host CLI. */
 export const hostTicketIntakeLayer = GitHubTicketIntakeLive;
 
-/** Host Layers: warm sandbox, Cursor agents, GitHub host, provision, caps. */
+/**
+ * Host controller Layers: Sandbox lease + worker launch + progress stderr sink.
+ * Graph / Cursor / Git-host Layers live in the worker process.
+ */
 export const hostMinimalAdwLayer = Layer.mergeAll(
-  SandboxProvider.Host,
-  CursorBuildAgentLive,
-  CursorReviewAgentLive,
-  GitHubGhLive,
-  WorkspaceProvision.Host.pipe(Layer.provide(GitHubGhLive)),
-  Layer.succeed(
-    AdwTestCommands,
-    AdwTestCommands.of({
-      resolve: resolvePackageJsonTestCommands,
-    })
-  ),
-  AdwBuildAttemptCap.Default,
-  AdwReviewAttemptCap.Default,
-  AdwSchemaResumeCap.Default,
+  hostSandboxProviderLayer,
   AdwProgressStderrLive
 );
 
 /**
  * Run one Host minimal ADW. Credentials from `input.env` / process env
- * (CURSOR_API_KEY, GH_TOKEN). Host enforces single ADW at a time.
+ * (CURSOR_API_KEY, GH_TOKEN). Host enforces single ADW at a time via lease.
  */
 export const runHostMinimalAdw = (
   input: MinimalAdwInput

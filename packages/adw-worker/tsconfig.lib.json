@@ -1,9 +1,9 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
-    "outDir": "../../dist/out-tsc/packages/runtime",
+    "outDir": "../../dist/out-tsc/packages/adw-worker",
     "rootDir": "src",
-    "tsBuildInfoFile": "../../dist/out-tsc/packages/runtime/tsconfig.lib.tsbuildinfo",
+    "tsBuildInfoFile": "../../dist/out-tsc/packages/adw-worker/tsconfig.lib.tsbuildinfo",
     "composite": true,
     "declaration": true,
     "declarationMap": true,
@@ -17,9 +17,5 @@
     "vitest.config.ts",
     "vitest.config.mts"
   ],
-  "references": [
-    {
-      "path": "../adw-worker/tsconfig.lib.json"
-    }
-  ]
+  "references": []
 }

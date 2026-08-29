@@ -15,12 +15,12 @@ import {
 import { AdwStatus } from "./enums.ts";
 import { GitHost } from "./git-host.ts";
 import { monorepoRoot } from "./monorepo-root.ts";
-import { runMinimalAdw } from "./run-minimal-adw.ts";
+import { runMinimalAdwGraph } from "./run-minimal-adw-graph.ts";
 import { submitReviewPassViaTools } from "./review-tool-test-helpers.ts";
 import { AdwTestCommands } from "./test-commands.ts";
 import { WorkspaceProvision } from "./workspace-provision.ts";
 
-describe("runMinimalAdw progress events", () => {
+describe("runMinimalAdwGraph progress events", () => {
   it.effect("emits step enter/result through Effect Logger on happy path", () =>
     Effect.gen(function* () {
       const lines: string[] = [];
@@ -28,6 +28,7 @@ describe("runMinimalAdw progress events", () => {
       const fakeSandboxLayer = Layer.succeed(
         SandboxProvider,
         SandboxProvider.of({
+          acquire: () => Effect.die("acquire unused in graph test"),
           create: () =>
             Effect.succeed({
               id: "sandbox-1",
@@ -72,7 +73,7 @@ describe("runMinimalAdw progress events", () => {
         })
       );
 
-      const result = yield* runMinimalAdw({
+      const result = yield* runMinimalAdwGraph({
         ticketId: "T-PROG",
         prompt: "work",
       }).pipe(
@@ -169,6 +170,7 @@ describe("runMinimalAdw progress events", () => {
       const fakeSandboxLayer = Layer.succeed(
         SandboxProvider,
         SandboxProvider.of({
+          acquire: () => Effect.die("acquire unused in graph test"),
           create: () =>
             Effect.succeed({
               id: "sandbox-1",
@@ -187,7 +189,7 @@ describe("runMinimalAdw progress events", () => {
         })
       );
 
-      const result = yield* runMinimalAdw({
+      const result = yield* runMinimalAdwGraph({
         ticketId: "T-WIRE-MISS",
         prompt: "work",
       }).pipe(

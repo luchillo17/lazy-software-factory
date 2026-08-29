@@ -81,6 +81,7 @@ classDef ship fill:#1a2e2e,stroke:#5eead4,color:#ccfbf1
 | [0013](./adr/0013-test-agent-parallel-check-gates.md)          | Test agent: parallel check-only gates + full fail report             |
 | [0014](./adr/0014-structured-agent-output-via-custom-tools.md) | Structured LLM Agent output via local customTools (tool-only wire)   |
 | [0015](./adr/0015-host-foreign-cwd-before-docker.md)           | Host-on-foreign-cwd before classic Docker in the vision cut          |
+| [0016](./adr/0016-sandbox-resident-adw-worker.md)              | Sandbox lease + versioned ADW worker; Cursor local SDK in-sandbox    |
 
 ## Open decisions
 

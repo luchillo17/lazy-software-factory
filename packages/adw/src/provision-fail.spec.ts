@@ -13,12 +13,12 @@ import {
 } from "./attempt-caps.ts";
 import { AdwStatus } from "./enums.ts";
 import { GitHost } from "./git-host.ts";
-import { runMinimalAdw } from "./run-minimal-adw.ts";
+import { runMinimalAdwGraph } from "./run-minimal-adw-graph.ts";
 import { AdwTestCommands } from "./test-commands.ts";
 import { ProvisionError, WorkspaceProvision } from "./workspace-provision.ts";
 import { monorepoRoot } from "./monorepo-root.ts";
 
-describe("runMinimalAdw provision failure", () => {
+describe("runMinimalAdwGraph provision failure", () => {
   it.effect("provision failure yields failed with zero agent runs", () =>
     Effect.gen(function* () {
       const buildRuns = yield* Ref.make(0);
@@ -29,6 +29,7 @@ describe("runMinimalAdw provision failure", () => {
         Layer.succeed(
           SandboxProvider,
           SandboxProvider.of({
+            acquire: () => Effect.die("acquire unused in graph test"),
             create: () =>
               Effect.succeed({
                 id: "sandbox-1",
@@ -95,7 +96,7 @@ describe("runMinimalAdw provision failure", () => {
         AdwSchemaResumeCap.Default
       );
 
-      const result = yield* runMinimalAdw({
+      const result = yield* runMinimalAdwGraph({
         ticketId: "TICKET-1",
         prompt: "do the thing",
       }).pipe(Effect.provide(layers));

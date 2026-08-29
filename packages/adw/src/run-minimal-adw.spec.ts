@@ -13,14 +13,14 @@ import {
 } from "./attempt-caps.ts";
 import { AdwStatus } from "./enums.ts";
 import { GitHost } from "./git-host.ts";
-import { runMinimalAdw } from "./run-minimal-adw.ts";
+import { runMinimalAdwGraph } from "./run-minimal-adw-graph.ts";
 import { submitReviewPassViaTools } from "./review-tool-test-helpers.ts";
 import { AdwTestCommands } from "./test-commands.ts";
 import { withEmptyPendingDeltaGit } from "./empty-pending-delta-git-test-helpers.ts";
 import { ProvisionError, WorkspaceProvision } from "./workspace-provision.ts";
 import { monorepoRoot } from "./monorepo-root.ts";
 
-describe("runMinimalAdw happy path", () => {
+describe("runMinimalAdwGraph happy path", () => {
   it.effect("provision → Build → Test → Review → Ship yields shipped", () =>
     Effect.gen(function* () {
       const steps = yield* Ref.make<string[]>([]);
@@ -30,6 +30,7 @@ describe("runMinimalAdw happy path", () => {
       const fakeSandboxLayer = Layer.succeed(
         SandboxProvider,
         SandboxProvider.of({
+          acquire: () => Effect.die("acquire unused in graph test"),
           create: () =>
             Effect.gen(function* () {
               yield* record("sandbox");
@@ -144,7 +145,7 @@ describe("runMinimalAdw happy path", () => {
         })
       );
 
-      const result = yield* runMinimalAdw({
+      const result = yield* runMinimalAdwGraph({
         ticketId: "TICKET-1",
         prompt: "implement the thing",
       }).pipe(
@@ -196,6 +197,7 @@ describe("runMinimalAdw happy path", () => {
         Layer.succeed(
           SandboxProvider,
           SandboxProvider.of({
+            acquire: () => Effect.die("acquire unused in graph test"),
             create: (options) =>
               Effect.gen(function* () {
                 yield* Ref.update(createCwds, (cs) => [
@@ -258,7 +260,7 @@ describe("runMinimalAdw happy path", () => {
         AdwSchemaResumeCap.Default
       );
 
-      const result = yield* runMinimalAdw({
+      const result = yield* runMinimalAdwGraph({
         ticketId: "TICKET-CWD",
         prompt: "aim the tree",
         cwd: "/tmp/named-git-tree",
@@ -278,6 +280,7 @@ describe("runMinimalAdw happy path", () => {
         Layer.succeed(
           SandboxProvider,
           SandboxProvider.of({
+            acquire: () => Effect.die("acquire unused in graph test"),
             create: (options) =>
               Effect.gen(function* () {
                 yield* Ref.update(createCwds, (cs) => [
@@ -340,7 +343,7 @@ describe("runMinimalAdw happy path", () => {
         AdwSchemaResumeCap.Default
       );
 
-      const result = yield* runMinimalAdw({
+      const result = yield* runMinimalAdwGraph({
         ticketId: "TICKET-DEFAULT-CWD",
         prompt: "self-build cwd",
       }).pipe(Effect.provide(layers));

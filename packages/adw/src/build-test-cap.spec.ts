@@ -14,7 +14,7 @@ import {
 } from "./attempt-caps.ts";
 import { AdwStatus } from "./enums.ts";
 import { GitHost } from "./git-host.ts";
-import { runMinimalAdw } from "./run-minimal-adw.ts";
+import { runMinimalAdwGraph } from "./run-minimal-adw-graph.ts";
 import { submitReviewPassViaTools } from "./review-tool-test-helpers.ts";
 import { withEmptyPendingDeltaGit } from "./empty-pending-delta-git-test-helpers.ts";
 import { AdwTestCommands } from "./test-commands.ts";
@@ -87,7 +87,7 @@ const passThroughShipWithoutGates = Layer.mergeAll(
   )
 );
 
-describe("runMinimalAdw Build↔Test resume + cap", () => {
+describe("runMinimalAdwGraph Build↔Test resume + cap", () => {
   it.effect("Test fail resumes same Build session with gate output", () =>
     Effect.gen(function* () {
       const resumes = yield* Ref.make<
@@ -98,6 +98,7 @@ describe("runMinimalAdw Build↔Test resume + cap", () => {
       const sandboxLayer = Layer.succeed(
         SandboxProvider,
         SandboxProvider.of({
+          acquire: () => Effect.die("acquire unused in graph test"),
           create: () =>
             Effect.succeed({
               id: "sandbox-1",
@@ -137,7 +138,7 @@ describe("runMinimalAdw Build↔Test resume + cap", () => {
         })
       );
 
-      const result = yield* runMinimalAdw({
+      const result = yield* runMinimalAdwGraph({
         ticketId: "T-RESUME",
         prompt: "fix it",
       }).pipe(
@@ -173,6 +174,7 @@ describe("runMinimalAdw Build↔Test resume + cap", () => {
         const sandboxLayer = Layer.succeed(
           SandboxProvider,
           SandboxProvider.of({
+            acquire: () => Effect.die("acquire unused in graph test"),
             create: () =>
               Effect.succeed({
                 id: "sandbox-1",
@@ -210,7 +212,7 @@ describe("runMinimalAdw Build↔Test resume + cap", () => {
           AdwBuildAttemptCap.of({ maxAttempts: 3 })
         );
 
-        const result = yield* runMinimalAdw({
+        const result = yield* runMinimalAdwGraph({
           ticketId: "T-CAP",
           prompt: "never passes",
         }).pipe(
@@ -246,6 +248,7 @@ describe("runMinimalAdw Build↔Test resume + cap", () => {
         const sandboxLayer = Layer.succeed(
           SandboxProvider,
           SandboxProvider.of({
+            acquire: () => Effect.die("acquire unused in graph test"),
             create: () =>
               Effect.succeed({
                 id: "sandbox-1",
@@ -291,7 +294,7 @@ describe("runMinimalAdw Build↔Test resume + cap", () => {
           })
         );
 
-        const result = yield* runMinimalAdw({
+        const result = yield* runMinimalAdwGraph({
           ticketId: "T-PARALLEL",
           prompt: "fix gates",
         }).pipe(

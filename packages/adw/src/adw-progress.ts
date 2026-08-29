@@ -1,15 +1,33 @@
-import { Effect, Logger } from "effect";
+import { Context, Effect, Logger, Option } from "effect";
 import {
   formatAdwProgressEvent,
   type AdwProgressEvent,
 } from "./adw-progress-event.ts";
 
+/**
+ * Optional progress sink. When provided (ADW worker), emits structured events
+ * for the protocol. When absent, falls back to Effect.log formatting (Host).
+ */
+export class AdwProgressSink extends Context.Service<
+  AdwProgressSink,
+  {
+    readonly emit: (event: AdwProgressEvent) => Effect.Effect<void>;
+  }
+>()("@lazy-software-factory/adw/AdwProgressSink") {}
+
 const messageParts = (message: unknown): unknown[] =>
   Array.isArray(message) ? message : [message];
 
-/** Emit a typed ADW progress event through Effect's Logger. */
+/** Emit a typed ADW progress event through the sink or Effect's Logger. */
 export const emitAdwProgress = (event: AdwProgressEvent): Effect.Effect<void> =>
-  Effect.log(formatAdwProgressEvent(event));
+  Effect.serviceOption(AdwProgressSink).pipe(
+    Effect.flatMap((sink) => {
+      if (Option.isSome(sink)) {
+        return sink.value.emit(event);
+      }
+      return Effect.log(formatAdwProgressEvent(event));
+    })
+  );
 
 const progressLineFromLogMessage = (message: unknown): string =>
   messageParts(message)
