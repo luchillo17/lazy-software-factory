@@ -28,11 +28,11 @@ RUN apt-get update \
 # Compiled worker + Review skill pack only (no Nx, tsx, TypeScript sources, or devDeps).
 COPY packages/adw-worker/runner/dist/adw-worker.mjs /opt/factory/adw-worker.mjs
 COPY packages/adw/host-skill-pack /opt/factory/host-skill-pack
-# Optional Cursor native helpers when present in the build context.
+# Cursor SDK + linux natives (real dirs) when building a non-deterministic runner.
 COPY packages/adw-worker/runner/dist/cursor-mods/ /opt/factory/node_modules/
-RUN chown -R adw:adw /opt/factory \
-  && ! command -v nx >/dev/null \
-  && ! command -v tsx >/dev/null
+
+ARG ADW_RUNNER_REQUIRE_CURSOR=0
+ARG ADW_RUNNER_LINUX_NATIVE=sdk-linux-x64
 
 ENV HOME=/home/adw \
   ADW_HOST_SKILL_PACK_ROOT=/opt/factory/host-skill-pack \
@@ -40,6 +40,17 @@ ENV HOME=/home/adw \
   npm_config_cache=/workspace/.npm-cache \
   XDG_CACHE_HOME=/home/adw/.cache \
   NODE_ENV=production
+
+# Fail the build if Cursor helpers are required but missing/unloadable (symlink-only
+# staging used to pass here). Native packages have no "main" — assert on disk.
+RUN chown -R adw:adw /opt/factory \
+  && ! command -v nx >/dev/null \
+  && ! command -v tsx >/dev/null \
+  && if [ "${ADW_RUNNER_REQUIRE_CURSOR}" = "1" ]; then \
+    node -e "require.resolve('@cursor/sdk')" \
+    && test -f "/opt/factory/node_modules/@cursor/${ADW_RUNNER_LINUX_NATIVE}/package.json" \
+    && test -d "/opt/factory/node_modules/@cursor/${ADW_RUNNER_LINUX_NATIVE}/bin"; \
+  fi
 
 USER adw
 WORKDIR /workspace
