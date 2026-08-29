@@ -40,6 +40,7 @@ ENV HOME=/home/adw \
   npm_config_cache=/workspace/.npm-cache \
   npm_config_store_dir=/home/adw/.cache/pnpm-store \
   XDG_CACHE_HOME=/home/adw/.cache \
+  NX_NATIVE_FILE_CACHE_DIRECTORY=/workspace/.nx/native-cache \
   NODE_ENV=production
 
 # Fail the build if Cursor helpers are required but missing/unloadable (adjacent-only

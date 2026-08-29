@@ -7,6 +7,7 @@ dist/
 build/
 .turbo/
 .nx/
+.npm-cache/
 *.tsbuildinfo
 
 # Env / secrets

@@ -12,10 +12,10 @@
     "adw": "./bin/adw.mjs"
   },
   "scripts": {
-    "nx": "NX_NATIVE_FILE_CACHE_DIRECTORY=.nx/native-cache nx",
-    "graph": "NX_NATIVE_FILE_CACHE_DIRECTORY=.nx/native-cache nx graph",
-    "typecheck": "NX_NATIVE_FILE_CACHE_DIRECTORY=.nx/native-cache nx run-many -t typecheck",
-    "test": "NX_NATIVE_FILE_CACHE_DIRECTORY=.nx/native-cache nx run-many -t test",
+    "nx": "nx",
+    "graph": "nx graph",
+    "typecheck": "nx run-many -t typecheck",
+    "test": "nx run-many -t test",
     "ensure:gh-stack": "node ./scripts/ensure-gh-stack.ts",
     "postinstall": "node ./scripts/ensure-gh-stack.ts",
     "prepare": "husky && effect-language-service patch",
