@@ -78,7 +78,11 @@ describe("docker argv builders", () => {
       )
     );
     assert.isTrue(args.some((a) => a.startsWith(`${DOCKER_TMP_PATH}:`)));
-    assert.isTrue(args.some((a) => a.startsWith(`${DOCKER_CACHE_PATH}:`)));
+    const cacheMount = args.find((a) => a.startsWith(`${DOCKER_CACHE_PATH}:`));
+    assert.isDefined(cacheMount);
+    assert.include(cacheMount, "uid=10001");
+    assert.include(cacheMount, "gid=10001");
+    assert.include(cacheMount, "mode=0700");
   });
 
   it("create args never embed secret-looking env by convention tests", () => {

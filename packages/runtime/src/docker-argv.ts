@@ -78,7 +78,7 @@ export const dockerCreateArgs = (options: {
     "--tmpfs",
     `${DOCKER_TMP_PATH}:rw,noexec,nosuid,size=${tmpSize}`,
     "--tmpfs",
-    `${DOCKER_CACHE_PATH}:rw,exec,nosuid,size=${cacheSize}`,
+    `${DOCKER_CACHE_PATH}:rw,exec,nosuid,size=${cacheSize},uid=10001,gid=10001,mode=0700`,
     // No --privileged, no Docker socket mount, no -p / --publish.
   ];
 
