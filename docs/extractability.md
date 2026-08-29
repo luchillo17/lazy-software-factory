@@ -1,8 +1,8 @@
 # Extractability note (v0)
 
-How to depend on the extractable Factory packages from **outside** this monorepo’s own apps — and how to invoke **Host** against a foreign git tree without npm publish.
+How to depend on the extractable Factory packages from **outside** this monorepo’s own apps — invoke **Host** against a foreign git tree, or compose a **SandboxProvider** for the generic controller — without npm publish.
 
-Glossary: [`CONTEXT.md`](../CONTEXT.md). Cut: [`VISION.md`](./VISION.md) §3 · §4. Decision: [ADR-0002](./adr/0002-nx-monorepo-extractable-packages.md). Split: [ADR-0001](./adr/0001-skills-runtime-adw-split.md). Host foreign cwd: [ADR-0015](./adr/0015-host-foreign-cwd-before-docker.md). Operator runbook: [`docs/host-self-build.md`](./host-self-build.md).
+Glossary: [`CONTEXT.md`](../CONTEXT.md). Cut: [`VISION.md`](./VISION.md) §3 · §4 · §5. Decision: [ADR-0002](./adr/0002-nx-monorepo-extractable-packages.md). Split: [ADR-0001](./adr/0001-skills-runtime-adw-split.md). Host foreign cwd: [ADR-0015](./adr/0015-host-foreign-cwd-before-docker.md). Worker: [ADR-0016](./adr/0016-sandbox-resident-adw-worker.md). Operator: [`docs/host-self-build.md`](./host-self-build.md), [`docs/docker-operator.md`](./docker-operator.md).
 
 ## Packages
 
@@ -41,7 +41,7 @@ To run Host **Minimal ADW** against another git tree (still no npm publish):
 3. Ensure the target cwd has a Skill pack for Build (`.agents/skills` including `/implement`). Review’s `/adw-review` is Host-bundled.
 4. Start Host with either:
    - **`adw-host`** from the target repo (omitted `--cwd` → invoker directory), or
-   - **`pnpm adw:host -- … --cwd <dir>`** from the Factory clone.
+   - **`pnpm adw:host -- … --cwd <dir>`** / **`pnpm adw -- --sandbox host …`** from the Factory clone.
 
 ```bash
 # from the product repo
@@ -49,6 +49,7 @@ To run Host **Minimal ADW** against another git tree (still no npm publish):
 
 # from the Factory clone
 pnpm adw:host -- --issue 123 --cwd ../my-product
+pnpm adw -- --sandbox host --issue 123 --cwd ../my-product
 ```
 
 **Footgun:** `--repo-url` does **not** replace an existing `.git` in the sandbox cwd (ADR-0010 reuse). Do not pass `--repo-url` from a Factory checkout to “aim” at another product — use `--cwd` or run `adw-host` from that product. Details: [`docs/host-self-build.md`](./host-self-build.md).
@@ -65,3 +66,15 @@ Reference Host Minimal ADW composition: `@lazy-software-factory/adw` (`hostMinim
 - `Effect.provide` a Layer merge that supplies `SandboxProvider`, Build/Review `AgentProvider`s, and `GitHost` (plus caps/progress sinks as needed).
 - Pass credentials per run (`CURSOR_API_KEY`, `GH_TOKEN`, …) — not baked into package code (ADR-0003).
 - Pass `cwd` when the warm sandbox should not be `process.cwd()`.
+
+## Compose SandboxProvider without Docker types in ADW graph code
+
+The generic controller (`runMinimalAdw`) depends only on the **project-owned** `SandboxProvider` Effect service (`@lazy-software-factory/runtime`). Provider choice is a **composition-root** concern — keep Docker/OCI types out of Minimal ADW graph modules (`run-minimal-adw`, provision, agents, gates):
+
+1. Import `runMinimalAdw` from `@lazy-software-factory/adw` in your thin app or operator.
+2. At that edge only, `Effect.provide` either:
+   - `SandboxProvider.host({ … })` / Host Layer helpers, or
+   - `dockerSandboxProviderLayer({ image })` / `makeDockerSandboxProviderLayer` from **`@lazy-software-factory/runtime`** (OCI image ref stays Layer config).
+3. Factory reference: `operator-cli.ts` is the composition root that selects Host vs Docker Layers; `adw-host` always provides Host. Graph/worker protocol packages stay provider-agnostic.
+
+Consumers adding a cloud adapter implement the same `SandboxProvider` contract and provide their Layer at the edge. See [ADR-0016](./adr/0016-sandbox-resident-adw-worker.md) and [`docs/agents/sandbox-provider-conformance.md`](./agents/sandbox-provider-conformance.md).

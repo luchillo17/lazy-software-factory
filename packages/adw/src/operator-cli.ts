@@ -57,9 +57,9 @@ const operatorFlagConfig = {
     AdwSandboxProviderKind.Docker,
   ]).pipe(
     Flag.withDescription(
-      "Sandbox backend. Default: host (unchanged). Pass docker explicitly for isolated ADWs."
+      "Sandbox backend. Default: docker. Pass --sandbox host (or use adw-host) for the lightweight Host path."
     ),
-    Flag.withDefault(AdwSandboxProviderKind.Host)
+    Flag.withDefault(AdwSandboxProviderKind.Docker)
   ),
   issue: optionalStringFlag(
     "issue",
@@ -69,7 +69,7 @@ const operatorFlagConfig = {
   prompt: optionalStringFlag("prompt", "Manual Initial prompt. Or ADW_PROMPT."),
   repoUrl: optionalStringFlag(
     "repo-url",
-    "Remote Git URL. Required for --sandbox docker; Host uses it when cwd has no .git."
+    "Remote Git URL. Required for Docker (default); Host uses it when cwd has no .git."
   ),
   startingRef: optionalStringFlag(
     "starting-ref",
@@ -77,7 +77,7 @@ const operatorFlagConfig = {
   ),
   cwd: optionalStringFlag(
     "cwd",
-    "Host warm sandbox directory only. Rejected for --sandbox docker."
+    "Host warm sandbox directory only. Rejected for Docker (default sandbox)."
   ),
 };
 
@@ -111,20 +111,19 @@ export const operatorFlagsFromCli = (
 });
 
 const OPERATOR_CLI_DESCRIPTION =
-  "Run one Minimal ADW. Default --sandbox host (same as adw-host). Pass --sandbox docker for an isolated container worker; Docker requires --repo-url and rejects --cwd.";
+  "Run one Minimal ADW. Default --sandbox docker (isolated container worker; requires --repo-url; rejects --cwd). Pass --sandbox host or use adw-host for the lightweight Host path.";
 
 const OPERATOR_CLI_EXAMPLES: ReadonlyArray<{
   readonly command: string;
   readonly description?: string;
 }> = [
   {
-    command: "adw --issue <n> [--cwd <dir>]",
-    description: "Host Minimal ADW (default sandbox)",
+    command: "adw --issue <n> --repo-url <url> [--starting-ref <ref>]",
+    description: "Docker Minimal ADW (default sandbox)",
   },
   {
-    command:
-      "adw --sandbox docker --issue <n> --repo-url <url> [--starting-ref <ref>]",
-    description: "Isolated Docker Minimal ADW (explicit; not yet the default)",
+    command: "adw --sandbox host --issue <n> [--cwd <dir>]",
+    description: "Host Minimal ADW (explicit; same as adw-host)",
   },
 ];
 

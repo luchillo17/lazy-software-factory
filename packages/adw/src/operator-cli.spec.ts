@@ -43,7 +43,7 @@ const OperatorCliTestLayer = Layer.mergeAll(
 );
 
 describe("generic adw CLI", () => {
-  it("defaults sandbox to host without changing Host default", () => {
+  it("maps explicit --sandbox host through operatorFlagsFromCli", () => {
     const flags = operatorFlagsFromCli({
       sandbox: AdwSandboxProviderKind.Host,
       issue: Option.none(),
@@ -55,6 +55,33 @@ describe("generic adw CLI", () => {
     });
     assert.strictEqual(flags.sandbox, AdwSandboxProviderKind.Host);
   });
+
+  it.effect(
+    "defaults sandbox to docker (requires --repo-url without --sandbox)",
+    () =>
+      Effect.gen(function* () {
+        const prev = process.env["ADW_REPO_URL"];
+        delete process.env["ADW_REPO_URL"];
+        const code = yield* runOperatorArgv([
+          "--ticket",
+          "86",
+          "--prompt",
+          "x",
+        ]).pipe(Effect.provide(OperatorCliTestLayer));
+        if (prev !== undefined) {
+          process.env["ADW_REPO_URL"] = prev;
+        }
+        assert.strictEqual(code, 1);
+        const errors = yield* TestConsole.errorLines;
+        assert.isTrue(
+          errors.some(
+            (line) =>
+              typeof line === "string" &&
+              line.includes("Docker sandbox requires --repo-url")
+          )
+        );
+      })
+  );
 
   it.effect("rejects docker with --cwd", () =>
     Effect.gen(function* () {
@@ -90,6 +117,19 @@ describe("generic adw CLI", () => {
         process.env["ADW_REPO_URL"] = prev;
       }
       assert.strictEqual(code, 1);
+    })
+  );
+
+  it.effect("help documents docker as default and host as explicit", () =>
+    Effect.gen(function* () {
+      const code = yield* runOperatorArgv(["--help"]).pipe(
+        Effect.provide(OperatorCliTestLayer)
+      );
+      assert.strictEqual(code, 0);
+      const help = (yield* TestConsole.logLines).map(String).join("\n");
+      assert.isTrue(help.includes("Default: docker"));
+      assert.isTrue(help.includes("--sandbox host"));
+      assert.isTrue(help.includes("adw-host"));
     })
   );
 

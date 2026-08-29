@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
- * Provider-neutral `adw` bin. Default sandbox remains host; pass
- * `--sandbox docker` explicitly for isolated runners.
+ * Provider-neutral `adw` bin. Default sandbox is docker; pass
+ * `--sandbox host` (or use `adw-host`) for the lightweight Host path.
  */
 import { spawnSync } from "node:child_process";
 import { dirname, resolve } from "node:path";
