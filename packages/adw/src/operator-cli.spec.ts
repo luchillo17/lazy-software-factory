@@ -7,6 +7,7 @@ import {
   operatorCliConfigLayer,
   operatorFlagsFromCli,
   runOperatorArgv,
+  selectDockerWorkerEnv,
 } from "./operator-cli.ts";
 import { stripPnpmLeadingDashDash } from "./host-operator-cli.ts";
 import { hostOperatorFsLayer } from "./host-operator.ts";
@@ -97,5 +98,23 @@ describe("generic adw CLI", () => {
       "--issue",
       "1",
     ]);
+  });
+
+  it("passes only explicit worker credentials and settings into Docker", () => {
+    assert.deepStrictEqual(
+      selectDockerWorkerEnv({
+        CURSOR_API_KEY: "cursor-key",
+        GH_TOKEN: "github-token",
+        ADW_MODEL: "grok-4.5",
+        HOME: "/home/operator",
+        PNPM_HOME: "/home/operator/.local/share/pnpm",
+        AWS_SECRET_ACCESS_KEY: "unrelated-secret",
+      }),
+      {
+        CURSOR_API_KEY: "cursor-key",
+        GH_TOKEN: "github-token",
+        ADW_MODEL: "grok-4.5",
+      }
+    );
   });
 });

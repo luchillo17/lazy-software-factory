@@ -173,8 +173,34 @@ const prepareDockerOperatorEnv = (
 ): Effect.Effect<Record<string, string>, never, never> =>
   loadHostDotEnv(process.cwd()).pipe(
     Effect.provide(hostOperatorFsLayer),
-    Effect.map((fileEnv) => mergeHostOperatorEnv(fileEnv, shell)),
-    Effect.orElseSucceed(() => mergeHostOperatorEnv({}, shell))
+    Effect.map((fileEnv) =>
+      selectDockerWorkerEnv(mergeHostOperatorEnv(fileEnv, shell))
+    ),
+    Effect.orElseSucceed(() =>
+      selectDockerWorkerEnv(mergeHostOperatorEnv({}, shell))
+    )
+  );
+
+const dockerWorkerEnvKeys = [
+  "CURSOR_API_KEY",
+  "GH_TOKEN",
+  "ADW_MODEL",
+  "CURSOR_MODEL",
+  "GH_HOST",
+  "GIT_AUTHOR_NAME",
+  "GIT_AUTHOR_EMAIL",
+  "GIT_COMMITTER_NAME",
+  "GIT_COMMITTER_EMAIL",
+] as const;
+
+/** Keep host paths and unrelated credentials out of the Docker worker. */
+export const selectDockerWorkerEnv = (
+  env: Readonly<Record<string, string>>
+): Record<string, string> =>
+  Object.fromEntries(
+    dockerWorkerEnvKeys.flatMap((key) =>
+      env[key] === undefined ? [] : [[key, env[key]]]
+    )
   );
 
 const handleOperator = (config: OperatorCliConfig) =>
