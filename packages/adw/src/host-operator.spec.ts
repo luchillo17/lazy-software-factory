@@ -123,10 +123,12 @@ describe("host operator entry", () => {
           status: AdwStatus.Shipped,
           prUrl: "https://example.test/pr/1",
           sandboxId: "sbx",
+          buildSessionId: "build-1",
+          reviewSessionId: "review-1",
         });
         assert.strictEqual(
           line,
-          "status=shipped ticket=T-1 pr=https://example.test/pr/1 sandbox=sbx"
+          "status=shipped ticket=T-1 pr=https://example.test/pr/1 sandbox=sbx buildSession=build-1 reviewSession=review-1"
         );
         assert.isFalse(line.toLowerCase().includes("token"));
         assert.isFalse(line.toLowerCase().includes("api_key"));

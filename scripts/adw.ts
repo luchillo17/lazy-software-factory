@@ -2,6 +2,18 @@
  * Provider-neutral Minimal ADW operator (`adw`).
  * Default sandbox is docker; Host via `--sandbox host` or `adw-host`.
  */
-import { runOperatorMain } from "../packages/adw/src/operator-cli.ts";
+import { NodeRuntime } from "@effect/platform-node";
+import { Effect } from "effect";
+import { operatorMainEffect } from "../packages/adw/src/operator-cli.ts";
 
-process.exit(await runOperatorMain(process.argv.slice(2)));
+NodeRuntime.runMain(
+  operatorMainEffect(process.argv.slice(2)).pipe(
+    Effect.tap((code) =>
+      Effect.sync(() => {
+        process.exitCode = code;
+      })
+    ),
+    Effect.asVoid
+  ),
+  { disableErrorReporting: true }
+);

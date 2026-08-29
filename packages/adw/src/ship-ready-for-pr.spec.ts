@@ -264,7 +264,10 @@ describe("runMinimalAdwGraph Ship → ready_for_pr", () => {
       }).pipe(Effect.provide(Layer.mergeAll(greenAgents, gitLayer)));
 
       assert.strictEqual(result.status, AdwStatus.ReadyForPr);
-      assert.strictEqual(result.detail, "Ship commit failed");
+      assert.include(
+        result.detail,
+        "Ship commit failed: GitHostError: commit failed"
+      );
       assert.isFalse(yield* Ref.get(pushed));
     })
   );

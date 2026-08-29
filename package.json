@@ -27,6 +27,7 @@
     "@commitlint/cli": "^21.2.2",
     "@commitlint/config-conventional": "^21.2.2",
     "@effect/language-service": "^0.87.2",
+    "@effect/platform-node": "4.0.0-beta.106",
     "@nx/js": "23.1.2",
     "@nx/vite": "23.1.2",
     "@nx/vitest": "23.1.2",

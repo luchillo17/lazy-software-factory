@@ -65,7 +65,7 @@ describe("runMinimalAdw controller seam", () => {
                       ticketId: "82",
                       status: AdwWorkerAdwStatus.Shipped,
                       prUrl: "https://example.test/pr/1",
-                      sandboxId: "lease-1",
+                      sandboxId: "worker-local",
                     },
                     effectiveCapabilities: hostCaps,
                   } satisfies AdwWorkerTerminalOutcome;
@@ -89,6 +89,7 @@ describe("runMinimalAdw controller seam", () => {
       );
       assert.strictEqual(controlled.result.status, AdwStatus.Shipped);
       assert.strictEqual(controlled.result.prUrl, "https://example.test/pr/1");
+      assert.strictEqual(controlled.result.sandboxId, "lease-1");
       assert.isTrue(
         progressLines.some((line) => line.includes("step=provision"))
       );

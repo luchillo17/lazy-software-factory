@@ -9,6 +9,7 @@ Glossary: [`CONTEXT.md`](../CONTEXT.md). Cut: [`VISION.md`](./VISION.md) §5. Wo
 - Docker Engine on the operator machine (`docker` on `PATH`; daemon reachable)
 - Node `>=22.18` + `pnpm install` at this Factory root (controller + image build)
 - Operator-machine credentials in shell or Factory checkout `.env`: **`CURSOR_API_KEY`**, **`GH_TOKEN`** (Issues, Contents, Pull requests). Shell wins over dotenv. Secrets ride **worker stdin** only — never image layers or `docker create -e`
+- Git identity in shell or `.env`: `GIT_AUTHOR_NAME`, `GIT_AUTHOR_EMAIL`, `GIT_COMMITTER_NAME`, `GIT_COMMITTER_EMAIL`. Fresh container clones do not inherit host Git config
 - `gh` on `PATH` for TicketIntake on the operator host (Ship/`gh` inside the worker use the injected `GH_TOKEN`)
 - An **open** `ready-for-agent` Issue on the **target** remote (or `--ticket` / `--prompt`)
 - Local runner image built once (below)
@@ -53,7 +54,7 @@ Pass through operator `.env` / shell. Docker keeps a **whitelist** into the work
 
 ## Resource requests, cancellation, cleanup
 
-- **Limits** (CPU fractional cores, memory bytes, PID count, lifetime ms) are SandboxProvider concerns on the Docker Layer / acquire path — enforced via `docker create` where supported; reported on effective capabilities. Soft prefs the backend cannot meet stay visible as unmet. Host cannot enforce these (hard → fail).
+- **Limits** (CPU fractional cores, memory bytes, PID count, lifetime ms) are SandboxProvider concerns on the Docker Layer / acquire path — enforced via `docker create` where supported; reported on effective capabilities. Generic CLI currently requests no explicit limits and exposes no resource flags; embedding consumers configure `defaultLimits` on `dockerSandboxProviderLayer`. Soft prefs the backend cannot meet stay visible as unmet. Host cannot enforce these (hard → fail).
 - **Capacity** — configurable concurrent leases (default 32). Exhaustion → typed busy/capacity error; **no** provider-side queue.
 - **Cancel** — interrupt the controller Effect: graceful stop → force-kill → idempotent release of container, volume, and capacity slot.
 - **Cleanup** — after terminal exit, worker container and workspace volume are removed. Verify:
@@ -84,7 +85,7 @@ Sandbox isolates **compute and filesystem** (container + ephemeral volume). It d
 ## Proven live + automated evidence
 
 - **Automated concurrency / cancel / leak:** [#85](https://github.com/luchillo17/lazy-software-factory/issues/85) / [PR #92](https://github.com/luchillo17/lazy-software-factory/pull/92) — `packages/adw/src/docker-integration.spec.ts` (`pnpm nx run @lazy-software-factory/adw:test-docker`)
-- **Live self-build:** proof ticket [#93](https://github.com/luchillo17/lazy-software-factory/issues/93) → shipped [PR #94](https://github.com/luchillo17/lazy-software-factory/pull/94); default flip [#86](https://github.com/luchillo17/lazy-software-factory/issues/86)
+- **Live self-build:** proof ticket [#93](https://github.com/luchillo17/lazy-software-factory/issues/93) → shipped [PR #94](https://github.com/luchillo17/lazy-software-factory/pull/94); default flip [#86](https://github.com/luchillo17/lazy-software-factory/issues/86). Recorded terminal `completed`, status `shipped`, Build/Review session IDs, effective container capabilities, no requested/effective resource limits, and empty post-exit container/volume queries. Full redacted values live on #86.
 
 ## Explicit non-goals
 

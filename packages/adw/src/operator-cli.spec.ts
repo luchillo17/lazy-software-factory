@@ -3,12 +3,24 @@ import { Effect, Layer, Stdio, Terminal } from "effect";
 import { TestConsole } from "effect/testing";
 import { ChildProcessSpawner } from "effect/unstable/process";
 import {
+  AdwWorkerAdwStatus,
+  AdwWorkerCapability,
+  AdwWorkerIsolation,
+  AdwWorkerTerminalKind,
+} from "@lazy-software-factory/adw-worker";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import {
   AdwSandboxProviderKind,
+  formatDockerOperatorResult,
   operatorCliConfigLayer,
   operatorFlagsFromCli,
+  prepareDockerOperatorSession,
   runOperatorArgv,
   selectDockerWorkerEnv,
 } from "./operator-cli.ts";
+import { resolveAdwRunnerImage } from "./docker-runner-image.ts";
 import { stripPnpmLeadingDashDash } from "./host-operator-cli.ts";
 import { hostOperatorFsLayer } from "./host-operator.ts";
 import { TicketIntake, TicketIntakeError } from "./ticket-intake.ts";
@@ -155,6 +167,91 @@ describe("generic adw CLI", () => {
         GH_TOKEN: "github-token",
         ADW_MODEL: "grok-4.5",
       }
+    );
+  });
+
+  it("formats Docker lease, sessions, image, and capabilities", () => {
+    const effectiveCapabilities = {
+      capabilities: [AdwWorkerCapability.CursorLocalAgent],
+      maxConcurrentLeases: 32,
+      isolation: AdwWorkerIsolation.Container,
+    };
+    const result = {
+      ticketId: "86",
+      status: AdwWorkerAdwStatus.Shipped,
+      sandboxId: "docker-lease-1",
+      buildSessionId: "build-1",
+      reviewSessionId: "review-1",
+      prUrl: "https://example.test/pr/1",
+    };
+    const line = formatDockerOperatorResult(
+      {
+        outcome: {
+          kind: AdwWorkerTerminalKind.Completed,
+          result,
+          effectiveCapabilities,
+        },
+        result,
+        effectiveCapabilities,
+      },
+      "example.test/adw:proof"
+    );
+    assert.include(line, "sandbox=docker-lease-1");
+    assert.include(line, "buildSession=build-1");
+    assert.include(line, "reviewSession=review-1");
+    assert.include(line, "terminal=completed");
+    assert.include(line, "image=example.test/adw:proof");
+    assert.include(line, '"isolation":"container"');
+  });
+
+  it.effect("loads Docker URL and image override from operator .env", () => {
+    const dir = mkdtempSync(join(tmpdir(), "adw-docker-env-"));
+    writeFileSync(
+      join(dir, ".env"),
+      [
+        "ADW_REPO_URL=https://example.test/from-dotenv.git",
+        "ADW_RUNNER_IMAGE=example.test/adw:proof",
+      ].join("\n")
+    );
+
+    return Effect.gen(function* () {
+      const session = yield* prepareDockerOperatorSession(
+        { ticket: "86", prompt: "x" },
+        dir,
+        {}
+      );
+      assert.strictEqual(
+        session.args.repoUrl,
+        "https://example.test/from-dotenv.git"
+      );
+      assert.strictEqual(
+        resolveAdwRunnerImage(session.env),
+        "example.test/adw:proof"
+      );
+    }).pipe(
+      Effect.provide(hostOperatorFsLayer),
+      Effect.ensuring(Effect.sync(() => rmSync(dir, { recursive: true })))
+    );
+  });
+
+  it.effect("rejects ADW_CWD loaded from operator .env", () => {
+    const dir = mkdtempSync(join(tmpdir(), "adw-docker-cwd-"));
+    writeFileSync(join(dir, ".env"), "ADW_CWD=/tmp/host-only\n");
+
+    return prepareDockerOperatorSession(
+      { ticket: "86", prompt: "x" },
+      dir,
+      {}
+    ).pipe(
+      Effect.flip,
+      Effect.tap((error) =>
+        Effect.sync(() => {
+          assert.include(error.message, "Docker sandbox rejects");
+        })
+      ),
+      Effect.asVoid,
+      Effect.provide(hostOperatorFsLayer),
+      Effect.ensuring(Effect.sync(() => rmSync(dir, { recursive: true })))
     );
   });
 });

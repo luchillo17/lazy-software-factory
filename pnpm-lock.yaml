@@ -16,6 +16,9 @@ importers:
       "@effect/language-service":
         specifier: ^0.87.2
         version: 0.87.2
+      "@effect/platform-node":
+        specifier: 4.0.0-beta.106
+        version: 4.0.0-beta.106(effect@4.0.0-beta.106)(ioredis@5.11.1)
       "@nx/js":
         specifier: 23.1.2
         version: 23.1.2(@babel/traverse@7.29.8)(nx@23.1.2)
