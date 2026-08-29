@@ -9,6 +9,9 @@ export const DOCKER_WORKSPACE_PATH = "/workspace" as const;
 /** Writable temp inside the read-only root filesystem. */
 export const DOCKER_TMP_PATH = "/tmp" as const;
 
+/** Ephemeral writable home for Cursor state, GitHub CLI, and tool caches. */
+export const DOCKER_HOME_PATH = "/home/adw" as const;
+
 /** Writable cache home for package managers / tooling. */
 export const DOCKER_CACHE_PATH = "/home/adw/.cache" as const;
 
@@ -62,7 +65,7 @@ export const dockerCreateArgs = (options: {
     "--tmpfs",
     `${DOCKER_TMP_PATH}:rw,noexec,nosuid,size=${tmpSize}`,
     "--tmpfs",
-    `${DOCKER_CACHE_PATH}:rw,exec,nosuid,size=${cacheSize},uid=10001,gid=10001,mode=0700`,
+    `${DOCKER_HOME_PATH}:rw,exec,nosuid,size=${cacheSize},uid=10001,gid=10001,mode=0700`,
     // No --privileged, no Docker socket mount, no -p / --publish.
   ];
 
