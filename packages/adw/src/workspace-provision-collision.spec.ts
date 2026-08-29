@@ -36,6 +36,9 @@ const recordingSandbox = (calls: Ref.Ref<ExecCall[]>): Sandbox => ({
       if (command === "git" && args[0] === "checkout") {
         return { exitCode: 0, stdout: "", stderr: "" };
       }
+      if (command === "cat" && args[0] === "package.json") {
+        return { exitCode: 1, stdout: "", stderr: "No such file" };
+      }
       if (command === "test") {
         return { exitCode: 1, stdout: "", stderr: "" };
       }
@@ -253,7 +256,13 @@ describe("WorkspaceProvision ticket-branch collision preflight", () => {
         [
           ["git", "rev-parse", "--git-dir"],
           ["git", "checkout", "-B", "adw/55"],
+          ["cat", "package.json"],
           ["test", "-f", "pnpm-lock.yaml"],
+          ["test", "-f", "package-lock.json"],
+          ["test", "-f", "npm-shrinkwrap.json"],
+          ["test", "-f", "yarn.lock"],
+          ["test", "-f", "bun.lockb"],
+          ["test", "-f", "bun.lock"],
         ]
       );
     })

@@ -8,8 +8,8 @@ This runbook uses **TicketIntake** (GitHub Issue ref). **Role skill binding** is
 
 ## Prerequisites
 
-- Node `>=22.18` and pnpm (see root `package.json` `engines` / `packageManager`)
-- Install at the **Factory** repo root: `pnpm install` (needed even when the sandbox is a sibling tree — Host loads packages from this checkout)
+- Node `>=22.18` and a supported package manager for the **target** tree (npm, pnpm, or Yarn — see that repo’s `packageManager` / lockfile; Factory self-build uses pnpm per root `package.json`)
+- Install at the **Factory** repo root: `pnpm install` (needed even when the sandbox is a sibling tree — Host loads packages from this checkout). WorkspaceProvision then runs the target’s own locked install inside the sandbox cwd (not an Nx requirement on the target).
 - Copy [`.env.example`](../.env.example) to gitignored `.env` on the **sandbox cwd** (Factory clone for self-build; target tree for foreign cwd) and fill **`CURSOR_API_KEY`** + **`GH_TOKEN`** (Issues, Contents, Pull requests — comments on the example). Shell env already set wins over dotenv.
 - `gh` on `PATH` (TicketIntake and Ship call it; `GH_TOKEN` is the forge credential)
 - An **open** Issue on the **target** repo with label **`ready-for-agent`**

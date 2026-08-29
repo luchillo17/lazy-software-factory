@@ -51,13 +51,24 @@ describe("runMinimalAdwGraph happy path", () => {
                       );
                       return { exitCode: 0, stdout: "", stderr: "" };
                     }
+                    if (command === "cat" && args[0] === "package.json") {
+                      return {
+                        exitCode: 0,
+                        stdout: JSON.stringify({
+                          packageManager: "pnpm@9.0.0",
+                        }),
+                        stderr: "",
+                      };
+                    }
                     if (command === "test" && args[0] === "-f") {
-                      yield* record("provision-lockfile");
                       return {
                         exitCode: args[1] === "pnpm-lock.yaml" ? 0 : 1,
                         stdout: "",
                         stderr: "",
                       };
+                    }
+                    if (command === "corepack") {
+                      return { exitCode: 0, stdout: "", stderr: "" };
                     }
                     if (command === "pnpm") {
                       yield* record("provision-install");
@@ -175,7 +186,6 @@ describe("runMinimalAdwGraph happy path", () => {
         "sandbox",
         "provision-git",
         "provision-branch",
-        "provision-lockfile",
         "provision-install",
         "build",
         "test",
