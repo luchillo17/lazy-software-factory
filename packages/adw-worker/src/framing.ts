@@ -1,9 +1,9 @@
 import { Effect, Schema } from "effect";
 import {
-  ADW_WORKER_PROTOCOL_VERSION,
   AdwWorkerFrameSchema,
   AdwWorkerHandshakeKind,
   AdwWorkerHandshakeRequestSchema,
+  AdwWorkerProtocolVersion,
   AdwWorkerRequestSchema,
   type AdwWorkerFrame,
   type AdwWorkerHandshakeRequest,
@@ -34,7 +34,7 @@ export const encodeWorkerRequest = (request: AdwWorkerRequest): string =>
 /** Encode the pre-secret handshake line for worker stdin. */
 export const encodeWorkerHandshake = (
   handshake: AdwWorkerHandshakeRequest = {
-    protocolVersion: ADW_WORKER_PROTOCOL_VERSION,
+    protocolVersion: AdwWorkerProtocolVersion.V1,
     kind: AdwWorkerHandshakeKind.Handshake,
   }
 ): string => `${JSON.stringify(handshake)}\n`;
@@ -102,7 +102,7 @@ export const decodeWorkerFrame = (
       raw !== null &&
       "protocolVersion" in raw &&
       (raw as { protocolVersion: unknown }).protocolVersion !==
-        ADW_WORKER_PROTOCOL_VERSION
+        AdwWorkerProtocolVersion.V1
     ) {
       return yield* new AdwWorkerProtocolError({
         message: `Unsupported worker protocol version: ${String(

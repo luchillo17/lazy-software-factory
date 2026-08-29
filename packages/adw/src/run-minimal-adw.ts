@@ -1,6 +1,6 @@
 import {
-  ADW_WORKER_PROTOCOL_VERSION,
   AdwWorkerProgressKind,
+  AdwWorkerProtocolVersion,
   AdwWorkerTerminalKind,
   defaultMinimalAdwCapabilityRequirements,
   type AdwWorkerEffectiveCapabilities,
@@ -23,9 +23,7 @@ import type {
 export type {
   MinimalAdwInput,
   MinimalAdwResult,
-  MinimalAdwServices,
 } from "./run-minimal-adw-graph.ts";
-export { runMinimalAdwGraph } from "./run-minimal-adw-graph.ts";
 
 const toAdwProgressEvent = (
   event: AdwWorkerProgressEvent
@@ -165,7 +163,7 @@ export const runMinimalAdwController = (
       const workerExit = yield* Effect.exit(
         lease.runWorker(
           {
-            protocolVersion: ADW_WORKER_PROTOCOL_VERSION,
+            protocolVersion: AdwWorkerProtocolVersion.V1,
             ticketId: input.ticketId,
             prompt: input.prompt,
             cwd: input.cwd ?? lease.cwd,
@@ -180,7 +178,7 @@ export const runMinimalAdwController = (
         )
       );
 
-      const outcome: AdwWorkerTerminalOutcome = Exit.match(workerExit, {
+      const workerOutcome: AdwWorkerTerminalOutcome = Exit.match(workerExit, {
         onSuccess: (value) => value,
         onFailure: (cause) => {
           if (Cause.hasInterruptsOnly(cause)) {
@@ -201,6 +199,16 @@ export const runMinimalAdwController = (
       // Lease metadata is authoritative for provider limits / unmet soft prefs;
       // the worker terminal frame may echo a subset for protocol completeness.
       const effectiveCapabilities = lease.effectiveCapabilities;
+      const releaseExit = yield* lease.release().pipe(Effect.exit);
+      const outcome: AdwWorkerTerminalOutcome = Exit.isFailure(releaseExit)
+        ? {
+            kind: AdwWorkerTerminalKind.InfrastructureFailed,
+            detail: `Sandbox cleanup failed: ${detailFromUnknown(
+              Cause.squash(releaseExit.cause)
+            )}`,
+            effectiveCapabilities,
+          }
+        : workerOutcome;
       const result = {
         ...minimalAdwResultFromOutcome(outcome, input.ticketId),
         // Worker-local providers report their own internal id (for example

@@ -3,7 +3,10 @@ import type { Sandbox } from "@lazy-software-factory/runtime";
 import { Effect, Layer, Ref } from "effect";
 import { stubGitHost } from "./git-host-stub.ts";
 import { GitHost, GitHostError } from "./git-host.ts";
-import { WorkspaceProvision } from "./workspace-provision.ts";
+import {
+  ProvisionErrorTag,
+  WorkspaceProvision,
+} from "./workspace-provision.ts";
 
 type ExecCall = {
   readonly command: string;
@@ -32,7 +35,7 @@ const recordingSandbox = (
   return {
     id: "sandbox-1",
     cwd: "/tmp/sandbox-1",
-    exec: (command, args = []) =>
+    exec: ({ command, argv: args = [] }) =>
       Effect.gen(function* () {
         yield* Ref.update(calls, (c) => [...c, { command, args: [...args] }]);
 
@@ -186,7 +189,9 @@ describe("WorkspaceProvision.Host locked install", () => {
 
       const message = yield* provision(sandbox).pipe(
         Effect.map(() => null as string | null),
-        Effect.catchTag("ProvisionError", (e) => Effect.succeed(e.message))
+        Effect.catchTag(ProvisionErrorTag.ProvisionError, (e) =>
+          Effect.succeed(e.message)
+        )
       );
       assert.isTrue(
         message?.includes("Unsupported package manager deno") ?? false
@@ -329,7 +334,9 @@ describe("WorkspaceProvision.Host locked install", () => {
 
         const message = yield* provision(sandbox).pipe(
           Effect.map(() => null as string | null),
-          Effect.catchTag("ProvisionError", (e) => Effect.succeed(e.message))
+          Effect.catchTag(ProvisionErrorTag.ProvisionError, (e) =>
+            Effect.succeed(e.message)
+          )
         );
 
         assert.isTrue(message?.includes("Contradictory lockfiles") ?? false);
@@ -351,7 +358,9 @@ describe("WorkspaceProvision.Host locked install", () => {
 
       const message = yield* provision(sandbox).pipe(
         Effect.map(() => null as string | null),
-        Effect.catchTag("ProvisionError", (e) => Effect.succeed(e.message))
+        Effect.catchTag(ProvisionErrorTag.ProvisionError, (e) =>
+          Effect.succeed(e.message)
+        )
       );
       assert.isTrue(message?.includes("requires pnpm-lock.yaml") ?? false);
       assert.isFalse(
@@ -372,7 +381,9 @@ describe("WorkspaceProvision.Host locked install", () => {
 
       const message = yield* provision(sandbox).pipe(
         Effect.map(() => null as string | null),
-        Effect.catchTag("ProvisionError", (e) => Effect.succeed(e.message))
+        Effect.catchTag(ProvisionErrorTag.ProvisionError, (e) =>
+          Effect.succeed(e.message)
+        )
       );
       assert.isTrue(
         message?.includes("Unsupported package manager bun") ?? false
@@ -404,7 +415,9 @@ describe("WorkspaceProvision.Host locked install", () => {
 
         const message = yield* provision(sandbox).pipe(
           Effect.map(() => null as string | null),
-          Effect.catchTag("ProvisionError", (e) => Effect.succeed(e.message))
+          Effect.catchTag(ProvisionErrorTag.ProvisionError, (e) =>
+            Effect.succeed(e.message)
+          )
         );
         assert.isNotNull(message);
         assert.isFalse(message!.includes(secret));
@@ -432,7 +445,7 @@ describe("WorkspaceProvision.Host", () => {
       const sandbox: Sandbox = {
         id: "sandbox-1",
         cwd: "/tmp/sandbox-1",
-        exec: (command, args = []) =>
+        exec: ({ command, argv: args = [] }) =>
           Effect.gen(function* () {
             yield* Ref.update(calls, (c) => [
               ...c,
@@ -533,7 +546,7 @@ describe("WorkspaceProvision.Host", () => {
       // Force missing git by custom sandbox:
       const empty: Sandbox = {
         ...sandbox,
-        exec: (command, args = []) => {
+        exec: ({ command, argv: args = [] }) => {
           if (command === "git") {
             return Effect.succeed({
               exitCode: 128,
@@ -541,7 +554,7 @@ describe("WorkspaceProvision.Host", () => {
               stderr: "not a git repository",
             });
           }
-          return sandbox.exec(command, args);
+          return sandbox.exec({ command, argv: args });
         },
       };
 
@@ -581,7 +594,7 @@ describe("WorkspaceProvision.Host", () => {
       const empty: Sandbox = {
         id: "sandbox-1",
         cwd: "/tmp/sandbox-1",
-        exec: (command) =>
+        exec: ({ command }) =>
           Effect.succeed(
             command === "git"
               ? {

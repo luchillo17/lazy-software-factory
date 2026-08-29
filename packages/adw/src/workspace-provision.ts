@@ -14,8 +14,13 @@ import { ticketBranch } from "./ticket-branch.ts";
 /** Bound install failure text in ADW `detail` (after redaction). */
 const INSTALL_DIAGNOSTIC_MAX_CHARS = 2_000;
 
+export const ProvisionErrorTag = {
+  ProvisionError: "ProvisionError",
+} as const;
+export const ProvisionErrorTagSchema = Schema.Enum(ProvisionErrorTag);
+
 export class ProvisionError extends Schema.TaggedError<ProvisionError>()(
-  "ProvisionError",
+  ProvisionErrorTag.ProvisionError,
   {
     message: Schema.String,
     cause: Schema.optional(Schema.Defect()),
@@ -50,7 +55,7 @@ const execOrProvisionFail = (
   },
   ProvisionError
 > =>
-  sandbox.exec(command, args).pipe(
+  sandbox.exec({ command, argv: args }).pipe(
     Effect.mapError(
       (err) =>
         new ProvisionError({

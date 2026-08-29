@@ -14,7 +14,7 @@ const sandboxWith = (exec: Sandbox["exec"]): Sandbox => ({
   destroy: () => Effect.void,
 });
 
-const emptyDeltaExec: Sandbox["exec"] = (command, args = []) => {
+const emptyDeltaExec: Sandbox["exec"] = ({ command, argv: args = [] }) => {
   if (command !== "git") {
     return Effect.succeed({
       exitCode: 1,
@@ -58,7 +58,7 @@ describe("runSeamConfirmAgent", () => {
   it.effect("skips when worktree is dirty even with seam markers", () =>
     Effect.gen(function* () {
       const result = yield* runSeamConfirmAgent({
-        sandbox: sandboxWith((command, args = []) => {
+        sandbox: sandboxWith(({ command, argv: args = [] }) => {
           if (command === "git" && args[0] === "status") {
             return Effect.succeed({
               exitCode: 0,
@@ -66,7 +66,7 @@ describe("runSeamConfirmAgent", () => {
               stderr: "",
             });
           }
-          return emptyDeltaExec(command, args);
+          return emptyDeltaExec({ command, argv: args });
         }),
         output: "seams need your OK before any test",
         seamConfirmCount: 0,
@@ -82,7 +82,7 @@ describe("runSeamConfirmAgent", () => {
     () =>
       Effect.gen(function* () {
         const result = yield* runSeamConfirmAgent({
-          sandbox: sandboxWith((command, args = []) => {
+          sandbox: sandboxWith(({ command, argv: args = [] }) => {
             if (command === "git" && args[0] === "diff") {
               return Effect.succeed({
                 exitCode: 0,
@@ -90,7 +90,7 @@ describe("runSeamConfirmAgent", () => {
                 stderr: "",
               });
             }
-            return emptyDeltaExec(command, args);
+            return emptyDeltaExec({ command, argv: args });
           }),
           output: "seams need your OK before any test",
           seamConfirmCount: 0,

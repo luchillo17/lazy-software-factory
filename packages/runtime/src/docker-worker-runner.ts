@@ -1,6 +1,6 @@
 import {
-  ADW_WORKER_PROTOCOL_VERSION,
   AdwWorkerFrameKind,
+  AdwWorkerProtocolVersion,
   AdwWorkerProtocolError,
   decodeWorkerFrame,
   encodeWorkerHandshake,
@@ -65,7 +65,7 @@ export const runDockerWorkerHandshake = (options: {
                 message: `Docker worker handshake probe expected handshake_ok, got ${frame.kind}`,
               });
             }
-            if (frame.protocolVersion !== ADW_WORKER_PROTOCOL_VERSION) {
+            if (frame.protocolVersion !== AdwWorkerProtocolVersion.V1) {
               return yield* new SandboxWorkerError({
                 message: "Docker worker handshake probe protocol mismatch",
               });

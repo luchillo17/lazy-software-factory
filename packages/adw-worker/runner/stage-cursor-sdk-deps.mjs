@@ -33,16 +33,17 @@ const usage = () => {
 };
 
 const parseArgs = (argv) => {
-  const out = { root: "", dest: "", linuxNative: "" };
+  const options = { root: "", dest: "", linuxNative: "" };
   for (let i = 0; i < argv.length; i++) {
-    const a = argv[i];
-    if (a === "--root") out.root = argv[++i] ?? "";
-    else if (a === "--dest") out.dest = argv[++i] ?? "";
-    else if (a === "--linux-native") out.linuxNative = argv[++i] ?? "";
+    const argument = argv[i];
+    if (argument === "--root") options.root = argv[++i] ?? "";
+    else if (argument === "--dest") options.dest = argv[++i] ?? "";
+    else if (argument === "--linux-native")
+      options.linuxNative = argv[++i] ?? "";
     else usage();
   }
-  if (!out.root || !out.dest || !out.linuxNative) usage();
-  return out;
+  if (!options.root || !options.dest || !options.linuxNative) usage();
+  return options;
 };
 
 const resolveCursorSdkDir = (root) => {
@@ -83,18 +84,18 @@ const virtualNodeModulesFor = (packageName, realPkgDir) =>
  * own virtual-store node_modules (pnpm production graph reachable from SDK).
  */
 const collectProductionClosure = (sdkDir) => {
-  const startNm = resolve(sdkDir, "../..");
-  const seenNm = new Set();
+  const startingNodeModules = resolve(sdkDir, "../..");
+  const visitedNodeModules = new Set();
   /** @type {Map<string, string>} name -> real package directory */
   const packages = new Map();
-  const queue = [startNm];
+  const queue = [startingNodeModules];
 
   while (queue.length > 0) {
-    const nm = realpathSync(queue.shift());
-    if (seenNm.has(nm)) continue;
-    seenNm.add(nm);
+    const nodeModulesDir = realpathSync(queue.shift());
+    if (visitedNodeModules.has(nodeModulesDir)) continue;
+    visitedNodeModules.add(nodeModulesDir);
 
-    for (const [name, link] of iterPackages(nm)) {
+    for (const [name, link] of iterPackages(nodeModulesDir)) {
       let realPkg;
       try {
         realPkg = realpathSync(link);
@@ -102,8 +103,9 @@ const collectProductionClosure = (sdkDir) => {
         continue;
       }
       if (!packages.has(name)) packages.set(name, realPkg);
-      const pkgNm = virtualNodeModulesFor(name, realPkg);
-      if (!seenNm.has(pkgNm)) queue.push(pkgNm);
+      const packageNodeModules = virtualNodeModulesFor(name, realPkg);
+      if (!visitedNodeModules.has(packageNodeModules))
+        queue.push(packageNodeModules);
     }
   }
 
@@ -178,7 +180,7 @@ const assertNoExternalSymlinks = (dest) => {
 };
 
 const smokeLoad = (dest, linuxNative) => {
-  const r = spawnSync(
+  const result = spawnSync(
     process.execPath,
     [
       "-e",
@@ -189,9 +191,9 @@ const smokeLoad = (dest, linuxNative) => {
       encoding: "utf8",
     }
   );
-  if (r.status !== 0) {
+  if (result.status !== 0) {
     throw new Error(
-      `staged Cursor closure failed smoke load:\n${r.stderr || r.stdout}`
+      `staged Cursor closure failed smoke load:\n${result.stderr || result.stdout}`
     );
   }
 

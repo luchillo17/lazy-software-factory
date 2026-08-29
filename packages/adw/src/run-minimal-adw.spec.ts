@@ -1,5 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 import {
+  AgentError,
   BuildAgentProvider,
   ReviewAgentProvider,
   SandboxProvider,
@@ -37,7 +38,7 @@ describe("runMinimalAdwGraph happy path", () => {
               const box: Sandbox = {
                 id: "sandbox-1",
                 cwd: monorepoRoot,
-                exec: withEmptyPendingDeltaGit((command, args = []) =>
+                exec: withEmptyPendingDeltaGit(({ command, argv: args = [] }) =>
                   Effect.gen(function* () {
                     if (command === "git" && args[0] === "rev-parse") {
                       yield* record("provision-git");
@@ -197,6 +198,72 @@ describe("runMinimalAdwGraph happy path", () => {
       const shipOrder = yield* Ref.get(pushThenPr);
       assert.deepStrictEqual(shipOrder, ["push", "pr"]);
     })
+  );
+
+  it.effect(
+    "agent infrastructure failure escapes the completed ADW result",
+    () =>
+      Effect.gen(function* () {
+        const layers = Layer.mergeAll(
+          Layer.succeed(
+            SandboxProvider,
+            SandboxProvider.of({
+              acquire: () => Effect.die("acquire unused in graph test"),
+              create: () =>
+                Effect.succeed({
+                  id: "sandbox-1",
+                  cwd: monorepoRoot,
+                  exec: () =>
+                    Effect.succeed({ exitCode: 0, stdout: "", stderr: "" }),
+                  destroy: () => Effect.void,
+                } satisfies Sandbox),
+            })
+          ),
+          Layer.succeed(
+            WorkspaceProvision,
+            WorkspaceProvision.of({ provision: () => Effect.void })
+          ),
+          Layer.succeed(
+            BuildAgentProvider,
+            BuildAgentProvider.of({
+              run: () =>
+                Effect.fail(
+                  new AgentError({ message: "agent transport down" })
+                ),
+              resume: () => Effect.die("unused"),
+            })
+          ),
+          ReviewAgentProvider.NotImplemented,
+          Layer.succeed(
+            GitHost,
+            GitHost.of({
+              commitWorkingTree: () => Effect.void,
+              clone: () => Effect.void,
+              push: () => Effect.void,
+              openPullRequest: () => Effect.die("unused"),
+              remoteBranchExists: () => Effect.succeed(false),
+              findOpenPullRequest: () => Effect.succeed(null),
+            })
+          ),
+          Layer.succeed(
+            AdwTestCommands,
+            AdwTestCommands.of({ resolve: () => [{ command: "node" }] })
+          ),
+          AdwBuildAttemptCap.Default,
+          AdwReviewAttemptCap.Default,
+          AdwSchemaResumeCap.Default
+        );
+
+        const exit = yield* runMinimalAdwGraph({
+          ticketId: "TICKET-INFRA",
+          prompt: "work",
+        }).pipe(Effect.provide(layers), Effect.exit);
+
+        assert.strictEqual(exit._tag, "Failure");
+        if (exit._tag === "Failure") {
+          assert.include(String(exit.cause), "agent transport down");
+        }
+      })
   );
 
   it.effect("sandbox create uses input.cwd when provided", () =>

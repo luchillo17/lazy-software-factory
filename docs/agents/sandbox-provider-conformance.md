@@ -17,6 +17,7 @@ issues #81 / #85 / #86.
 | Sandbox                | One warm execution environment for **one** ADW                                         |
 | Sandbox lease          | Scoped controller handle: capability check, one worker run, release                    |
 | ADW worker             | Versioned process inside the Sandbox; speaks the worker protocol                       |
+| Structured exec        | Command + argv, optional cwd/env/stdin/timeout; shell strings are not the contract     |
 | Hard requirements      | Must be enforced or acquire fails **before** allocation / Agent work                   |
 | Soft preferences       | Best-effort; unmet items remain on effective metadata                                  |
 | Effective capabilities | What the backend actually provided (caps, isolation, limits, unmet soft)               |
@@ -25,6 +26,10 @@ issues #81 / #85 / #86.
 
 Resource limits on the wire: CPU (fractional cores), memory (bytes), PID count,
 lifetime (ms). Features that may be hard/soft: `disk_quota`, `retained_workspaces`.
+Provider/worker cooperative cancellation is a typed `cancelled` terminal
+outcome. Caller-initiated Effect interruption remains an interrupted Effect
+(never an ADW `failed` result) while scoped finalizers perform the same bounded
+termination and cleanup.
 
 ## Host vs Docker (documented differences)
 
@@ -39,7 +44,9 @@ lifetime (ms). Features that may be hard/soft: `disk_quota`, `retained_workspace
 | Source intake         | Host cwd / `--cwd`                          | Remote Git only (no dirty-tree bind mounts)             |
 
 Shared conformance suite: `packages/runtime/src/sandbox-provider.conformance.ts`
-(Host stub worker + Docker fake CLI). Live Docker concurrency:
+(Host stub worker + Docker fake CLI). It asserts one worker invocation per
+lease. Live Docker success, ADW-failure, protocol-error, cancellation,
+concurrency, isolation, and leak coverage:
 `packages/adw/src/docker-integration.spec.ts` (`adw:test-docker`).
 
 **Isolation boundary:** Sandbox isolates **compute and filesystem** only. Shared

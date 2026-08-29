@@ -27,7 +27,7 @@ type ExecCall = {
 const recordingSandbox = (calls: Ref.Ref<ExecCall[]>): Sandbox => ({
   id: "sandbox-1",
   cwd: "/tmp/sandbox-1",
-  exec: (command, args = []) =>
+  exec: ({ command, argv: args = [] }) =>
     Effect.gen(function* () {
       yield* Ref.update(calls, (c) => [...c, { command, args: [...args] }]);
       if (command === "git" && args[0] === "rev-parse") {
@@ -78,7 +78,7 @@ const minimalAdwCollisionLayers = (options: {
           Effect.succeed({
             id: "sandbox-1",
             cwd: monorepoRoot,
-            exec: (command, args = []) =>
+            exec: ({ command, argv: args = [] }) =>
               Effect.succeed(
                 command === "git" && args[0] === "rev-parse"
                   ? { exitCode: 0, stdout: ".git\n", stderr: "" }

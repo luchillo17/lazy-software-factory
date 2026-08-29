@@ -30,9 +30,19 @@ import type {
   AcquireSandboxOptions,
   SandboxLease,
 } from "./sandbox-lease.ts";
-import type { CreateSandboxOptions, ExecResult, Sandbox } from "./sandbox.ts";
+import type {
+  CreateSandboxOptions,
+  ExecResult,
+  Sandbox,
+  SandboxExecOptions,
+} from "./sandbox.ts";
 
-export type { CreateSandboxOptions, ExecResult, Sandbox } from "./sandbox.ts";
+export type {
+  CreateSandboxOptions,
+  ExecResult,
+  Sandbox,
+  SandboxExecOptions,
+} from "./sandbox.ts";
 export type {
   AcquireSandboxError,
   AcquireSandboxOptions,
@@ -65,8 +75,7 @@ type HostBox = {
   readonly cwd: string;
   readonly children: Set<ChildProcessHandle>;
   readonly exec: (
-    command: string,
-    args?: readonly string[]
+    options: SandboxExecOptions
   ) => Effect.Effect<ExecResult, SandboxExecError>;
   readonly destroy: () => Effect.Effect<void>;
 };
@@ -79,7 +88,7 @@ const makeLocalSandbox = (options?: CreateSandboxOptions): Sandbox => {
   return {
     id,
     cwd,
-    exec: (command, args = []) =>
+    exec: (execOptions) =>
       Effect.gen(function* () {
         if (destroyed) {
           return yield* new SandboxExecError({
@@ -87,10 +96,12 @@ const makeLocalSandbox = (options?: CreateSandboxOptions): Sandbox => {
           });
         }
         return yield* runCapturedProcess({
-          command,
-          args,
-          cwd,
-          env,
+          command: execOptions.command,
+          args: execOptions.argv ?? [],
+          cwd: execOptions.cwd ?? cwd,
+          env: execOptions.env ? { ...env, ...execOptions.env } : env,
+          stdin: execOptions.stdin,
+          timeoutMs: execOptions.timeoutMs,
           extendEnv: false,
         }).pipe(
           Effect.mapError(
@@ -142,7 +153,7 @@ export class SandboxProvider extends Context.Service<
       create: (options) =>
         Effect.acquireRelease(
           Effect.succeed(makeLocalSandbox(options)),
-          (box) => box.destroy()
+          (box) => box.destroy().pipe(Effect.orDie)
         ),
       acquire: () =>
         Effect.fail(
@@ -251,8 +262,7 @@ export class SandboxProvider extends Context.Service<
                 cwd,
                 children,
                 exec: (
-                  command: string,
-                  args: readonly string[] = []
+                  execOptions: SandboxExecOptions
                 ): Effect.Effect<ExecResult, SandboxExecError> =>
                   Effect.gen(function* () {
                     if (destroyed || activeId !== id) {
@@ -262,10 +272,14 @@ export class SandboxProvider extends Context.Service<
                     }
 
                     return yield* runCapturedProcess({
-                      command,
-                      args,
-                      cwd,
-                      env,
+                      command: execOptions.command,
+                      args: execOptions.argv ?? [],
+                      cwd: execOptions.cwd ?? cwd,
+                      env: execOptions.env
+                        ? { ...env, ...execOptions.env }
+                        : env,
+                      stdin: execOptions.stdin,
+                      timeoutMs: execOptions.timeoutMs,
                       extendEnv: false,
                       onSpawn: (handle) => {
                         children.add(handle);
@@ -314,6 +328,7 @@ export class SandboxProvider extends Context.Service<
 
             const box = yield* allocateHostBox(options);
             let released = false;
+            let workerRan = false;
 
             const release = (): Effect.Effect<void> =>
               Effect.suspend(() => {
@@ -345,6 +360,12 @@ export class SandboxProvider extends Context.Service<
                       message: `Sandbox lease ${box.id} is released`,
                     });
                   }
+                  if (workerRan) {
+                    return yield* new SandboxWorkerError({
+                      message: `Sandbox lease ${box.id} already ran its ADW worker`,
+                    });
+                  }
+                  workerRan = true;
                   return yield* runHostWorkerProcess({
                     launch: config.workerLaunch,
                     request,

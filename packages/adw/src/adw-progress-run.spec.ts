@@ -33,7 +33,7 @@ describe("runMinimalAdwGraph progress events", () => {
             Effect.succeed({
               id: "sandbox-1",
               cwd: monorepoRoot,
-              exec: (command, args = []) => {
+              exec: ({ command, argv: args = [] }) => {
                 if (command === "git" && args[0] === "rev-parse") {
                   return Effect.succeed({
                     exitCode: 0,

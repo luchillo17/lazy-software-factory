@@ -22,7 +22,12 @@ export {
 export { CursorSdk, CursorSdkLive } from "./cursor-sdk.ts";
 export type { CursorSdkService } from "./cursor-sdk.ts";
 export { DEFAULT_LOCAL_ADW_MODEL } from "./default-local-model.ts";
-export type { CreateSandboxOptions, ExecResult, Sandbox } from "./sandbox.ts";
+export type {
+  CreateSandboxOptions,
+  ExecResult,
+  Sandbox,
+  SandboxExecOptions,
+} from "./sandbox.ts";
 export type {
   AcquireSandboxError,
   AcquireSandboxOptions,

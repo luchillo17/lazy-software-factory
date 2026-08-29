@@ -20,7 +20,7 @@ Glossary: [`CONTEXT.md`](../CONTEXT.md). Cut: [`VISION.md`](./VISION.md) §5. Wo
 pnpm adw:runner:build
 ```
 
-Produces local tag `lazy-software-factory/adw-worker:local` (pinned Node digest + staged worker). Override at run time with `ADW_RUNNER_IMAGE` (custom images must still pass the worker handshake). **No registry publish** in this path.
+Produces local tag `lazy-software-factory/adw-worker:local`. Node uses an OCI digest; Debian packages resolve from a dated snapshot; direct package versions and architecture-specific `gh` artifacts are pinned and checksum-verified; worker dependencies come from the Factory lockfile. Pins live in `packages/adw-worker/runner/image-pins.env`. Override at run time with `ADW_RUNNER_IMAGE` (custom images must still pass the worker handshake). **No registry publish** in this path.
 
 ## Provider selection
 
@@ -57,14 +57,14 @@ Pass through operator `.env` / shell. Docker keeps a **whitelist** into the work
 - **Limits** (CPU fractional cores, memory bytes, PID count, lifetime ms) are SandboxProvider concerns on the Docker Layer / acquire path — enforced via `docker create` where supported; reported on effective capabilities. Generic CLI currently requests no explicit limits and exposes no resource flags; embedding consumers configure `defaultLimits` on `dockerSandboxProviderLayer`. Soft prefs the backend cannot meet stay visible as unmet. Host cannot enforce these (hard → fail).
 - **Capacity** — configurable concurrent leases (default 32). Exhaustion → typed busy/capacity error; **no** provider-side queue.
 - **Cancel** — interrupt the controller Effect: graceful stop → force-kill → idempotent release of container, volume, and capacity slot.
-- **Cleanup** — after terminal exit, worker container and workspace volume are removed. Verify:
+- **Cleanup** — after success, ADW failure, protocol failure, or cancellation, the worker container and workspace volume are removed. Cleanup attempts both resources; a removal failure is reported as `infrastructure_failed` and the provider does not silently free the capacity slot. Verify:
 
 ```bash
 docker ps --all --quiet --filter label=lazy.software.factory.adw=1
 docker volume ls --quiet --filter label=lazy.software.factory.adw=1
 ```
 
-Both should print no IDs after a normal or cancelled run.
+Both should print no IDs after every terminal path.
 
 ## Isolation limit (shared backends)
 

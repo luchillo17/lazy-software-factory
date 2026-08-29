@@ -8,19 +8,19 @@
  */
 import { assert, describe, it } from "@effect/vitest";
 import {
-  ADW_WORKER_PROTOCOL_VERSION,
   AdwWorkerAdwStatus,
   AdwWorkerCapability,
   AdwWorkerFrameKind,
   AdwWorkerHandshakeKind,
   AdwWorkerIsolation,
   AdwWorkerProgressKind,
+  AdwWorkerProtocolVersion,
   AdwWorkerSandboxFeature,
   AdwWorkerStep,
   AdwWorkerSupportLevel,
   AdwWorkerTerminalKind,
 } from "@lazy-software-factory/adw-worker";
-import { Effect, Fiber, Layer, Ref } from "effect";
+import { Cause, Effect, Fiber, Layer, Ref } from "effect";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -58,12 +58,12 @@ rl.on("line", (line) => {
   lines.push(line);
   if (lines.length === 1) {
     write({
-      protocolVersion: ${ADW_WORKER_PROTOCOL_VERSION},
+      protocolVersion: ${AdwWorkerProtocolVersion.V1},
       kind: "${AdwWorkerFrameKind.HandshakeOk}",
     });
   } else if (lines.length === 2) {
     write({
-      protocolVersion: ${ADW_WORKER_PROTOCOL_VERSION},
+      protocolVersion: ${AdwWorkerProtocolVersion.V1},
       kind: "${AdwWorkerFrameKind.Progress}",
       event: {
         kind: "${AdwWorkerProgressKind.StepEnter}",
@@ -71,7 +71,7 @@ rl.on("line", (line) => {
       },
     });
     write({
-      protocolVersion: ${ADW_WORKER_PROTOCOL_VERSION},
+      protocolVersion: ${AdwWorkerProtocolVersion.V1},
       kind: "${AdwWorkerFrameKind.Terminal}",
       outcome: {
         kind: "${AdwWorkerTerminalKind.Completed}",
@@ -101,7 +101,7 @@ const write = (obj) => {
 rl.on("line", (line) => {
   if (line.includes('"${AdwWorkerHandshakeKind.Handshake}"')) {
     write({
-      protocolVersion: ${ADW_WORKER_PROTOCOL_VERSION},
+      protocolVersion: ${AdwWorkerProtocolVersion.V1},
       kind: "${AdwWorkerFrameKind.HandshakeOk}",
     });
   } else {
@@ -109,6 +109,43 @@ rl.on("line", (line) => {
   }
 });
 `;
+
+const protocolEdgeStubSource = (afterRequest: string) => `#!/usr/bin/env node
+import * as readline from "node:readline";
+const rl = readline.createInterface({ input: process.stdin, terminal: false });
+const write = (obj) => process.stdout.write(JSON.stringify(obj) + "\\n");
+let lines = 0;
+rl.on("line", () => {
+  lines += 1;
+  if (lines === 1) {
+    write({
+      protocolVersion: ${AdwWorkerProtocolVersion.V1},
+      kind: "${AdwWorkerFrameKind.HandshakeOk}",
+    });
+  } else {
+    ${afterRequest}
+    rl.close();
+  }
+});
+`;
+
+const completedTerminalStatement = `write({
+  protocolVersion: ${AdwWorkerProtocolVersion.V1},
+  kind: "${AdwWorkerFrameKind.Terminal}",
+  outcome: {
+    kind: "${AdwWorkerTerminalKind.Completed}",
+    result: {
+      ticketId: "conformance",
+      status: "${AdwWorkerAdwStatus.Failed}",
+      detail: "expected test failure",
+    },
+    effectiveCapabilities: {
+      capabilities: ["${AdwWorkerCapability.WorkspaceExec}"],
+      maxConcurrentLeases: 1,
+      isolation: "${AdwWorkerIsolation.Host}",
+    },
+  },
+});`;
 
 export const describeSandboxProviderConformance = (options: {
   readonly name: string;
@@ -337,30 +374,101 @@ export const describeSandboxProviderConformance = (options: {
             const layer = options.withStubWorkerLayer!(stubPath);
             const events = yield* Ref.make<string[]>([]);
 
-            const outcome = yield* Effect.scoped(
+            const { outcome, secondRun } = yield* Effect.scoped(
               Effect.gen(function* () {
                 const provider = yield* SandboxProvider;
                 const lease = yield* provider.acquire({
                   requirements: { hard: [...minimalHard] },
                 });
-                return yield* lease.runWorker(
-                  {
-                    protocolVersion: ADW_WORKER_PROTOCOL_VERSION,
-                    ticketId: "conformance",
-                    prompt: "stub",
-                    cwd: process.cwd(),
-                  },
-                  {
-                    onProgress: (event) =>
-                      Ref.update(events, (xs) => [...xs, event.kind]),
-                  }
-                );
+                const request = {
+                  protocolVersion: AdwWorkerProtocolVersion.V1,
+                  ticketId: "conformance",
+                  prompt: "stub",
+                  cwd: process.cwd(),
+                } as const;
+                const outcome = yield* lease.runWorker(request, {
+                  onProgress: (event) =>
+                    Ref.update(events, (xs) => [...xs, event.kind]),
+                });
+                const secondRun = yield* lease
+                  .runWorker(request, { onProgress: () => Effect.void })
+                  .pipe(Effect.exit);
+                return { outcome, secondRun };
               })
             ).pipe(Effect.provide(layer));
 
             assert.strictEqual(outcome.kind, AdwWorkerTerminalKind.Completed);
+            assert.strictEqual(secondRun._tag, "Failure");
+            if (secondRun._tag === "Failure") {
+              assert.include(String(secondRun.cause), "already ran");
+            }
             const seen = yield* Ref.get(events);
             assert.isTrue(seen.includes(AdwWorkerProgressKind.StepEnter));
+          }),
+        { timeout: 30_000 }
+      );
+
+      it.live(
+        "rejects duplicate/missing terminal frames and redacts stderr",
+        () =>
+          Effect.gen(function* () {
+            const cases = [
+              {
+                name: "duplicate",
+                source: protocolEdgeStubSource(
+                  `${completedTerminalStatement}\n${completedTerminalStatement}`
+                ),
+                expected: "Duplicate terminal worker frame",
+              },
+              {
+                name: "missing",
+                source: protocolEdgeStubSource(
+                  `process.stderr.write("token=ghp_abcdefghijklmnopqrstuvwxyz012345\\\\n");`
+                ),
+                expected: "exited without terminal frame",
+              },
+            ] as const;
+
+            for (const testCase of cases) {
+              const dir = yield* Effect.tryPromise(() =>
+                mkdtemp(join(tmpdir(), `sandbox-conformance-${testCase.name}-`))
+              );
+              const stubPath = join(dir, "edge-stub-worker.mjs");
+              yield* Effect.tryPromise(() =>
+                writeFile(stubPath, testCase.source)
+              );
+              const layer = options.withStubWorkerLayer!(stubPath);
+              const exit = yield* Effect.scoped(
+                Effect.gen(function* () {
+                  const provider = yield* SandboxProvider;
+                  const lease = yield* provider.acquire({
+                    requirements: { hard: [...minimalHard] },
+                  });
+                  return yield* lease.runWorker(
+                    {
+                      protocolVersion: AdwWorkerProtocolVersion.V1,
+                      ticketId: "conformance",
+                      prompt: testCase.name,
+                      cwd: process.cwd(),
+                    },
+                    { onProgress: () => Effect.void }
+                  );
+                })
+              ).pipe(Effect.provide(layer), Effect.exit);
+
+              assert.strictEqual(exit._tag, "Failure");
+              if (exit._tag === "Failure") {
+                const detail = String(Cause.squash(exit.cause));
+                assert.include(detail, testCase.expected);
+                if (testCase.name === "missing") {
+                  assert.include(detail, "[REDACTED]");
+                  assert.notInclude(
+                    detail,
+                    "ghp_abcdefghijklmnopqrstuvwxyz012345"
+                  );
+                }
+              }
+            }
           }),
         { timeout: 30_000 }
       );
@@ -388,7 +496,7 @@ export const describeSandboxProviderConformance = (options: {
                   });
                   return yield* lease.runWorker(
                     {
-                      protocolVersion: ADW_WORKER_PROTOCOL_VERSION,
+                      protocolVersion: AdwWorkerProtocolVersion.V1,
                       ticketId: "conformance-cancel",
                       prompt: "stub",
                       cwd: process.cwd(),

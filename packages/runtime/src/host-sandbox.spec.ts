@@ -15,13 +15,19 @@ describe("Host SandboxProvider", () => {
         assert.isString(sandbox.id);
         assert.isTrue(sandbox.id.length > 0);
 
-        const result = yield* sandbox.exec("node", [
-          "-e",
-          'process.stdout.write("ok")',
-        ]);
+        const result = yield* sandbox.exec({
+          command: "node",
+          argv: [
+            "-e",
+            'process.stdin.on("data", (chunk) => process.stdout.write(`${process.env["EXEC_MARKER"]}:${process.cwd()}:${chunk}`))',
+          ],
+          cwd: process.cwd(),
+          env: { EXEC_MARKER: "ok" },
+          stdin: "input",
+        });
 
         assert.strictEqual(result.exitCode, 0);
-        assert.strictEqual(result.stdout, "ok");
+        assert.strictEqual(result.stdout, `ok:${process.cwd()}:input`);
 
         yield* sandbox.destroy();
       })
@@ -51,7 +57,10 @@ describe("Host SandboxProvider", () => {
         Effect.gen(function* () {
           const sandbox = yield* provider.create({ cwd: process.cwd() });
           const fiber = yield* Effect.forkChild(
-            sandbox.exec("node", ["-e", "setTimeout(() => {}, 10_000)"])
+            sandbox.exec({
+              command: "node",
+              argv: ["-e", "setTimeout(() => {}, 10_000)"],
+            })
           );
           yield* Effect.sleep("30 millis");
           yield* sandbox.destroy();
@@ -81,11 +90,15 @@ describe("Host SandboxProvider", () => {
           const sandbox = yield* provider.create({ cwd: process.cwd() });
 
           const exit = yield* sandbox
-            .exec("node", [
-              "-e",
-              `require("node:fs").writeFileSync(${JSON.stringify(pidFile)}, String(process.pid)); setTimeout(() => {}, 60_000)`,
-            ])
-            .pipe(Effect.timeout("200 millis"), Effect.exit);
+            .exec({
+              command: "node",
+              argv: [
+                "-e",
+                `require("node:fs").writeFileSync(${JSON.stringify(pidFile)}, String(process.pid)); setTimeout(() => {}, 60_000)`,
+              ],
+              timeoutMs: 1_500,
+            })
+            .pipe(Effect.exit);
 
           assert.isTrue(exit._tag === "Failure");
 

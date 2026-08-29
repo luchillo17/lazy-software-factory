@@ -31,7 +31,7 @@ describe("runTestAgent", () => {
     () =>
       Effect.gen(function* () {
         const result = yield* runTestAgent({
-          sandbox: sandboxWith((command) =>
+          sandbox: sandboxWith(({ command }) =>
             Effect.succeed(
               command === "fail"
                 ? { exitCode: 1, stdout: "expected 1", stderr: "got 0" }

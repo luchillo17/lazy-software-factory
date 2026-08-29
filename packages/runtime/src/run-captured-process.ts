@@ -34,12 +34,18 @@ export const runCapturedProcess = (options: {
   readonly args: readonly string[];
   readonly cwd?: string;
   readonly env?: Readonly<Record<string, string | undefined>>;
+  readonly stdin?: string | Uint8Array;
+  readonly timeoutMs?: number;
   /** When true (default if `env` set), merge `env` onto `process.env`. */
   readonly extendEnv?: boolean;
   readonly onSpawn?: (handle: ChildProcessHandle) => void;
   readonly onSettle?: (handle: ChildProcessHandle) => void;
-}): Effect.Effect<CapturedProcessResult, PlatformError> =>
-  Effect.scoped(
+}) => {
+  const stdin =
+    typeof options.stdin === "string"
+      ? new TextEncoder().encode(options.stdin)
+      : options.stdin;
+  const run = Effect.scoped(
     Effect.gen(function* () {
       const handle = yield* ChildProcess.make(
         options.command,
@@ -48,6 +54,7 @@ export const runCapturedProcess = (options: {
           cwd: options.cwd,
           env: options.env ? { ...options.env } : undefined,
           extendEnv: options.extendEnv ?? options.env !== undefined,
+          stdin: stdin === undefined ? "ignore" : Stream.succeed(stdin),
         }
       );
       options.onSpawn?.(handle);
@@ -73,3 +80,8 @@ export const runCapturedProcess = (options: {
       } satisfies CapturedProcessResult;
     })
   ).pipe(Effect.provide(NodeChildProcessLive));
+
+  return options.timeoutMs === undefined
+    ? run
+    : run.pipe(Effect.timeout(`${options.timeoutMs} millis`));
+};

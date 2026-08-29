@@ -12,6 +12,7 @@ import {
 import {
   SandboxBusyError,
   SandboxCapabilityError,
+  SandboxDestroyError,
   SandboxProvider,
   type SandboxLease,
 } from "@lazy-software-factory/runtime";
@@ -35,12 +36,15 @@ const hostCaps = {
   isolation: AdwWorkerIsolation.Host,
 } as const;
 
-const makeLease = (runWorker: SandboxLease["runWorker"]): SandboxLease => ({
+const makeLease = (
+  runWorker: SandboxLease["runWorker"],
+  release: SandboxLease["release"] = () => Effect.void
+): SandboxLease => ({
   id: "lease-1",
   cwd: "/tmp/repo",
   effectiveCapabilities: hostCaps,
   runWorker,
-  release: () => Effect.void,
+  release,
 });
 
 describe("runMinimalAdw controller seam", () => {
@@ -176,6 +180,49 @@ describe("runMinimalAdw controller seam", () => {
       assert.isTrue(
         controlled.result.detail?.startsWith("infrastructure_failed:")
       );
+    })
+  );
+
+  it.effect("cleanup failure overrides completed worker outcome", () =>
+    Effect.gen(function* () {
+      const fake = Layer.succeed(
+        SandboxProvider,
+        SandboxProvider.of({
+          create: () => Effect.die("create unused"),
+          acquire: () =>
+            Effect.succeed(
+              makeLease(
+                () =>
+                  Effect.succeed({
+                    kind: AdwWorkerTerminalKind.Completed,
+                    result: {
+                      ticketId: "82",
+                      status: AdwWorkerAdwStatus.Shipped,
+                    },
+                    effectiveCapabilities: hostCaps,
+                  }),
+                () =>
+                  Effect.fail(
+                    new SandboxDestroyError({
+                      message: "volume still attached",
+                    })
+                  )
+              )
+            ),
+        })
+      );
+
+      const controlled = yield* runMinimalAdwController({
+        ticketId: "82",
+        prompt: "x",
+      }).pipe(Effect.provide(fake));
+
+      assert.strictEqual(
+        controlled.outcome.kind,
+        AdwWorkerTerminalKind.InfrastructureFailed
+      );
+      assert.include(controlled.result.detail ?? "", "volume still attached");
+      assert.strictEqual(controlled.result.sandboxId, "lease-1");
     })
   );
 

@@ -5,19 +5,46 @@
 ARG NODE_IMAGE=node:24.20.0-bookworm-slim@sha256:ba849c60be29959425b8734d57b8b4b7d56f98edd9504c9af091d5281095a71e
 
 FROM ${NODE_IMAGE} AS runtime
-RUN apt-get update \
-  && apt-get install -y --no-install-recommends \
-    ca-certificates \
-    curl \
-    git \
-    gnupg \
-  && curl -fsSL "https://cli.github.com/packages/githubcli-archive-keyring.gpg" \
-    | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
-  && chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg \
-  && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
-    > /etc/apt/sources.list.d/github-cli.list \
+ARG TARGETARCH
+ARG DEBIAN_SNAPSHOT=20260824T000000Z
+ARG CA_CERTIFICATES_VERSION=20250419~deb12u1
+ARG CURL_VERSION=7.88.1-10+deb12u15
+ARG GIT_VERSION=1:2.39.5-0+deb12u3
+ARG GH_VERSION=2.98.0
+ARG GH_AMD64_SHA256=f65a3fa2fa0eb2e97c445ee3f5e087a40aae03b64847f45a8f13805e504535d6
+ARG GH_ARM64_SHA256=bbc4ac7964c2a091fd555cd1758d10a7cfcfdc472e405f0b0fb958f05d535cb6
+
+RUN printf '%s\n' \
+    'Types: deb' \
+    "URIs: http://snapshot.debian.org/archive/debian/${DEBIAN_SNAPSHOT}" \
+    'Suites: bookworm bookworm-updates' \
+    'Components: main' \
+    'Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg' \
+    'Check-Valid-Until: no' \
+    '' \
+    'Types: deb' \
+    "URIs: http://snapshot.debian.org/archive/debian-security/${DEBIAN_SNAPSHOT}" \
+    'Suites: bookworm-security' \
+    'Components: main' \
+    'Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg' \
+    'Check-Valid-Until: no' \
+    > /etc/apt/sources.list.d/debian.sources \
   && apt-get update \
-  && apt-get install -y --no-install-recommends gh \
+  && apt-get install -y --no-install-recommends \
+    "ca-certificates=${CA_CERTIFICATES_VERSION}" \
+    "curl=${CURL_VERSION}" \
+    "git=${GIT_VERSION}" \
+  && case "${TARGETARCH}" in \
+    amd64) GH_SHA256="${GH_AMD64_SHA256}" ;; \
+    arm64) GH_SHA256="${GH_ARM64_SHA256}" ;; \
+    *) echo "unsupported runner architecture: ${TARGETARCH}" >&2; exit 1 ;; \
+  esac \
+  && curl -fsSL \
+    "https://github.com/cli/cli/releases/download/v${GH_VERSION}/gh_${GH_VERSION}_linux_${TARGETARCH}.deb" \
+    -o /tmp/gh.deb \
+  && echo "${GH_SHA256}  /tmp/gh.deb" | sha256sum --check --strict \
+  && apt-get install -y --no-install-recommends /tmp/gh.deb \
+  && rm -f /tmp/gh.deb \
   && rm -rf /var/lib/apt/lists/* \
   && corepack enable \
   && groupadd --gid 10001 adw \

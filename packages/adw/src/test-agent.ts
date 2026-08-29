@@ -92,7 +92,7 @@ export const runTestAgent = (
 
     const stepResults = yield* Effect.all(
       commands.map((step) =>
-        sandbox.exec(step.command, step.args ?? []).pipe(
+        sandbox.exec({ command: step.command, argv: step.args ?? [] }).pipe(
           Effect.map((gate) => ({
             _tag: TestExecBranch.Ok,
             step,

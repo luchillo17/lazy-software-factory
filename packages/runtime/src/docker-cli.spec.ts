@@ -111,6 +111,7 @@ describe("docker argv builders", () => {
       command: "node",
       args: ["/opt/factory/worker.mjs"],
       workdir: DOCKER_WORKSPACE_PATH,
+      env: { EXEC_MARKER: "ok" },
     });
     assert.deepStrictEqual(
       [...args],
@@ -119,6 +120,8 @@ describe("docker argv builders", () => {
         "--interactive",
         "--workdir",
         DOCKER_WORKSPACE_PATH,
+        "--env",
+        "EXEC_MARKER=ok",
         "c1",
         "node",
         "/opt/factory/worker.mjs",
