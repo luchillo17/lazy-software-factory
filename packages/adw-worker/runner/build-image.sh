@@ -24,75 +24,45 @@ case "$(uname -m)" in
 esac
 
 mkdir -p packages/adw-worker/runner/dist
-# Stage Cursor SDK + linux natives as real directories (pnpm store symlinks are outside
-# the Docker context allowlist — never ship dangling links).
+# Stage Cursor SDK production closure as real directories (pnpm store symlinks are
+# outside the Docker context allowlist — never ship dangling or host-store links).
 rm -rf packages/adw-worker/runner/dist/cursor-mods
 mkdir -p packages/adw-worker/runner/dist/cursor-mods
 CURSOR_MODS="packages/adw-worker/runner/dist/cursor-mods"
-
-resolve_cursor_sdk_dir() {
-  local candidate
-  for candidate in \
-    "packages/runtime/node_modules/@cursor/sdk" \
-    "node_modules/@cursor/sdk"; do
-    if [[ -e "$candidate" ]]; then
-      readlink -f "$candidate"
-      return 0
-    fi
-  done
-  return 1
-}
+STAGE_SCRIPT="$ROOT/packages/adw-worker/runner/stage-cursor-sdk-deps.mjs"
 
 if [[ "$REQUIRE_CURSOR" == "1" ]]; then
-  SDK_DIR=""
-  if ! SDK_DIR="$(resolve_cursor_sdk_dir)"; then
-    echo "error: @cursor/sdk not found under node_modules or packages/runtime/node_modules" >&2
-    echo "error: run pnpm install from the Factory root (lockfile) before building the runner image" >&2
-    exit 1
-  fi
-  # .../.pnpm/@cursor+sdk@VER/node_modules/@cursor/sdk → .../node_modules
-  PNPM_NM="$(cd "$SDK_DIR/../.." && pwd)"
-  if [[ ! -d "$PNPM_NM/@cursor/sdk" ]]; then
-    echo "error: expected pnpm layout at $PNPM_NM/@cursor/sdk (got SDK_DIR=$SDK_DIR)" >&2
-    exit 1
-  fi
-  # Dereference pnpm symlinks so COPY includes real package trees + transitive deps.
-  cp -aL "$PNPM_NM/." "$CURSOR_MODS/"
-
-  if [[ -L "$CURSOR_MODS/@cursor/sdk" ]] || [[ ! -f "$CURSOR_MODS/@cursor/sdk/package.json" ]]; then
-    echo "error: staged @cursor/sdk must be a real directory with package.json" >&2
-    exit 1
-  fi
-  if [[ -L "$CURSOR_MODS/@cursor/$LINUX_NATIVE" ]] || [[ ! -f "$CURSOR_MODS/@cursor/$LINUX_NATIVE/package.json" ]]; then
-    echo "error: staged @cursor/$LINUX_NATIVE missing or still a symlink (linux native helpers required)" >&2
-    exit 1
-  fi
-
-  # Drop non-target platform packages (darwin/win32/other linux) to keep the image lean.
-  find "$CURSOR_MODS/@cursor" -mindepth 1 -maxdepth 1 \( -type d -o -type l \) -name 'sdk-*' ! -name "$LINUX_NATIVE" -exec rm -rf {} +
-
-  DANGLING="$(find "$CURSOR_MODS" -type l ! -exec test -e {} \; -print || true)"
-  if [[ -n "$DANGLING" ]]; then
-    echo "error: dangling symlinks in cursor-mods staging (Docker context cannot follow them):" >&2
-    echo "$DANGLING" >&2
-    exit 1
-  fi
-
-  if ! NODE_PATH="$CURSOR_MODS" node -e "require.resolve('@cursor/sdk')"; then
-    echo "error: staged @cursor/sdk is not resolvable via NODE_PATH=$CURSOR_MODS" >&2
-    exit 1
-  fi
+  node "$STAGE_SCRIPT" \
+    --root "$ROOT" \
+    --dest "$CURSOR_MODS" \
+    --linux-native "$LINUX_NATIVE"
 else
   # Deterministic image: no Cursor helpers.
-  :
+  touch "$CURSOR_MODS/.keep"
 fi
-# Keep COPY happy when deterministic (empty dir marker).
-touch "$CURSOR_MODS/.keep"
 
+# Prefer root bin; fall back to esbuild resolved through vite (lockfile transitive).
 ESBUILD_BIN="$ROOT/node_modules/.bin/esbuild"
 if [[ ! -x "$ESBUILD_BIN" ]]; then
-  echo "esbuild not found at $ESBUILD_BIN (Factory lockfile / install required)" >&2
-  exit 1
+  ESBUILD_BIN="$(
+    node --input-type=module -e '
+import { createRequire } from "node:module";
+import { existsSync, realpathSync } from "node:fs";
+import { join } from "node:path";
+const root = process.argv[1];
+const bin = join(root, "node_modules/.bin/esbuild");
+if (existsSync(bin)) { console.log(bin); process.exit(0); }
+try {
+  const vitePkg = realpathSync(join(root, "node_modules/vite/package.json"));
+  console.log(createRequire(vitePkg).resolve("esbuild/bin/esbuild"));
+} catch {
+  process.exit(1);
+}
+' "$ROOT"
+  )" || {
+    echo "esbuild not found (Factory lockfile / install required; expected via vite)" >&2
+    exit 1
+  }
 fi
 "$ESBUILD_BIN" "$ENTRY" \
   --bundle \
