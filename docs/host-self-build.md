@@ -86,4 +86,4 @@ pnpm adw:runner:build
 pnpm adw -- --sandbox docker --issue <n> --repo-url <git-url> [--starting-ref <ref>]
 ```
 
-Docker rejects `--cwd` (no dirty-tree bind mounts). Default `--sandbox` remains `host` until the live proof (#86). Real-daemon integration: `pnpm nx run @lazy-software-factory/adw:test-docker` (not cached; fails if Docker is unavailable).
+Docker rejects `--cwd` (no dirty-tree bind mounts). Default `--sandbox` remains `host` until the live proof (#86). Real-daemon integration: `pnpm nx run @lazy-software-factory/adw:test-docker` (not cached; fails if Docker is unavailable) — builds the runner image once, runs concurrent Minimal ADWs, isolation + cancel leak checks (#85). Provider contract map (incl. future Vercel semantics): `docs/agents/sandbox-provider-conformance.md`.

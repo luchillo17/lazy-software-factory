@@ -1,6 +1,8 @@
 import { assert, describe, it } from "@effect/vitest";
 import {
+  AdwWorkerCapability,
   AdwWorkerIsolation,
+  AdwWorkerSandboxFeature,
   AdwWorkerSupportLevel,
   AdwWorkerTerminalKind,
 } from "@lazy-software-factory/adw-worker";
@@ -12,7 +14,11 @@ import {
   makeDockerSandboxProviderLayer,
   rejectDockerHostSourceIntake,
 } from "./docker-sandbox.ts";
-import { SandboxCreateError, SandboxProvider } from "./index.ts";
+import {
+  SandboxBusyError,
+  SandboxCreateError,
+  SandboxProvider,
+} from "./index.ts";
 
 const recordingDockerCli = (seen: Ref.Ref<readonly string[][]>) =>
   Layer.succeed(
@@ -125,6 +131,126 @@ describe("Docker SandboxProvider (faked CLI)", () => {
           ),
           "secrets must not appear in Docker CLI argv"
         );
+      })
+  );
+
+  it.effect("hard disk_quota fails before any Docker CLI allocation", () =>
+    Effect.gen(function* () {
+      const seen = yield* Ref.make<readonly string[][]>([]);
+      const layer = makeDockerSandboxProviderLayer({
+        image: "factory-adw-worker:test",
+      }).pipe(
+        Layer.provide(NodeCrypto.layer),
+        Layer.provide(recordingDockerCli(seen))
+      );
+
+      const result = yield* Effect.scoped(
+        Effect.gen(function* () {
+          const provider = yield* SandboxProvider;
+          return yield* provider.acquire({
+            requirements: {
+              hard: [AdwWorkerCapability.WorkspaceExec],
+              hardFeatures: [AdwWorkerSandboxFeature.DiskQuota],
+            },
+          });
+        })
+      ).pipe(Effect.provide(layer), Effect.exit);
+
+      assert.strictEqual(result._tag, "Failure");
+      const calls = yield* Ref.get(seen);
+      assert.strictEqual(calls.length, 0);
+    })
+  );
+
+  it.effect(
+    "soft unsupported features remain visible; resource limits hit docker create",
+    () =>
+      Effect.gen(function* () {
+        const seen = yield* Ref.make<readonly string[][]>([]);
+        const layer = makeDockerSandboxProviderLayer({
+          image: "factory-adw-worker:test",
+          defaultLimits: { cpu: 0.5 },
+        }).pipe(
+          Layer.provide(NodeCrypto.layer),
+          Layer.provide(recordingDockerCli(seen))
+        );
+
+        yield* Effect.scoped(
+          Effect.gen(function* () {
+            const provider = yield* SandboxProvider;
+            const lease = yield* provider.acquire({
+              requirements: {
+                hard: [AdwWorkerCapability.WorkspaceExec],
+                softFeatures: [AdwWorkerSandboxFeature.RetainedWorkspaces],
+                hardLimits: {
+                  cpu: 1,
+                  memoryBytes: 134_217_728,
+                  pidsLimit: 64,
+                  lifetimeMs: 120_000,
+                },
+              },
+            });
+            assert.deepStrictEqual(
+              lease.effectiveCapabilities.unmetSoftFeatures,
+              [AdwWorkerSandboxFeature.RetainedWorkspaces]
+            );
+            assert.strictEqual(lease.effectiveCapabilities.limits?.cpu, 1);
+            assert.strictEqual(
+              lease.effectiveCapabilities.limits?.memoryBytes,
+              134_217_728
+            );
+            assert.strictEqual(
+              lease.effectiveCapabilities.limits?.pidsLimit,
+              64
+            );
+            assert.strictEqual(
+              lease.effectiveCapabilities.limits?.lifetimeMs,
+              120_000
+            );
+          })
+        ).pipe(Effect.provide(layer));
+
+        const calls = yield* Ref.get(seen);
+        const create = calls.find((a) => a[0] === "create");
+        assert.isTrue(create !== undefined);
+        assert.isTrue(create!.includes("--cpus"));
+        assert.isTrue(create!.includes("1"));
+        assert.isTrue(create!.includes("--memory"));
+        assert.isTrue(create!.includes("134217728"));
+        assert.isTrue(create!.includes("--pids-limit"));
+        assert.isTrue(create!.includes("64"));
+      })
+  );
+
+  it.effect(
+    "capacity exhaustion returns Busy immediately without allocating",
+    () =>
+      Effect.gen(function* () {
+        const seen = yield* Ref.make<readonly string[][]>([]);
+        const layer = makeDockerSandboxProviderLayer({
+          image: "factory-adw-worker:test",
+          maxConcurrentLeases: 1,
+        }).pipe(
+          Layer.provide(NodeCrypto.layer),
+          Layer.provide(recordingDockerCli(seen))
+        );
+
+        const result = yield* Effect.scoped(
+          Effect.gen(function* () {
+            const provider = yield* SandboxProvider;
+            const first = yield* provider.acquire({});
+            assert.isString(first.id);
+            return yield* provider.acquire({}).pipe(Effect.exit);
+          })
+        ).pipe(Effect.provide(layer));
+
+        assert.strictEqual(result._tag, "Failure");
+        if (result._tag === "Failure") {
+          assert.isTrue(
+            String(result.cause).includes(SandboxBusyError.name) ||
+              String(result.cause).includes("SandboxBusyError")
+          );
+        }
       })
   );
 
