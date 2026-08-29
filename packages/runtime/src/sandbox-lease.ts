@@ -11,6 +11,7 @@ import type {
   SandboxBusyError,
   SandboxCapabilityError,
   SandboxCreateError,
+  SandboxDestroyError,
   SandboxWorkerError,
 } from "./errors.ts";
 import type { CreateSandboxOptions, Sandbox } from "./sandbox.ts";
@@ -46,7 +47,7 @@ export interface SandboxLease {
     SandboxWorkerError | AdwWorkerProtocolError
   >;
   /** Idempotent lease release (also runs on Scope finalizer). */
-  readonly release: () => Effect.Effect<void>;
+  readonly release: () => Effect.Effect<void, SandboxDestroyError>;
 }
 
 export type AcquireSandboxError =

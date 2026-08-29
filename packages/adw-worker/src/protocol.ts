@@ -1,11 +1,14 @@
 import { Schema } from "effect";
 
 /** Wire protocol version for controller ↔ ADW worker framed messages. */
-export const ADW_WORKER_PROTOCOL_VERSION = 1 as const;
-
-export const AdwWorkerProtocolVersionSchema = Schema.Literal(
-  ADW_WORKER_PROTOCOL_VERSION
+export const AdwWorkerProtocolVersion = {
+  V1: 1,
+} as const;
+export const AdwWorkerProtocolVersionSchema = Schema.Enum(
+  AdwWorkerProtocolVersion
 );
+export type AdwWorkerProtocolVersion =
+  typeof AdwWorkerProtocolVersionSchema.Type;
 
 /** Closed set of ADW statuses mirrored on the worker wire (ADR-0007 / ADR-0011). */
 export const AdwWorkerAdwStatus = {

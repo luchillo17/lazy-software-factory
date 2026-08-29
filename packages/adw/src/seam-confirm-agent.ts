@@ -69,7 +69,7 @@ const execGit = (
   args: readonly string[]
 ): Effect.Effect<ExecResult | void> =>
   sandbox
-    .exec("git", args)
+    .exec({ command: "git", argv: args })
     .pipe(Effect.catchTag(RuntimeErrorTag.SandboxExecError, () => Effect.void));
 
 const isEmptyStdout = (result: ExecResult | void): boolean =>

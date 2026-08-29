@@ -18,6 +18,7 @@ accepted
 
 - Controller and worker speak a versioned Effect Schema protocol (request, progress frames, terminal `completed` / `cancelled` / `infrastructure_failed`).
 - Cursor local SDK must execute inside the provider environment (the worker), not on a host-side wrapper around container `exec`.
+- Portable `Sandbox.exec` requests are structured: command + argv with optional cwd, per-operation environment, stdin, and timeout. Shell strings are not the provider contract.
 - SandboxProvider grows `acquire` (lease + capabilities + `runWorker`); in-process `create` remains for worker-local exec and tests.
 - Glossary: **Sandbox lease**, **ADW worker** (see `CONTEXT.md`).
 - Sandbox isolates compute and filesystem; it does **not** isolate shared external backends (forges, cloud deploys, SaaS — e.g. [#78](https://github.com/luchillo17/lazy-software-factory/issues/78)).

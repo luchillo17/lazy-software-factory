@@ -7,7 +7,8 @@ import { Effect } from "effect";
  */
 export const withEmptyPendingDeltaGit =
   (fallback: Sandbox["exec"]): Sandbox["exec"] =>
-  (command, args = []) => {
+  (options) => {
+    const { command, argv: args = [] } = options;
     if (command === "git" && args[0] === "status") {
       return Effect.succeed({ exitCode: 0, stdout: "", stderr: "" });
     }
@@ -21,5 +22,5 @@ export const withEmptyPendingDeltaGit =
     if (command === "git" && args[0] === "diff") {
       return Effect.succeed({ exitCode: 0, stdout: "", stderr: "" });
     }
-    return fallback(command, args);
+    return fallback(options);
   };

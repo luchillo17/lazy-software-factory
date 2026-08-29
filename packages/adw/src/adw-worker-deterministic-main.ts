@@ -3,10 +3,10 @@
  * No Cursor SDK import — keeps the compiled bundle free of native helpers.
  */
 import {
-  ADW_WORKER_PROTOCOL_VERSION,
   AdwWorkerCapability,
   AdwWorkerFrameKind,
   AdwWorkerIsolation,
+  AdwWorkerProtocolVersion,
   AdwWorkerSupportLevel,
   AdwWorkerTerminalKind,
   decodeWorkerHandshake,
@@ -101,7 +101,7 @@ const workerGraphLayer = Layer.mergeAll(
       emit: (event) =>
         Effect.sync(() => {
           writeFrame({
-            protocolVersion: ADW_WORKER_PROTOCOL_VERSION,
+            protocolVersion: AdwWorkerProtocolVersion.V1,
             kind: AdwWorkerFrameKind.Progress,
             event,
           });
@@ -134,7 +134,7 @@ const run = Effect.gen(function* () {
   );
 
   writeFrame({
-    protocolVersion: ADW_WORKER_PROTOCOL_VERSION,
+    protocolVersion: AdwWorkerProtocolVersion.V1,
     kind: AdwWorkerFrameKind.HandshakeOk,
   });
 
@@ -169,7 +169,7 @@ const run = Effect.gen(function* () {
   });
 
   writeFrame({
-    protocolVersion: ADW_WORKER_PROTOCOL_VERSION,
+    protocolVersion: AdwWorkerProtocolVersion.V1,
     kind: AdwWorkerFrameKind.Terminal,
     outcome: {
       kind: AdwWorkerTerminalKind.Completed,
@@ -190,7 +190,7 @@ const run = Effect.gen(function* () {
           : String(err);
       process.stderr.write(`${redactWorkerDiagnostics(detail)}\n`);
       writeFrame({
-        protocolVersion: ADW_WORKER_PROTOCOL_VERSION,
+        protocolVersion: AdwWorkerProtocolVersion.V1,
         kind: AdwWorkerFrameKind.Terminal,
         outcome: {
           kind: AdwWorkerTerminalKind.InfrastructureFailed,

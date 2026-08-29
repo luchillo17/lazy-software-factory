@@ -3,6 +3,11 @@ import {
   ReviewAgentProvider,
   type AgentSession,
 } from "@lazy-software-factory/runtime/agent-provider";
+import type {
+  AgentError,
+  SandboxBusyError,
+  SandboxCreateError,
+} from "@lazy-software-factory/runtime/errors";
 import { SandboxProvider } from "@lazy-software-factory/runtime/sandbox-provider";
 import { Effect, Schema } from "effect";
 import {
@@ -35,7 +40,10 @@ import {
   DEFAULT_SKILL_PACK_ROOT,
 } from "./role-skill-binding.ts";
 import { ticketBranch } from "./ticket-branch.ts";
-import { WorkspaceProvision } from "./workspace-provision.ts";
+import {
+  WorkspaceProvision,
+  type ProvisionError,
+} from "./workspace-provision.ts";
 
 /**
  * Minimal ADW (ADR-0007): provision → Build ↔ SeamConfirm ↔ Test → Review → Ship.
@@ -85,7 +93,11 @@ export type MinimalAdwServices =
  */
 export const runMinimalAdwGraph = (
   input: MinimalAdwInput
-): Effect.Effect<MinimalAdwResult, never, MinimalAdwServices> =>
+): Effect.Effect<
+  MinimalAdwResult,
+  SandboxCreateError | SandboxBusyError | AgentError,
+  MinimalAdwServices
+> =>
   Effect.scoped(
     Effect.gen(function* () {
       const sandboxes = yield* SandboxProvider;
@@ -106,7 +118,7 @@ export const runMinimalAdwGraph = (
         kind: AdwProgressKind.StepEnter,
         step: AdwStep.Provision,
       });
-      yield* provisioner
+      const provisionFailure = yield* provisioner
         .provision({
           sandbox,
           ticketId: input.ticketId,
@@ -121,8 +133,20 @@ export const runMinimalAdwGraph = (
               step: AdwStep.Provision,
               result: AdwStepResult.Fail,
             })
-          )
+          ),
+          Effect.match({
+            onFailure: (error: ProvisionError) => error,
+            onSuccess: () => undefined,
+          })
         );
+      if (provisionFailure) {
+        return {
+          ticketId: input.ticketId,
+          status: AdwStatus.Failed,
+          detail: provisionFailure.message,
+          sandboxId: sandbox.id,
+        } satisfies MinimalAdwResult;
+      }
       yield* emitAdwProgress({
         kind: AdwProgressKind.StepResult,
         step: AdwStep.Provision,
@@ -356,13 +380,5 @@ export const runMinimalAdwGraph = (
         reviewSessionId,
         prUrl: shipResult.prUrl,
       } satisfies MinimalAdwResult;
-    }).pipe(
-      Effect.catch((err) =>
-        Effect.succeed({
-          ticketId: input.ticketId,
-          status: AdwStatus.Failed,
-          detail: err instanceof Error ? err.message : String(err),
-        } satisfies MinimalAdwResult)
-      )
-    )
+    })
   );

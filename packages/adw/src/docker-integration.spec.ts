@@ -9,8 +9,11 @@
  */
 import { assert, describe, it } from "@effect/vitest";
 import {
+  AdwWorkerAdwStatus,
   AdwWorkerCapability,
+  AdwWorkerFrameKind,
   AdwWorkerIsolation,
+  AdwWorkerProtocolVersion,
   AdwWorkerSupportLevel,
   AdwWorkerTerminalKind,
 } from "@lazy-software-factory/adw-worker";
@@ -128,6 +131,16 @@ const assertNoAdwLeaks = (): Effect.Effect<void> =>
 
 const containerNameForLease = (leaseId: string): string =>
   `lsf-adw-${leaseId.replaceAll("-", "").slice(0, 12)}`;
+
+const stubWorkerSource = (secondLineAction: string): string =>
+  [
+    "const rl=require('node:readline').createInterface({input:process.stdin,terminal:false});",
+    "let lines=0;",
+    "const write=(value)=>process.stdout.write(JSON.stringify(value)+'\\n');",
+    "rl.on('line',()=>{lines+=1;",
+    `if(lines===1){write({protocolVersion:${AdwWorkerProtocolVersion.V1},kind:'${AdwWorkerFrameKind.HandshakeOk}'});}`,
+    `else{${secondLineAction};rl.close();}});`,
+  ].join("");
 
 describe("Docker real-container Minimal ADW", () => {
   it.live(
@@ -354,10 +367,7 @@ describe("Docker real-container Minimal ADW", () => {
 
         const image = resolveAdwRunnerImage();
         // Hang after handshake so cancel exercises SIGTERM→SIGKILL + release.
-        const hangWorker =
-          "const rl=require('node:readline').createInterface({input:process.stdin,terminal:false});" +
-          "rl.on('line',(line)=>{if(line.includes('\"handshake\"')){process.stdout.write(" +
-          "JSON.stringify({protocolVersion:1,kind:'handshake_ok'})+'\\n');}else{setTimeout(()=>{},6e4);}});";
+        const hangWorker = stubWorkerSource("setTimeout(()=>{},6e4)");
         const layer = dockerSandboxProviderLayer({
           image,
           maxConcurrentLeases: 1,
@@ -377,7 +387,7 @@ describe("Docker real-container Minimal ADW", () => {
               });
               return yield* lease.runWorker(
                 {
-                  protocolVersion: 1,
+                  protocolVersion: AdwWorkerProtocolVersion.V1,
                   ticketId: "85-cancel",
                   prompt: "hang",
                   cwd: DOCKER_WORKSPACE_PATH,
@@ -405,6 +415,126 @@ describe("Docker real-container Minimal ADW", () => {
           })
         ).pipe(Effect.provide(layer));
 
+        yield* assertNoAdwLeaks();
+      }),
+    { timeout: 300_000 }
+  );
+
+  it.live(
+    "ADW failure, cancellation, and protocol error release all resources",
+    () =>
+      Effect.gen(function* () {
+        yield* requireDockerDaemon();
+        yield* Effect.sync(buildRunnerImageOnce);
+
+        const image = resolveAdwRunnerImage();
+        const completedFailureWorker = stubWorkerSource(
+          `write({protocolVersion:${AdwWorkerProtocolVersion.V1},kind:'${AdwWorkerFrameKind.Terminal}',outcome:{kind:'${AdwWorkerTerminalKind.Completed}',result:{ticketId:'85-failed',status:'${AdwWorkerAdwStatus.Failed}',detail:'deterministic failure'},effectiveCapabilities:{capabilities:['${AdwWorkerCapability.WorkspaceExec}'],maxConcurrentLeases:1,isolation:'${AdwWorkerIsolation.Container}'}}})`
+        );
+        const failedOutcome = yield* Effect.scoped(
+          Effect.gen(function* () {
+            const provider = yield* SandboxProvider;
+            const lease = yield* provider.acquire({
+              requirements: {
+                hard: [AdwWorkerCapability.WorkspaceExec],
+              },
+            });
+            return yield* lease.runWorker(
+              {
+                protocolVersion: AdwWorkerProtocolVersion.V1,
+                ticketId: "85-failed",
+                prompt: "fail",
+                cwd: DOCKER_WORKSPACE_PATH,
+              },
+              { onProgress: () => Effect.void }
+            );
+          })
+        ).pipe(
+          Effect.provide(
+            dockerSandboxProviderLayer({
+              image,
+              workerCommand: "node",
+              workerArgs: ["-e", completedFailureWorker],
+            })
+          )
+        );
+        assert.strictEqual(failedOutcome.kind, AdwWorkerTerminalKind.Completed);
+        if (failedOutcome.kind === AdwWorkerTerminalKind.Completed) {
+          assert.strictEqual(
+            failedOutcome.result.status,
+            AdwWorkerAdwStatus.Failed
+          );
+        }
+        yield* assertNoAdwLeaks();
+
+        const cancelledWorker = stubWorkerSource(
+          `write({protocolVersion:${AdwWorkerProtocolVersion.V1},kind:'${AdwWorkerFrameKind.Terminal}',outcome:{kind:'${AdwWorkerTerminalKind.Cancelled}',detail:'provider cancelled'}})`
+        );
+        const cancelledOutcome = yield* Effect.scoped(
+          Effect.gen(function* () {
+            const provider = yield* SandboxProvider;
+            const lease = yield* provider.acquire({
+              requirements: {
+                hard: [AdwWorkerCapability.WorkspaceExec],
+              },
+            });
+            return yield* lease.runWorker(
+              {
+                protocolVersion: AdwWorkerProtocolVersion.V1,
+                ticketId: "85-cancelled-terminal",
+                prompt: "cancel",
+                cwd: DOCKER_WORKSPACE_PATH,
+              },
+              { onProgress: () => Effect.void }
+            );
+          })
+        ).pipe(
+          Effect.provide(
+            dockerSandboxProviderLayer({
+              image,
+              workerCommand: "node",
+              workerArgs: ["-e", cancelledWorker],
+            })
+          )
+        );
+        assert.strictEqual(
+          cancelledOutcome.kind,
+          AdwWorkerTerminalKind.Cancelled
+        );
+        yield* assertNoAdwLeaks();
+
+        const malformedWorker = stubWorkerSource(
+          "process.stdout.write('not-json\\n')"
+        );
+        const protocolExit = yield* Effect.scoped(
+          Effect.gen(function* () {
+            const provider = yield* SandboxProvider;
+            const lease = yield* provider.acquire({
+              requirements: {
+                hard: [AdwWorkerCapability.WorkspaceExec],
+              },
+            });
+            return yield* lease.runWorker(
+              {
+                protocolVersion: AdwWorkerProtocolVersion.V1,
+                ticketId: "85-protocol",
+                prompt: "malformed",
+                cwd: DOCKER_WORKSPACE_PATH,
+              },
+              { onProgress: () => Effect.void }
+            );
+          })
+        ).pipe(
+          Effect.provide(
+            dockerSandboxProviderLayer({
+              image,
+              workerCommand: "node",
+              workerArgs: ["-e", malformedWorker],
+            })
+          ),
+          Effect.exit
+        );
+        assert.strictEqual(protocolExit._tag, "Failure");
         yield* assertNoAdwLeaks();
       }),
     { timeout: 300_000 }

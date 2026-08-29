@@ -20,7 +20,10 @@ import {
   SandboxProvider,
 } from "./index.ts";
 
-const recordingDockerCli = (seen: Ref.Ref<readonly string[][]>) =>
+const recordingDockerCli = (
+  seen: Ref.Ref<readonly string[][]>,
+  options: { readonly failCleanup?: boolean } = {}
+) =>
   Layer.succeed(
     DockerCli,
     DockerCli.of({
@@ -43,6 +46,16 @@ const recordingDockerCli = (seen: Ref.Ref<readonly string[][]>) =>
             head === "rm" ||
             (head === "volume" && args[1] === "rm")
           ) {
+            if (
+              options.failCleanup &&
+              (head === "rm" || (head === "volume" && args[1] === "rm"))
+            ) {
+              return {
+                exitCode: 1,
+                stdout: "",
+                stderr: `forced ${head} cleanup failure`,
+              };
+            }
             return { exitCode: 0, stdout: "", stderr: "" };
           }
           return { exitCode: 0, stdout: "", stderr: "" };
@@ -258,6 +271,39 @@ describe("Docker SandboxProvider (faked CLI)", () => {
               String(result.cause).includes("SandboxBusyError")
           );
         }
+      })
+  );
+
+  it.effect(
+    "cleanup reports failures after attempting container and volume",
+    () =>
+      Effect.gen(function* () {
+        const seen = yield* Ref.make<readonly string[][]>([]);
+        const layer = makeDockerSandboxProviderLayer({
+          image: "factory-adw-worker:test",
+        }).pipe(
+          Layer.provide(NodeCrypto.layer),
+          Layer.provide(recordingDockerCli(seen, { failCleanup: true }))
+        );
+
+        const exit = yield* Effect.scoped(
+          Effect.gen(function* () {
+            const provider = yield* SandboxProvider;
+            const lease = yield* provider.acquire({});
+            yield* lease.release();
+          })
+        ).pipe(Effect.provide(layer), Effect.exit);
+
+        assert.strictEqual(exit._tag, "Failure");
+        if (exit._tag === "Failure") {
+          assert.include(String(exit.cause), "forced rm cleanup failure");
+          assert.include(String(exit.cause), "forced volume cleanup failure");
+        }
+        const calls = yield* Ref.get(seen);
+        assert.isTrue(calls.some((args) => args[0] === "rm"));
+        assert.isTrue(
+          calls.some((args) => args[0] === "volume" && args[1] === "rm")
+        );
       })
   );
 

@@ -80,6 +80,13 @@ fi
 docker build \
   --file packages/adw-worker/runner/Dockerfile \
   --build-arg "NODE_IMAGE=${ADW_RUNNER_NODE_IMAGE}" \
+  --build-arg "DEBIAN_SNAPSHOT=${ADW_RUNNER_DEBIAN_SNAPSHOT}" \
+  --build-arg "CA_CERTIFICATES_VERSION=${ADW_RUNNER_CA_CERTIFICATES_VERSION}" \
+  --build-arg "CURL_VERSION=${ADW_RUNNER_CURL_VERSION}" \
+  --build-arg "GIT_VERSION=${ADW_RUNNER_GIT_VERSION}" \
+  --build-arg "GH_VERSION=${ADW_RUNNER_GH_VERSION}" \
+  --build-arg "GH_AMD64_SHA256=${ADW_RUNNER_GH_AMD64_SHA256}" \
+  --build-arg "GH_ARM64_SHA256=${ADW_RUNNER_GH_ARM64_SHA256}" \
   --build-arg "ADW_RUNNER_REQUIRE_CURSOR=${REQUIRE_CURSOR}" \
   --build-arg "ADW_RUNNER_LINUX_NATIVE=${LINUX_NATIVE}" \
   --tag "${ADW_RUNNER_IMAGE_TAG}" \

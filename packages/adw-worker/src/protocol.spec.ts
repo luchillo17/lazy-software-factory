@@ -1,13 +1,13 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect } from "effect";
 import {
-  ADW_WORKER_PROTOCOL_VERSION,
   AdwWorkerAdwStatus,
   AdwWorkerCapability,
   AdwWorkerErrorTag,
   AdwWorkerFrameKind,
   AdwWorkerIsolation,
   AdwWorkerProgressKind,
+  AdwWorkerProtocolVersion,
   AdwWorkerProtocolError,
   AdwWorkerStep,
   AdwWorkerTerminalKind,
@@ -35,7 +35,7 @@ describe("adw worker protocol framing", () => {
       assert.strictEqual(handshake.kind, AdwWorkerHandshakeKind.Handshake);
       assert.strictEqual(
         handshake.protocolVersion,
-        ADW_WORKER_PROTOCOL_VERSION
+        AdwWorkerProtocolVersion.V1
       );
     })
   );
@@ -43,7 +43,7 @@ describe("adw worker protocol framing", () => {
   it.effect("round-trips handshake_ok frame", () =>
     Effect.gen(function* () {
       const line = encodeWorkerFrame({
-        protocolVersion: ADW_WORKER_PROTOCOL_VERSION,
+        protocolVersion: AdwWorkerProtocolVersion.V1,
         kind: AdwWorkerFrameKind.HandshakeOk,
       });
       const frame = yield* decodeWorkerFrame(line);
@@ -54,7 +54,7 @@ describe("adw worker protocol framing", () => {
   it.effect("round-trips a progress frame", () =>
     Effect.gen(function* () {
       const line = encodeWorkerFrame({
-        protocolVersion: ADW_WORKER_PROTOCOL_VERSION,
+        protocolVersion: AdwWorkerProtocolVersion.V1,
         kind: AdwWorkerFrameKind.Progress,
         event: {
           kind: AdwWorkerProgressKind.StepEnter,
@@ -72,7 +72,7 @@ describe("adw worker protocol framing", () => {
   it.effect("round-trips a completed terminal frame", () =>
     Effect.gen(function* () {
       const line = encodeWorkerFrame({
-        protocolVersion: ADW_WORKER_PROTOCOL_VERSION,
+        protocolVersion: AdwWorkerProtocolVersion.V1,
         kind: AdwWorkerFrameKind.Terminal,
         outcome: {
           kind: AdwWorkerTerminalKind.Completed,
@@ -126,7 +126,7 @@ describe("adw worker protocol framing", () => {
   it.effect("decodes a worker request line", () =>
     Effect.gen(function* () {
       const line = encodeWorkerRequest({
-        protocolVersion: ADW_WORKER_PROTOCOL_VERSION,
+        protocolVersion: AdwWorkerProtocolVersion.V1,
         ticketId: "82",
         prompt: "implement",
         cwd: "/tmp/repo",

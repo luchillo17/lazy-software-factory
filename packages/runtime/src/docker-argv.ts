@@ -147,6 +147,7 @@ export const dockerExecInteractiveArgs = (options: {
   readonly args: readonly string[];
   readonly workdir?: string;
   readonly user?: string;
+  readonly env?: Readonly<Record<string, string>>;
 }): readonly string[] => {
   const args: string[] = ["exec", "--interactive"];
   if (options.workdir) {
@@ -154,6 +155,11 @@ export const dockerExecInteractiveArgs = (options: {
   }
   if (options.user) {
     args.push("--user", options.user);
+  }
+  if (options.env) {
+    for (const [key, value] of Object.entries(options.env)) {
+      args.push("--env", `${key}=${value}`);
+    }
   }
   args.push(options.container, options.command, ...options.args);
   return args;

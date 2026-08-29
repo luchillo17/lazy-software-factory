@@ -20,7 +20,7 @@ Glossary: [`CONTEXT.md`](../CONTEXT.md). Cut: [`VISION.md`](./VISION.md) §5. Wo
 pnpm adw:runner:build
 ```
 
-Produces local tag `lazy-software-factory/adw-worker:local` (pinned Node digest + staged worker). Override at run time with `ADW_RUNNER_IMAGE` (custom images must still pass the worker handshake). **No registry publish** in this path.
+Produces local tag `lazy-software-factory/adw-worker:local`. Node uses an OCI digest; Debian packages resolve from a dated snapshot; direct package versions and architecture-specific `gh` artifacts are pinned and checksum-verified; worker dependencies come from the Factory lockfile. Pins live in `packages/adw-worker/runner/image-pins.env`. Override at run time with `ADW_RUNNER_IMAGE` (custom images must still pass the worker handshake). **No registry publish** in this path.
 
 ## Provider selection
 
@@ -57,14 +57,14 @@ Pass through operator `.env` / shell. Docker keeps a **whitelist** into the work
 - **Limits** (CPU fractional cores, memory bytes, PID count, lifetime ms) are SandboxProvider concerns on the Docker Layer / acquire path — enforced via `docker create` where supported; reported on effective capabilities. Generic CLI currently requests no explicit limits and exposes no resource flags; embedding consumers configure `defaultLimits` on `dockerSandboxProviderLayer`. Soft prefs the backend cannot meet stay visible as unmet. Host cannot enforce these (hard → fail).
 - **Capacity** — configurable concurrent leases (default 32). Exhaustion → typed busy/capacity error; **no** provider-side queue.
 - **Cancel** — interrupt the controller Effect: graceful stop → force-kill → idempotent release of container, volume, and capacity slot.
-- **Cleanup** — after terminal exit, worker container and workspace volume are removed. Verify:
+- **Cleanup** — after success, ADW failure, protocol failure, or cancellation, the worker container and workspace volume are removed. Cleanup attempts both resources; a removal failure is reported as `infrastructure_failed` and the provider does not silently free the capacity slot. Verify:
 
 ```bash
 docker ps --all --quiet --filter label=lazy.software.factory.adw=1
 docker volume ls --quiet --filter label=lazy.software.factory.adw=1
 ```
 
-Both should print no IDs after a normal or cancelled run.
+Both should print no IDs after every terminal path.
 
 ## Isolation limit (shared backends)
 
@@ -82,10 +82,54 @@ Sandbox isolates **compute and filesystem** (container + ephemeral volume). It d
 | `ready_for_pr` (exit 2)              | Review passed; commit/push/open-PR did not (ADR-0011)                         |
 | Provision / install fail             | Bad lockfile, unsupported package manager, or clone/auth failure before Build |
 
+## Terminal evidence line
+
+On exit, generic Docker `adw` prints one stdout line (`formatDockerOperatorResult`). Use it as operator evidence. Field order is stable; optional keys are **omitted** when unset (not printed as empty).
+
+Example shape (values illustrative):
+
+```text
+status=shipped ticket=93 pr=https://github.com/example/repo/pull/94 sandbox=<lease-uuid> buildSession=<id> reviewSession=<id> terminal=completed image=lazy-software-factory/adw-worker:local capabilities={"capabilities":["cursor_local_agent",…],"maxConcurrentLeases":32,"isolation":"container","retainedWorkspaces":"unsupported","diskQuota":"unsupported"}
+```
+
+| Field           | Meaning                                                                                                                                                                                                                                                                                                                   |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `status`        | Minimal ADW outcome: `shipped`, `ready_for_pr`, `failed`, or `not_implemented`.                                                                                                                                                                                                                                           |
+| `ticket`        | Ticket / run id (`--ticket`, `--issue`, or intake).                                                                                                                                                                                                                                                                       |
+| `pr`            | Opened PR URL when Ship succeeded. **Omitted** when there is no PR (failures, cancel, `ready_for_pr` without a URL, early infra fail).                                                                                                                                                                                    |
+| `detail`        | Short human reason when present (cancel / infrastructure / graph fail). Secrets in this text are redacted before print. **Omitted** when unused.                                                                                                                                                                          |
+| `sandbox`       | **Authoritative outer Docker Sandbox lease ID** (controller `SandboxLease.id`, typically a UUID). **Not** the worker-local `SandboxProvider.Local` id (`local`). The worker may report `local` on the wire; the controller overwrites with the lease id before formatting. **Omitted** if acquire never produced a lease. |
+| `buildSession`  | Opaque Build agent session id when Build ran. **Omitted** if the run never created a Build session.                                                                                                                                                                                                                       |
+| `reviewSession` | Opaque Review agent session id for the last Review attempt that ran. **Omitted** if Review never started.                                                                                                                                                                                                                 |
+| `terminal`      | Worker/controller terminal kind: `completed`, `cancelled`, or `infrastructure_failed`.                                                                                                                                                                                                                                    |
+| `image`         | Effective runner image tag (`ADW_RUNNER_IMAGE` or the default local tag).                                                                                                                                                                                                                                                 |
+| `capabilities`  | JSON of lease `effectiveCapabilities`, or the literal `unavailable` when no lease capabilities exist (e.g. acquire failed before a lease).                                                                                                                                                                                |
+
+### `capabilities` JSON
+
+Present keys describe what the Docker Layer actually advertised for that lease:
+
+| Key                                                               | Meaning                                                                                                                     |
+| ----------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `capabilities` (array inside the JSON)                            | Enforced capability strings (e.g. `cursor_local_agent`, `git_host_cli`, `workspace_exec`, `skill_pack_mount`).              |
+| `maxConcurrentLeases`                                             | Capacity ceiling for concurrent Docker leases.                                                                              |
+| `isolation`                                                       | `container` for Docker.                                                                                                     |
+| `retainedWorkspaces` / `diskQuota`                                | Support level (`supported` / `unsupported` / `unknown`) when reported.                                                      |
+| `limits`                                                          | Resource limits **actually applied** (`cpu`, `memoryBytes`, `pidsLimit`, `lifetimeMs`). **Omitted** when none were applied. |
+| `unmetSoftCapabilities` / `unmetSoftFeatures` / `unmetSoftLimits` | Soft preferences the backend could not meet. **Omitted** when empty.                                                        |
+
+Live generic-CLI runs usually omit `limits` and unmet-limit arrays — same honesty as [Resource requests, cancellation, cleanup](#resource-requests-cancellation-cleanup) (CLI requests no limits; absence means none requested/applied, not a redaction).
+
+### Secrets and recording
+
+- Credentials (`CURSOR_API_KEY`, `GH_TOKEN`, git auth, Bearer tokens, URL userinfo, etc.) **must not** appear in recorded evidence, issue comments, or pasted logs.
+- The operator line redacts common secret shapes in `detail` only; `capabilities=` is not secret-scrubbed. Treat redaction as defense in depth, not permission to paste secrets elsewhere.
+- Do not paste secret-bearing diagnostics (full `.env`, `docker inspect` env, handshake/request stdin, raw worker frames with `env`). Record status, ticket/PR, lease id, session ids, terminal kind, image, and the capabilities JSON from the line only.
+
 ## Proven live + automated evidence
 
 - **Automated concurrency / cancel / leak:** [#85](https://github.com/luchillo17/lazy-software-factory/issues/85) / [PR #92](https://github.com/luchillo17/lazy-software-factory/pull/92) — `packages/adw/src/docker-integration.spec.ts` (`pnpm nx run @lazy-software-factory/adw:test-docker`)
-- **Live self-build:** proof ticket [#93](https://github.com/luchillo17/lazy-software-factory/issues/93) → shipped [PR #94](https://github.com/luchillo17/lazy-software-factory/pull/94); default flip [#86](https://github.com/luchillo17/lazy-software-factory/issues/86). Recorded terminal `completed`, status `shipped`, Build/Review session IDs, effective container capabilities, no requested/effective resource limits, and empty post-exit container/volume queries. Full redacted values live on #86.
+- **Live self-build:** dependency proof ticket [#93](https://github.com/luchillo17/lazy-software-factory/issues/93) → shipped [PR #94](https://github.com/luchillo17/lazy-software-factory/pull/94); default flip [#86](https://github.com/luchillo17/lazy-software-factory/issues/86); reviewed default-path evidence ticket [#96](https://github.com/luchillo17/lazy-software-factory/issues/96) → shipped [PR #97](https://github.com/luchillo17/lazy-software-factory/pull/97). The #96 run records every field mapped above, including the authoritative outer lease `sandbox`, no requested/effective limits, and empty post-exit container/volume queries. Full redacted values live on #86.
 
 ## Explicit non-goals
 

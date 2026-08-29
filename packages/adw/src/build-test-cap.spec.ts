@@ -253,7 +253,7 @@ describe("runMinimalAdwGraph Build↔Test resume + cap", () => {
               Effect.succeed({
                 id: "sandbox-1",
                 cwd: monorepoRoot,
-                exec: withEmptyPendingDeltaGit((command) =>
+                exec: withEmptyPendingDeltaGit(({ command }) =>
                   Effect.gen(function* () {
                     const n = yield* Ref.get(round);
                     if (n === 0) {

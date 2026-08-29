@@ -33,6 +33,8 @@ export interface DockerCliService {
     readonly args: readonly string[];
     /** When set, merged onto process env (never log secrets). */
     readonly env?: Readonly<Record<string, string | undefined>>;
+    readonly stdin?: string | Uint8Array;
+    readonly timeoutMs?: number;
   }) => Effect.Effect<DockerCliRunResult, DockerCliError>;
 }
 
@@ -47,7 +49,7 @@ export class DockerCli extends Context.Service<DockerCli, DockerCliService>()(
     Layer.succeed(
       DockerCli,
       DockerCli.of({
-        run: ({ args, env }) =>
+        run: ({ args, env, stdin, timeoutMs }) =>
           Effect.gen(function* () {
             const command = options?.command ?? "docker";
             const fullArgs =
@@ -58,6 +60,8 @@ export class DockerCli extends Context.Service<DockerCli, DockerCliService>()(
               command,
               args: fullArgs,
               env,
+              stdin,
+              timeoutMs,
               extendEnv: env !== undefined,
             }).pipe(
               Effect.mapError(

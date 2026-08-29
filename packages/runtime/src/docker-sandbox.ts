@@ -9,7 +9,7 @@ import {
   type AdwWorkerResourceLimits,
 } from "@lazy-software-factory/adw-worker";
 import { NodeCrypto } from "@effect/platform-node";
-import { Effect, Fiber, Layer, Scope } from "effect";
+import { Cause, Effect, Exit, Fiber, Layer, Scope } from "effect";
 import { Crypto } from "effect/Crypto";
 import type { ChildProcessHandle } from "effect/unstable/process/ChildProcessSpawner";
 import {
@@ -31,6 +31,7 @@ import {
   RuntimeErrorTag,
   SandboxBusyError,
   SandboxCreateError,
+  SandboxDestroyError,
   SandboxExecError,
   SandboxWorkerError,
 } from "./errors.ts";
@@ -45,7 +46,12 @@ import type {
   AcquireSandboxOptions,
   SandboxLease,
 } from "./sandbox-lease.ts";
-import type { CreateSandboxOptions, ExecResult, Sandbox } from "./sandbox.ts";
+import type {
+  CreateSandboxOptions,
+  ExecResult,
+  Sandbox,
+  SandboxExecOptions,
+} from "./sandbox.ts";
 import { SandboxProvider } from "./sandbox-provider.ts";
 
 const dockerEnforceableLimits = new Set([
@@ -124,7 +130,8 @@ type DockerBox = {
   readonly volumeName: string;
   readonly cwd: typeof DOCKER_WORKSPACE_PATH;
   readonly children: Set<ChildProcessHandle>;
-  readonly destroy: () => Effect.Effect<void>;
+  readonly destroy: () => Effect.Effect<void, SandboxDestroyError>;
+  readonly finalize: () => Effect.Effect<void>;
 };
 
 const defaultWorkerCommand = "node";
@@ -160,21 +167,71 @@ export const makeDockerSandboxProviderLayer = (config: DockerSandboxOptions) =>
       const profile = dockerProfile(maxConcurrent, config.defaultLimits);
       const active = new Set<string>();
 
+      const cleanupStep = (
+        args: readonly string[],
+        label: string,
+        absentPattern: RegExp
+      ): Effect.Effect<void, SandboxDestroyError> =>
+        docker.run({ args }).pipe(
+          Effect.mapError(
+            (cause) =>
+              new SandboxDestroyError({
+                message: `${label} could not start`,
+                cause,
+              })
+          ),
+          Effect.flatMap((result) => {
+            if (
+              result.exitCode === 0 ||
+              absentPattern.test(`${result.stderr}\n${result.stdout}`)
+            ) {
+              return Effect.void;
+            }
+            return Effect.fail(
+              new SandboxDestroyError({
+                message: `${label} failed (exit ${result.exitCode}): ${
+                  result.stderr.trim() || result.stdout.trim() || "no output"
+                }`,
+              })
+            );
+          })
+        );
+
       const releaseResources = (box: {
         readonly id: string;
         readonly containerName: string;
         readonly volumeName: string;
-      }): Effect.Effect<void> =>
+      }): Effect.Effect<void, SandboxDestroyError> =>
         Effect.gen(function* () {
           yield* docker
             .run({ args: dockerKillArgs(box.containerName) })
             .pipe(Effect.catch(() => Effect.void));
-          yield* docker
-            .run({ args: dockerRmArgs(box.containerName) })
-            .pipe(Effect.catch(() => Effect.void));
-          yield* docker
-            .run({ args: dockerVolumeRmArgs(box.volumeName) })
-            .pipe(Effect.catch(() => Effect.void));
+
+          const containerExit = yield* cleanupStep(
+            dockerRmArgs(box.containerName),
+            "docker container cleanup",
+            /no such container/i
+          ).pipe(Effect.exit);
+          const volumeExit = yield* cleanupStep(
+            dockerVolumeRmArgs(box.volumeName),
+            "docker volume cleanup",
+            /no such volume|not found/i
+          ).pipe(Effect.exit);
+
+          if (Exit.isFailure(containerExit) || Exit.isFailure(volumeExit)) {
+            const causes = [
+              ...(Exit.isFailure(containerExit)
+                ? [Cause.squash(containerExit.cause)]
+                : []),
+              ...(Exit.isFailure(volumeExit)
+                ? [Cause.squash(volumeExit.cause)]
+                : []),
+            ];
+            return yield* new SandboxDestroyError({
+              message: causes.map(String).join("; "),
+              cause: causes,
+            });
+          }
           active.delete(box.id);
         });
 
@@ -215,6 +272,13 @@ export const makeDockerSandboxProviderLayer = (config: DockerSandboxOptions) =>
               err: SandboxCreateError
             ): Effect.Effect<never, SandboxCreateError> =>
               releaseResources({ id, containerName, volumeName }).pipe(
+                Effect.mapError(
+                  (cleanupError) =>
+                    new SandboxCreateError({
+                      message: `${err.message}; cleanup failed: ${cleanupError.message}`,
+                      cause: cleanupError,
+                    })
+                ),
                 Effect.andThen(Effect.fail(err))
               );
 
@@ -283,48 +347,52 @@ export const makeDockerSandboxProviderLayer = (config: DockerSandboxOptions) =>
             yield* dockerStep(createArgs, "docker create");
             yield* dockerStep(dockerStartArgs(containerName), "docker start");
 
-            let teardown: Effect.Effect<void> | undefined;
             const children = new Set<ChildProcessHandle>();
-
-            const destroy = (): Effect.Effect<void> =>
+            const cleanup = yield* Effect.cached(
+              Effect.uninterruptibleMask((restore) =>
+                Effect.gen(function* () {
+                  const pending = [...children];
+                  for (const handle of pending) {
+                    yield* handle
+                      .kill({ killSignal: "SIGTERM" })
+                      .pipe(Effect.catch(() => Effect.void));
+                  }
+                  yield* restore(
+                    Effect.forEach(
+                      pending,
+                      (handle) =>
+                        handle.exitCode.pipe(
+                          Effect.asVoid,
+                          Effect.timeout("5 seconds"),
+                          Effect.catchTag("TimeoutError", () =>
+                            handle
+                              .kill({ killSignal: "SIGKILL" })
+                              .pipe(Effect.catch(() => Effect.void))
+                          ),
+                          Effect.catch(() => Effect.void)
+                        ),
+                      { concurrency: "unbounded" }
+                    )
+                  ).pipe(Effect.exit);
+                  children.clear();
+                  yield* releaseResources({
+                    id,
+                    containerName,
+                    volumeName,
+                  });
+                })
+              )
+            );
+            let cleanupObserved = false;
+            const destroy = (): Effect.Effect<void, SandboxDestroyError> =>
               Effect.suspend(() => {
-                if (!teardown) {
-                  teardown = Effect.uninterruptibleMask((restore) =>
-                    Effect.gen(function* () {
-                      const pending = [...children];
-                      for (const handle of pending) {
-                        yield* handle
-                          .kill({ killSignal: "SIGTERM" })
-                          .pipe(Effect.catch(() => Effect.void));
-                      }
-                      yield* restore(
-                        Effect.forEach(
-                          pending,
-                          (handle) =>
-                            handle.exitCode.pipe(
-                              Effect.asVoid,
-                              Effect.timeout("5 seconds"),
-                              Effect.catchTag("TimeoutError", () =>
-                                handle
-                                  .kill({ killSignal: "SIGKILL" })
-                                  .pipe(Effect.catch(() => Effect.void))
-                              ),
-                              Effect.catch(() => Effect.void)
-                            ),
-                          { concurrency: "unbounded" }
-                        )
-                      );
-                      children.clear();
-                      yield* releaseResources({
-                        id,
-                        containerName,
-                        volumeName,
-                      });
-                    })
-                  );
-                }
-                return teardown;
+                cleanupObserved = true;
+                return cleanup;
               });
+            const finalize = (): Effect.Effect<void> =>
+              Effect.suspend(() =>
+                cleanupObserved ? cleanup.pipe(Effect.ignore) : cleanup
+              ).pipe(Effect.orDie);
 
             return {
               id,
@@ -333,9 +401,10 @@ export const makeDockerSandboxProviderLayer = (config: DockerSandboxOptions) =>
               cwd: DOCKER_WORKSPACE_PATH,
               children,
               destroy,
+              finalize,
             } satisfies DockerBox;
           }),
-          (box) => box.destroy()
+          (box) => box.finalize()
         );
 
       const create = (options?: CreateSandboxOptions) =>
@@ -352,19 +421,21 @@ export const makeDockerSandboxProviderLayer = (config: DockerSandboxOptions) =>
           );
           const box = yield* allocate(options, effective);
           const exec = (
-            command: string,
-            args: readonly string[] = []
+            execOptions: SandboxExecOptions
           ): Effect.Effect<ExecResult, SandboxExecError> =>
             Effect.gen(function* () {
               const result = yield* docker
                 .run({
                   args: dockerExecInteractiveArgs({
                     container: box.containerName,
-                    command,
-                    args,
-                    workdir: DOCKER_WORKSPACE_PATH,
+                    command: execOptions.command,
+                    args: execOptions.argv ?? [],
+                    workdir: execOptions.cwd ?? DOCKER_WORKSPACE_PATH,
                     user: config.user,
+                    env: execOptions.env,
                   }),
+                  stdin: execOptions.stdin,
+                  timeoutMs: execOptions.timeoutMs,
                 })
                 .pipe(
                   Effect.mapError(
@@ -403,16 +474,11 @@ export const makeDockerSandboxProviderLayer = (config: DockerSandboxOptions) =>
           let released = false;
           let workerRan = false;
 
-          const release = (): Effect.Effect<void> =>
+          const release = (): Effect.Effect<void, SandboxDestroyError> =>
             Effect.suspend(() => {
-              if (released) {
-                return Effect.void;
-              }
               released = true;
               return box.destroy();
             });
-
-          yield* Effect.addFinalizer(() => release());
 
           // Provider-side lifetime: destroy when the lease exceeds the limit.
           if (effective.limits?.lifetimeMs !== undefined) {
