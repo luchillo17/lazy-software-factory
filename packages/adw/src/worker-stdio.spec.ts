@@ -1,5 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 import {
+  exitWorkerAfterProtocolFlush,
   installWorkerProtocolStdoutGuard,
   type WorkerOutputWriter,
 } from "./worker-stdio.ts";
@@ -41,5 +42,29 @@ describe("worker protocol stdout guard", () => {
       '{"kind":"progress"}\n',
       "normal stdout\n",
     ]);
+  });
+
+  it("exits only after the terminal frame has flushed", async () => {
+    let flush: ((error?: Error | null) => void) | undefined;
+    let exitCode: number | undefined;
+    const stdout: WorkerOutputWriter = {
+      write: (_chunk, encodingOrCallback, callback) => {
+        flush =
+          typeof encodingOrCallback === "function"
+            ? encodingOrCallback
+            : callback;
+        return true;
+      },
+    };
+    const guard = installWorkerProtocolStdoutGuard(stdout, writer([]));
+
+    const exiting = exitWorkerAfterProtocolFlush(guard, 7, (code) => {
+      exitCode = code;
+    });
+
+    assert.isUndefined(exitCode);
+    flush?.();
+    await exiting;
+    assert.strictEqual(exitCode, 7);
   });
 });

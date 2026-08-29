@@ -11,7 +11,7 @@ export interface WorkerOutputWriter {
 }
 
 export interface WorkerProtocolStdoutGuard {
-  readonly writeProtocol: (frame: string) => boolean;
+  readonly writeProtocol: (frame: string, callback?: WriteCallback) => boolean;
   readonly restore: () => void;
 }
 
@@ -49,7 +49,8 @@ export const installWorkerProtocolStdoutGuard = (
   };
 
   return {
-    writeProtocol: (frame) => originalWrite(frame),
+    writeProtocol: (frame, callback) =>
+      callback ? originalWrite(frame, callback) : originalWrite(frame),
     restore: () => {
       if (!restored) {
         restored = true;
@@ -58,3 +59,20 @@ export const installWorkerProtocolStdoutGuard = (
     },
   };
 };
+
+/** Flush the terminal frame before forcing a dedicated worker process to exit. */
+export const exitWorkerAfterProtocolFlush = (
+  guard: WorkerProtocolStdoutGuard,
+  exitCode: number,
+  exit: (code: number) => void = process.exit
+): Promise<void> =>
+  new Promise((resolve, reject) => {
+    guard.writeProtocol("", (error) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+      exit(exitCode);
+      resolve();
+    });
+  });
