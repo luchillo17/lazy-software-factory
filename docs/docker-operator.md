@@ -129,7 +129,7 @@ Live generic-CLI runs usually omit `limits` and unmet-limit arrays — same hone
 ## Proven live + automated evidence
 
 - **Automated concurrency / cancel / leak:** [#85](https://github.com/luchillo17/lazy-software-factory/issues/85) / [PR #92](https://github.com/luchillo17/lazy-software-factory/pull/92) — `packages/adw/src/docker-integration.spec.ts` (`pnpm nx run @lazy-software-factory/adw:test-docker`)
-- **Live self-build:** proof ticket [#93](https://github.com/luchillo17/lazy-software-factory/issues/93) → shipped [PR #94](https://github.com/luchillo17/lazy-software-factory/pull/94); default flip [#86](https://github.com/luchillo17/lazy-software-factory/issues/86). Recorded fields match the map above (`terminal=completed`, `status=shipped`, Build/Review session IDs, outer lease `sandbox`, effective container capabilities, no requested/effective resource limits) plus empty post-exit container/volume queries. Full redacted values live on #86.
+- **Live self-build:** dependency proof ticket [#93](https://github.com/luchillo17/lazy-software-factory/issues/93) → shipped [PR #94](https://github.com/luchillo17/lazy-software-factory/pull/94); default flip [#86](https://github.com/luchillo17/lazy-software-factory/issues/86); reviewed default-path evidence ticket [#96](https://github.com/luchillo17/lazy-software-factory/issues/96) → shipped [PR #97](https://github.com/luchillo17/lazy-software-factory/pull/97). The #96 run records every field mapped above, including the authoritative outer lease `sandbox`, no requested/effective limits, and empty post-exit container/volume queries. Full redacted values live on #86.
 
 ## Explicit non-goals
 
