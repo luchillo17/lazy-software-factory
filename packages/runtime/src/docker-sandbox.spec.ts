@@ -114,7 +114,7 @@ describe("Docker SandboxProvider (faked CLI)", () => {
           calls.some(
             (a) =>
               a[0] === "create" &&
-              a.includes("pnpm_config_store_dir=/home/adw/.cache/pnpm-store")
+              a.includes("npm_config_store_dir=/home/adw/.cache/pnpm-store")
           )
         );
         assert.isTrue(calls.some((a) => a[0] === "start"));

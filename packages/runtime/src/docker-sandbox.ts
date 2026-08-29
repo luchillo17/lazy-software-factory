@@ -248,7 +248,7 @@ export const makeDockerSandboxProviderLayer = (config: DockerSandboxOptions) =>
                 ADW_HOST_SKILL_PACK_ROOT: "/opt/factory/host-skill-pack",
                 HOME: "/home/adw",
                 npm_config_cache: `${DOCKER_WORKSPACE_PATH}/.npm-cache`,
-                pnpm_config_store_dir: "/home/adw/.cache/pnpm-store",
+                npm_config_store_dir: "/home/adw/.cache/pnpm-store",
                 XDG_CACHE_HOME: "/home/adw/.cache",
                 ...config.containerEnv,
               },
