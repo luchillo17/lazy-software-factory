@@ -38,6 +38,7 @@ ENV HOME=/home/adw \
   ADW_HOST_SKILL_PACK_ROOT=/opt/factory/host-skill-pack \
   NODE_PATH=/opt/factory/node_modules \
   npm_config_cache=/workspace/.npm-cache \
+  pnpm_config_store_dir=/home/adw/.cache/pnpm-store \
   XDG_CACHE_HOME=/home/adw/.cache \
   NODE_ENV=production
 
