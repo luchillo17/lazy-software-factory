@@ -116,6 +116,13 @@ describe("Docker SandboxProvider (faked CLI)", () => {
         assert.isTrue(
           calls.some((a) => a[0] === "create" && a.includes("--read-only"))
         );
+        assert.isTrue(
+          calls.some(
+            (a) =>
+              a[0] === "create" &&
+              a.includes("pnpm_config_store_dir=/home/adw/.cache/pnpm-store")
+          )
+        );
         assert.isTrue(calls.some((a) => a[0] === "start"));
         assert.isTrue(
           calls.some((a) => a[0] === "rm" && a.includes("--force"))
