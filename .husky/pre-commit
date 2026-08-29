@@ -1,2 +1,6 @@
+# /tmp is often noexec in sandboxes; Nx's default native-cache under /tmp then
+# dlopens with ERR_DLOPEN_FAILED and leaves WorkspaceContext undefined.
+export NX_NATIVE_FILE_CACHE_DIRECTORY="${NX_NATIVE_FILE_CACHE_DIRECTORY:-.nx/native-cache}"
+
 npx lint-staged
 corepack pnpm nx run-many -t typecheck,test
