@@ -1,0 +1,21 @@
+0 verbose cli /usr/local/bin/node /usr/local/lib/node_modules/npm/bin/npm-cli.js
+1 info using npm@11.19.0
+2 info using node@v24.20.0
+3 silly config load:file:/usr/local/lib/node_modules/npm/npmrc
+4 silly config load:file:/workspace/.npmrc
+5 silly config load:file:/home/adw/.npmrc
+6 silly config load:file:/usr/local/etc/npmrc
+7 verbose title npm exec commitlint --edit .git/COMMIT_EDITMSG
+8 verbose argv "exec" "--no-yes" "--" "commitlint" "--edit" ".git/COMMIT_EDITMSG"
+9 verbose logfile logs-max:10 dir:/workspace/.npm-cache/_logs/2026-08-29T07_08_15_705Z-
+10 verbose logfile /workspace/.npm-cache/_logs/2026-08-29T07_08_15_705Z-debug-0.log
+11 warn Unknown env config "store-dir". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+12 warn Unknown project config "auto-install-peers". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+13 warn Unknown project config "strict-peer-dependencies". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+14 silly logfile done cleaning log files
+15 verbose cwd /workspace
+16 verbose os Linux 6.18.33.2-microsoft-standard-WSL2
+17 verbose node v24.20.0
+18 verbose npm  v11.19.0
+19 verbose exit 0
+20 info ok
